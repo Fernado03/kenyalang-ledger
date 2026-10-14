@@ -1,0 +1,9 @@
+# Dependency guards for the ingest pipeline.
+#
+# `opencv-python` (non-headless) and `opencv-python-headless` both install a
+# top-level `cv2` package. If both are present the last one installed wins,
+# producing an ABI mismatch against numpy (e.g. "module compiled against ABI
+# version 0x1000009 but this version of numpy is 0x2000000") or silently
+# shadowing our functions. EasyOCR itself depends on opencv-python-headless,
+# so pinning it here keeps a single, consistent OpenCV.
+opencv-python-headless>=4.9
