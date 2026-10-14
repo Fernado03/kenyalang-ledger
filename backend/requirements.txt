@@ -12,6 +12,7 @@ pytest>=8.2
 httpx>=0.27
 instructor>=1.7
 openai>=1.60
+python-dotenv>=1.0.0
 
 # OpenCV is pinned in constraints.txt to prevent the opencv-python vs
 # opencv-python-headless `cv2` clash that breaks against numpy 2.x.

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator
+try:
+    from dotenv import find_dotenv, load_dotenv
+    load_dotenv(find_dotenv(usecwd=True))
+except ImportError:
+    pass
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI

@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080" />
+  <title>Kenyalang Ledger — Launch Brag</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+  <script src="assets/music/audio-data.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+    }
+    :root {
+      --audio-bass: 0;
+      --audio-rms: 0;
+    }
+    html, body {
+      margin: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: #F8FAFC;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #0F172A;
+    }
+    .clip {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+    }
+    .font-mono-numbers {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums lining-nums;
+      letter-spacing: -0.02em;
+    }
+
+    /* Scene containers */
+    .scene {
+      background: #F8FAFC;
+      padding: 60px 80px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* Common Card & Badge Styles */
+    .card {
+      background: #FFFFFF;
+      border: 1px solid #CBD5E1;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    }
+    .card-dark {
+      background: #1E293B;
+      border: 1px solid #334155;
+      border-radius: 8px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .pill-brand {
+      background: #F0FDFA;
+      border: 1px solid #14B8A6;
+      color: #0F766E;
+    }
+    .pill-warning {
+      background: #FFFBEB;
+      border: 1px solid #F59E0B;
+      color: #78350F;
+    }
+    .pill-verified {
+      background: #ECFDF5;
+      border: 1px solid #10B981;
+      color: #065F46;
+    }
+
+    /* Audio reactive helper classes */
+    .audio-reactive-glow {
+      box-shadow: 0 0 calc(8px + var(--audio-bass) * 16px) rgba(20, 184, 166, calc(0.18 + var(--audio-bass) * 0.25));
+    }
+    .audio-reactive-border {
+      border-color: rgba(20, 184, 166, calc(0.4 + var(--audio-bass) * 0.6));
+    }
+  </style>
+</head>
+<body>
+  <div
+    id="root"
+    data-composition-id="main"
+    data-start="0"
+    data-duration="18.5"
+    data-width="1920"
+    data-height="1080"
+  >
+    <!-- Audio Layer -->
+    <audio id="bg-music" data-start="0" data-duration="18.5" data-track-index="10" data-volume="0.32" data-fade-out="0.8" src="assets/music/happy-beats-business-moves-vol-11-by-ende-dot-app.mp3"></audio>
+    <audio id="sfx-hook" data-start="1.60" data-duration="0.19" data-track-index="11" data-volume="0.65" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+    <audio id="sfx-token-1" data-start="4.75" data-duration="0.62" data-track-index="12" data-volume="0.60" src="assets/sfx/interface/switch_001.ogg"></audio>
+    <audio id="sfx-token-2" data-start="5.80" data-duration="0.62" data-track-index="13" data-volume="0.60" src="assets/sfx/interface/switch_001.ogg"></audio>
+    <audio id="sfx-click" data-start="10.01" data-duration="0.06" data-track-index="14" data-volume="0.70" src="assets/sfx/ui/mouseclick1.ogg"></audio>
+    <audio id="sfx-chime" data-start="11.06" data-duration="1.48" data-track-index="15" data-volume="0.75" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+    <audio id="sfx-drop" data-start="11.06" data-duration="0.11" data-track-index="16" data-volume="0.60" src="assets/sfx/interface/drop_001.ogg"></audio>
+    <audio id="sfx-export" data-start="14.76" data-duration="0.60" data-track-index="17" data-volume="0.70" src="assets/sfx/casino/card-slide-1.ogg"></audio>
+
+    <!-- ======================================================== -->
+    <!-- SCENE 1: The Paper Reality (0.00s – 3.70s)               -->
+    <!-- ======================================================== -->
+    <div id="scene-1" class="clip scene" data-start="0" data-duration="3.70" data-track-index="1">
+      <!-- Top Eyebrow -->
+      <div id="s1-eyebrow" style="display: flex; align-items: center; justify-content: space-between;">
+        <div class="pill pill-brand">
+          <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #0F766E;"></span>
+          KENYALANG LEDGER · MALAYSIA LHDN MYINVOIS MANDATE
+        </div>
+        <div style="font-size: 14px; font-weight: 500; color: #475569;">
+          KUCHING, SARAWAK // FREELANCE ACCOUNTANT WORKSPACE
+        </div>
+      </div>
+
+      <!-- Main Headline Block -->
+      <div style="text-align: center; margin: 10px 0;">
+        <h1 id="s1-headline-1" style="font-size: 54px; font-weight: 700; color: #0F172A; letter-spacing: -0.03em; line-height: 1.15;">
+          Clients dump 120 blurry thermal chits into WhatsApp.
+        </h1>
+        <h1 id="s1-headline-2" style="font-size: 58px; font-weight: 800; color: #134E4A; letter-spacing: -0.03em; margin-top: 12px; line-height: 1.15; opacity: 0;">
+          And LHDN requires every single line item verified.
+        </h1>
+      </div>
+
+      <!-- Visual Comparison Cards -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; max-width: 1440px; margin: 0 auto; width: 100%;">
+        <!-- Left: WhatsApp Photo Dump -->
+        <div id="s1-card-left" class="card" style="padding: 32px; background: #FFFFFF; border-left: 6px solid #25D366;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 44px; height: 44px; border-radius: 50%; background: #075E54; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px;">
+                💬
+              </div>
+              <div>
+                <div style="font-weight: 700; font-size: 18px; color: #0F172A;">Uncle Tan (Hardware & Kopitiam)</div>
+                <div style="font-size: 13px; color: #475569;">WhatsApp Month-End Handoff</div>
+              </div>
+            </div>
+            <span class="pill pill-warning">120 Blurry Photos</span>
+          </div>
+          <div style="background: #F1F5F9; border-radius: 6px; padding: 18px; font-size: 15px; color: #334155; line-height: 1.5;">
+            "Girl ah, this month receipts all inside. Some faded a bit, some handwritten chit from supplier. You help me do LHDN e-invoice hor, don't know how to key in computer."
+          </div>
+          <div style="margin-top: 18px; display: flex; gap: 10px;">
+            <span style="font-size: 12px; font-weight: 600; background: #FEF2F2; color: #991B1B; padding: 4px 10px; border-radius: 4px;">FADED THERMAL PAPER</span>
+            <span style="font-size: 12px; font-weight: 600; background: #FFFBEB; color: #78350F; padding: 4px 10px; border-radius: 4px;">MANGLISH ITEMS</span>
+            <span style="font-size: 12px; font-weight: 600; background: #F1F5F9; color: #475569; padding: 4px 10px; border-radius: 4px;">3.5 HOURS MANUAL ENTRY</span>
+          </div>
+        </div>
+
+        <!-- Right: Thermal Receipt Preview -->
+        <div id="s1-card-right" class="card" style="padding: 32px; background: #FFFFFF; border-left: 6px solid #134E4A;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+            <span style="font-weight: 700; font-size: 16px; color: #134E4A; letter-spacing: 0.05em;">PHYSICAL KUCHING CASH CHIT</span>
+            <span class="font-mono-numbers" style="font-size: 13px; color: #475569;">CHIT #99120</span>
+          </div>
+          <div style="background: #FAF8F5; border: 1px dashed #CBD5E1; padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #334155;">
+            <div style="text-align: center; font-weight: 700; margin-bottom: 8px; color: #0F172A;">KIM GUAN HARDWARE SDN BHD</div>
+            <div style="text-align: center; font-size: 12px; color: #475569; margin-bottom: 12px;">BRN: 202001012345 · SST: W10-1808-32000018</div>
+            <div style="border-top: 1px dashed #CBD5E1; margin: 8px 0;"></div>
+            <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+              <span>1x PVC PIPE 2"</span>
+              <span class="font-mono-numbers">RM 10.88</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 4px 0; color: #0F766E; font-weight: 600;">
+              <span>1x KOPI C PENG (BUNGKUS)</span>
+              <span class="font-mono-numbers">RM 2.80</span>
+            </div>
+            <div style="border-top: 1px dashed #CBD5E1; margin: 8px 0;"></div>
+            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; color: #0F172A;">
+              <span>TOTAL (INCL SST 6%)</span>
+              <span class="font-mono-numbers">RM 14.50</span>
+            </div>
+          </div>
+          <div style="margin-top: 16px; text-align: right;">
+            <span style="font-size: 13px; font-weight: 600; color: #0F766E;">Penny-level reconciliation required</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Bar -->
+      <div style="text-align: center; font-size: 14px; font-weight: 600; color: #475569; letter-spacing: 0.05em;">
+        BRIDGE FADED THERMAL CHITS WITH LHDN MYINVOIS COMPLIANCE
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SCENE 2: CV & Localized Token Extraction (3.70s – 8.96s)  -->
+    <!-- ======================================================== -->
+    <div id="scene-2" class="clip scene" data-start="3.70" data-duration="5.26" data-track-index="2">
+      <!-- Header -->
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <div class="pill pill-brand">
+          STEP 01 // COMPUTER VISION NORMALIZATION & SPATIAL TOKEN OCR
+        </div>
+        <div class="pill pill-verified" id="s2-confidence-pill">
+          ✓ 98.4% Confidence · CLAHE Restored
+        </div>
+      </div>
+
+      <!-- Title -->
+      <div>
+        <h2 style="font-size: 42px; font-weight: 700; color: #0F172A; letter-spacing: -0.02em;">
+          Adaptive Contrast Recovery & Localized Lexicon Parser
+        </h2>
+        <p style="font-size: 18px; color: #475569; margin-top: 4px;">
+          EasyOCR normalized bounding boxes paired with Malaysian business identifier extraction.
+        </p>
+      </div>
+
+      <!-- Dual Stage Layout -->
+      <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; align-items: center; margin: 10px 0;">
+        <!-- Left: Receipt Canvas with Bounding Boxes -->
+        <div class="card audio-reactive-border" style="padding: 24px; position: relative; background: #FFFFFF; height: 560px; overflow: hidden;">
+          <div style="position: absolute; top: 16px; left: 20px; font-size: 12px; font-weight: 700; color: #134E4A; letter-spacing: 0.08em; z-index: 10;">
+            NORMALIZED OCR BOUNDING BOXES (CANVAS VIEW)
+          </div>
+          
+          <!-- Receipt Paper Mockup Inside Canvas -->
+          <div style="position: absolute; top: 50px; left: 40px; right: 40px; bottom: 20px; background: #FAF8F5; border: 1px solid #E2E8F0; padding: 24px; font-family: 'JetBrains Mono', monospace; line-height: 1.8;">
+            <div style="text-align: center; font-weight: 700; font-size: 18px; color: #0F172A; margin-bottom: 4px;">KIM GUAN HARDWARE</div>
+            <div style="text-align: center; font-size: 13px; color: #475569; margin-bottom: 16px;">JALAN PENDING, 93450 KUCHING, SARAWAK</div>
+            
+            <div style="position: relative; margin: 8px 0; padding: 4px;">
+              <span id="s2-box-1" style="position: absolute; inset: 0; border: 2px solid #10B981; background: rgba(16, 185, 129, 0.12); border-radius: 4px; opacity: 0;"></span>
+              <div style="display: flex; justify-content: space-between; position: relative; z-index: 2;">
+                <span>BRN: 202001012345</span>
+                <span>SST: W10-1808-32000018</span>
+              </div>
+            </div>
+
+            <div style="border-top: 1px dashed #CBD5E1; margin: 12px 0;"></div>
+
+            <div style="position: relative; margin: 8px 0; padding: 4px;">
+              <span id="s2-box-2" style="position: absolute; inset: 0; border: 2px solid #0F766E; background: rgba(15, 118, 110, 0.15); border-radius: 4px; opacity: 0;"></span>
+              <div style="display: flex; justify-content: space-between; position: relative; z-index: 2; font-weight: 600; color: #0F766E;">
+                <span>1x KOPI C PENG</span>
+                <span class="font-mono-numbers">RM 2.80</span>
+              </div>
+            </div>
+
+            <div style="position: relative; margin: 8px 0; padding: 4px;">
+              <span id="s2-box-3" style="position: absolute; inset: 0; border: 2px solid #0F766E; background: rgba(15, 118, 110, 0.15); border-radius: 4px; opacity: 0;"></span>
+              <div style="display: flex; justify-content: space-between; position: relative; z-index: 2;">
+                <span>1x PVC PIPE 2" (CLASS O)</span>
+                <span class="font-mono-numbers">RM 10.88</span>
+              </div>
+            </div>
+
+            <div style="border-top: 1px dashed #CBD5E1; margin: 12px 0;"></div>
+
+            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 16px; padding: 4px 0;">
+              <span>SUBTOTAL</span>
+              <span class="font-mono-numbers">RM 13.68</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; padding: 2px 0; color: #475569;">
+              <span>SST (6%)</span>
+              <span class="font-mono-numbers">RM 0.82</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 18px; color: #134E4A; margin-top: 8px; border-top: 2px solid #CBD5E1; padding-top: 8px;">
+              <span>GRAND TOTAL</span>
+              <span class="font-mono-numbers">RM 14.50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Structured Token Stream -->
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Field 1 -->
+          <div id="s2-field-1" class="card" style="padding: 18px 24px; border-left: 5px solid #10B981; opacity: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase;">Malaysian Identifier Audit</span>
+              <span class="pill pill-verified" style="font-size: 11px;">Validated</span>
+            </div>
+            <div style="font-size: 18px; font-weight: 700; color: #0F172A; margin-top: 4px;">
+              Kim Guan Hardware Sdn Bhd
+            </div>
+            <div class="font-mono-numbers" style="font-size: 14px; color: #065F46; margin-top: 2px;">
+              BRN: 202001012345 · SST: W10-1808-32000018
+            </div>
+          </div>
+
+          <!-- Field 2 -->
+          <div id="s2-field-2" class="card" style="padding: 18px 24px; border-left: 5px solid #0F766E; opacity: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase;">Localized Sarawak Lexicon Match</span>
+              <span class="pill pill-brand" style="font-size: 11px;">Sarawakian Kopitiam Term</span>
+            </div>
+            <div style="font-size: 18px; font-weight: 700; color: #0F172A; margin-top: 4px;">
+              KOPI C PENG → Beverage (F&B Non-Capital Expense)
+            </div>
+            <div class="font-mono-numbers" style="font-size: 14px; color: #475569; margin-top: 2px;">
+              Qty: 1 · Unit Price: RM 2.80 · SST: RM 0.17
+            </div>
+          </div>
+
+          <!-- Field 3 -->
+          <div id="s2-field-3" class="card" style="padding: 18px 24px; border-left: 5px solid #134E4A; opacity: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase;">Hardware Supply Item</span>
+              <span class="pill pill-brand" style="font-size: 11px;">Tax Deduction Eligible</span>
+            </div>
+            <div style="font-size: 18px; font-weight: 700; color: #0F172A; margin-top: 4px;">
+              PVC PIPE 2" (CLASS O) → Building & Maintenance Material
+            </div>
+            <div class="font-mono-numbers" style="font-size: 14px; color: #475569; margin-top: 2px;">
+              Qty: 1 · Unit Price: RM 10.88 · SST: RM 0.65
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Status -->
+      <div style="display: flex; justify-content: space-between; font-size: 14px; color: #475569;">
+        <span>SPATIAL TOKEN PIPELINE: EASYOCR + INSTRUCTOR LLM SCHEMA</span>
+        <span style="font-weight: 600; color: #134E4A;">NEXT: HIGH-DENSITY REVIEW CONSOLE</span>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SCENE 3: Review Console & Math Reconciliation (8.96s – 14.50s) -->
+    <!-- ======================================================== -->
+    <div id="scene-3" class="clip scene" data-start="8.96" data-duration="5.54" data-track-index="3" style="opacity: 0;">
+      <!-- Console Top Nav -->
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #CBD5E1; padding-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 20px;">
+          <div style="font-size: 20px; font-weight: 800; color: #134E4A; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px;">
+            <span style="display: inline-block; width: 12px; height: 12px; background: #134E4A; border-radius: 2px;"></span>
+            KENYALANG LEDGER
+          </div>
+          <div style="font-size: 14px; color: #334155; font-weight: 600;">
+            Client: Kim Guan Hardware (Kuching) · Chit #INV-99120
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <span id="s3-status-pill" class="pill pill-warning">NEEDS REVIEW</span>
+          <button id="s3-export-btn" style="background: #134E4A; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 14px; cursor: pointer;">
+            Approve & Generate Exports →
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Math Audit Strip (SCR-03 §3.5) -->
+      <div id="s3-math-banner" style="background: #FEF2F2; border: 1px solid #EF4444; border-radius: 6px; padding: 12px 20px; color: #991B1B; display: flex; align-items: center; justify-content: space-between;">
+        <div id="s3-math-text" style="display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 700;">
+          <span>⚠️</span>
+          <span>Math Mismatch: Subtotal RM 13.68 + SST RM 0.82 ≠ RM 14.60 (RM 0.10 delta)</span>
+        </div>
+        <div style="font-size: 13px; font-weight: 600; color: #475569;">
+          SCR-03 §3.5 Deterministic Math Reconciler
+        </div>
+      </div>
+
+      <!-- Split Workspace -->
+      <div style="display: grid; grid-template-columns: 1fr 1.6fr; gap: 30px; height: 580px;">
+        <!-- Left: Canvas View -->
+        <div class="card" style="padding: 20px; position: relative; overflow: hidden; background: #F1F5F9;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; font-weight: 600; color: #475569;">
+            <span>CANVAS ZOOM: 1.25x</span>
+            <span class="font-mono-numbers">PAN: (X: 120, Y: -40)</span>
+          </div>
+          <div style="background: #FAF8F5; border: 1px solid #CBD5E1; padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 13px; height: calc(100% - 40px); position: relative;">
+            <div style="font-weight: 700; color: #0F172A; text-align: center;">KIM GUAN HARDWARE SDN BHD</div>
+            <div style="text-align: center; font-size: 11px; color: #475569;">PENDING ROAD, KUCHING</div>
+            <div style="border-top: 1px dashed #CBD5E1; margin: 10px 0;"></div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>1x PVC PIPE 2"</span>
+              <span class="font-mono-numbers">10.88</span>
+            </div>
+            <!-- Highlighted Row on Chit -->
+            <div id="s3-canvas-highlight" style="display: flex; justify-content: space-between; font-weight: 700; color: #134E4A; background: rgba(20, 184, 166, 0.15); border: 2px solid #14B8A6; border-radius: 4px; padding: 4px 6px; margin: 4px 0;">
+              <span style="color: #134E4A;">1x KOPI C PENG</span>
+              <span class="font-mono-numbers" style="color: #134E4A;">2.80</span>
+            </div>
+            <div style="border-top: 1px dashed #CBD5E1; margin: 10px 0;"></div>
+            <div style="display: flex; justify-content: space-between; font-weight: 700;">
+              <span>SUBTOTAL</span>
+              <span class="font-mono-numbers">13.68</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: #475569;">
+              <span>SST 6%</span>
+              <span class="font-mono-numbers">0.82</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: 15px; color: #134E4A; margin-top: 6px;">
+              <span>TOTAL RM</span>
+              <span class="font-mono-numbers">14.50</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Line Items Editor -->
+        <div class="card audio-reactive-border" style="padding: 24px; display: flex; flex-direction: column; justify-content: space-between; background: #FFFFFF;">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <span style="font-size: 14px; font-weight: 700; color: #0F172A; text-transform: uppercase;">Verified Line Items (High-Density Editor)</span>
+              <span style="font-size: 12px; font-weight: 500; color: #475569;">Keyboard driven: [Tab] navigate · [Enter] save</span>
+            </div>
+            
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+              <thead>
+                <tr style="border-bottom: 2px solid #CBD5E1; text-align: left; font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase;">
+                  <th style="padding: 8px 12px;">#</th>
+                  <th style="padding: 8px 12px;">Item Description</th>
+                  <th style="padding: 8px 12px; text-align: right;">Qty</th>
+                  <th style="padding: 8px 12px; text-align: right;">Price (RM)</th>
+                  <th style="padding: 8px 12px; text-align: right;">Tax (RM)</th>
+                  <th style="padding: 8px 12px; text-align: right;">Total (RM)</th>
+                  <th style="padding: 8px 12px; text-align: center;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Row 1 -->
+                <tr style="border-bottom: 1px solid #E2E8F0;">
+                  <td style="padding: 12px;" class="font-mono-numbers">1</td>
+                  <td style="padding: 12px; font-weight: 600;">PVC PIPE 2" (CLASS O)</td>
+                  <td style="padding: 12px; text-align: right;" class="font-mono-numbers">1</td>
+                  <td style="padding: 12px; text-align: right;" class="font-mono-numbers">10.88</td>
+                  <td style="padding: 12px; text-align: right;" class="font-mono-numbers">0.65</td>
+                  <td style="padding: 12px; text-align: right;" class="font-mono-numbers">11.53</td>
+                  <td style="padding: 12px; text-align: center;">
+                    <span class="pill pill-verified" style="font-size: 11px; padding: 2px 8px;">✓ OK</span>
+                  </td>
+                </tr>
+
+                <!-- Row 2: Active Row -->
+                <tr id="s3-row-active" style="border-bottom: 1px solid #E2E8F0; background: #FFFBEB;">
+                  <td style="padding: 12px;" class="font-mono-numbers">2</td>
+                  <td style="padding: 12px; font-weight: 700; color: #0F766E;">KOPI C PENG</td>
+                  <td style="padding: 12px; text-align: right;" class="font-mono-numbers">1</td>
+                  <td style="padding: 12px; text-align: right;" class="font-mono-numbers">2.80</td>
+                  <td id="s3-cell-tax" style="padding: 12px; text-align: right; font-weight: 700; color: #991B1B;" class="font-mono-numbers">
+                    0.27
+                  </td>
+                  <td id="s3-cell-total" style="padding: 12px; text-align: right; font-weight: 700; color: #991B1B;" class="font-mono-numbers">
+                    3.07
+                  </td>
+                  <td id="s3-cell-status" style="padding: 12px; text-align: center;">
+                    <span class="pill pill-warning" style="font-size: 11px; padding: 2px 8px;">Audit</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Total Breakdown Strip -->
+          <div style="background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 14px; font-weight: 600; color: #475569;">
+              Recalculating item totals & SST audit in real time...
+            </div>
+            <div style="display: flex; gap: 30px; font-size: 16px;">
+              <div>Subtotal: <span class="font-mono-numbers" style="font-weight: 700;">RM 13.68</span></div>
+              <div>SST: <span id="s3-grand-tax" class="font-mono-numbers" style="font-weight: 700;">RM 0.82</span></div>
+              <div style="color: #134E4A; font-weight: 800; font-size: 18px;">
+                Total: <span id="s3-grand-total" class="font-mono-numbers">RM 14.50</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Hint -->
+      <div style="font-size: 13px; color: #475569; text-align: right;">
+        PENNY-LEVEL PRECISION GUARANTEED BEFORE SIGN-OFF
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- SCENE 4: Dual Export & Outro (14.50s – 18.50s)           -->
+    <!-- ======================================================== -->
+    <div id="scene-4" class="clip scene" data-start="14.50" data-duration="4.00" data-track-index="4" style="background: #0F172A; color: #FFFFFF; justify-content: space-around; opacity: 0;">
+      <!-- Eyebrow -->
+      <div style="text-align: center;">
+        <span class="pill pill-brand" style="background: #134E4A; border-color: #14B8A6; color: #F0FDFA; font-size: 14px; padding: 6px 16px;">
+          ✓ VALIDATION COMPLETE · DUAL EXPORT ENGINE
+        </span>
+      </div>
+
+      <!-- Dual Export Cards -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; max-width: 1480px; margin: 0 auto; width: 100%;">
+        <!-- Card 1: LHDN MyInvois -->
+        <div id="s4-card-1" class="card-dark audio-reactive-border" style="padding: 36px; border-top: 5px solid #10B981; opacity: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <span style="font-size: 13px; font-weight: 700; color: #34D399; letter-spacing: 0.08em; text-transform: uppercase;">
+              Regulatory Compliance Target
+            </span>
+            <span class="pill pill-verified" style="font-size: 12px; background: #064E3B; border-color: #10B981; color: #ECFDF5;">
+              ✓ LHDN Validated
+            </span>
+          </div>
+          <h3 style="font-size: 32px; font-weight: 700; color: #FFFFFF; letter-spacing: -0.02em;">
+            LHDN MyInvois v1.1 Consolidated JSON
+          </h3>
+          <p style="font-size: 16px; color: #CBD5E1; margin-top: 10px; line-height: 1.5;">
+            Compliant with Lembaga Hasil Dalam Negeri e-invoicing schema. Includes Buyer TIN, Supplier BRN, classification codes, and tax totals.
+          </p>
+          <div style="margin-top: 24px; padding: 14px; background: #0B1120; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #10B981;">
+            {"Invoice": {"ID": "INV-99120", "IssueDate": "2026-10-12", "TaxTotal": 0.82, "LegalMonetaryTotal": 14.50}}
+          </div>
+        </div>
+
+        <!-- Card 2: AutoCount / SQL Account CSV -->
+        <div id="s4-card-2" class="card-dark audio-reactive-border" style="padding: 36px; border-top: 5px solid #14B8A6; opacity: 0;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <span style="font-size: 13px; font-weight: 700; color: #2DD4BF; letter-spacing: 0.08em; text-transform: uppercase;">
+              Accounting Software Export
+            </span>
+            <span class="pill pill-brand" style="font-size: 12px; background: #134E4A; border-color: #14B8A6; color: #F0FDFA;">
+              ✓ AutoCount & SQL Account
+            </span>
+          </div>
+          <h3 style="font-size: 32px; font-weight: 700; color: #FFFFFF; letter-spacing: -0.02em;">
+            Purchase Journal CSV
+          </h3>
+          <p style="font-size: 16px; color: #CBD5E1; margin-top: 10px; line-height: 1.5;">
+            Ready for 1-click import into standard Malaysian bookkeeping tools. Automated General Ledger mapping and penny-matched balances.
+          </p>
+          <div style="margin-top: 24px; padding: 14px; background: #0B1120; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #2DD4BF;">
+            DocNo,Date,Supplier,ItemCode,Description,Amount,SST,Total<br/>
+            INV-99120,2026-10-12,KIM GUAN,GL-FNB,KOPI C PENG,2.80,0.17,2.97
+          </div>
+        </div>
+      </div>
+
+      <!-- Outro Punchline & Logo Lockup -->
+      <div id="s4-brand-lockup" style="text-align: center; margin-top: 10px; opacity: 0;">
+        <div style="display: inline-flex; align-items: center; gap: 14px; margin-bottom: 12px;">
+          <div style="width: 48px; height: 48px; border-radius: 10px; background: #14B8A6; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 24px; color: #0F172A; box-shadow: 0 4px 20px rgba(20, 184, 166, 0.4);">
+            KL
+          </div>
+          <span style="font-size: 46px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.03em;">
+            Kenyalang Ledger
+          </span>
+        </div>
+        <div style="font-size: 20px; color: #94A3B8; font-weight: 500;">
+          Invoice & receipt digitizer tailored for Malaysian micro-SMEs & freelance accountants.
+        </div>
+        <div style="font-size: 24px; font-weight: 700; color: #2DD4BF; margin-top: 8px;">
+          "From WhatsApp dump to tax compliance in under 10 seconds."
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+    window.__timelines["main"] = tl;
+
+    // Audio-reactive per-frame sampling loop
+    if (window.AUDIO_FRAMES && window.AUDIO_FRAMES.length) {
+      for (let f = 0; f < window.AUDIO_FRAMES.length; f++) {
+        const frame = window.AUDIO_FRAMES[f];
+        const t = f / 30;
+        if (t > 18.5) break;
+        tl.call(() => {
+          const rms = frame[0];
+          const bass = frame[1];
+          document.documentElement.style.setProperty('--audio-bass', bass.toFixed(2));
+          document.documentElement.style.setProperty('--audio-rms', rms.toFixed(2));
+        }, [], t);
+      }
+    }
+
+    // ==========================================================
+    // SCENE 1 TIMELINE (0.00s – 3.70s)
+    // ==========================================================
+    tl.fromTo("#s1-eyebrow", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 0.2);
+    tl.fromTo("#s1-headline-1", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.4);
+    tl.fromTo("#s1-card-left", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, 0.7);
+    tl.fromTo("#s1-card-right", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, 0.9);
+
+    // beat-locked: 1.60s (Hook slam on strong beat)
+    tl.fromTo("#s1-headline-2", 
+      { opacity: 0, scale: 1.15, y: 15 }, 
+      { opacity: 1, scale: 1.0, y: 0, duration: 0.35, ease: "back.out(1.5)" }, 
+      1.60
+    );
+
+    // Transition Scene 1 -> Scene 2
+    tl.to("#scene-1", { x: -1920, duration: 0.35, ease: "power2.in" }, 3.35);
+
+    // ==========================================================
+    // SCENE 2 TIMELINE (3.70s – 8.96s)
+    // ==========================================================
+    // beat-locked: 3.70s
+    tl.fromTo("#scene-2", { x: 1920 }, { x: 0, duration: 0.35, ease: "power2.out" }, 3.70);
+
+    // beat-grid: 4.75s (Token 1: Malaysian BRN & SST registration)
+    tl.to("#s2-box-1", { opacity: 1, duration: 0.2, ease: "power2.out" }, 4.75);
+    tl.fromTo("#s2-field-1", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.35, ease: "power2.out" }, 4.75);
+
+    // beat-grid: 5.80s (Token 2: Localized Kopitiam Kopi C Peng)
+    tl.to("#s2-box-2", { opacity: 1, duration: 0.2, ease: "power2.out" }, 5.80);
+    tl.fromTo("#s2-field-2", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.35, ease: "power2.out" }, 5.80);
+
+    // beat-grid: 6.86s (Token 3: Hardware material)
+    tl.to("#s2-box-3", { opacity: 1, duration: 0.2, ease: "power2.out" }, 6.86);
+    tl.fromTo("#s2-field-3", { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.35, ease: "power2.out" }, 6.86);
+
+    // Transition Scene 2 -> Scene 3
+    tl.to("#scene-2", { opacity: 0, duration: 0.25, ease: "power2.in" }, 8.70);
+
+    // ==========================================================
+    // SCENE 3 TIMELINE (8.96s – 14.50s)
+    // ==========================================================
+    // beat-locked: 8.96s (Enter high-density accountant review console)
+    tl.fromTo("#scene-3", { opacity: 0 }, { opacity: 1, duration: 0.25, ease: "power2.out" }, 8.96);
+
+    // At 10.01s: Accountant edits line item row 2 tax field
+    tl.to("#s3-cell-tax", {
+      innerText: "0.17",
+      color: "#0F766E",
+      duration: 0.1,
+      snap: { innerText: 1 }
+    }, 10.01);
+    tl.to("#s3-cell-total", {
+      innerText: "2.97",
+      color: "#0F766E",
+      duration: 0.1,
+      snap: { innerText: 1 }
+    }, 10.01);
+    tl.to("#s3-row-active", { backgroundColor: "#ECFDF5", duration: 0.3 }, 10.01);
+
+    // beat-locked: 11.06s (Deterministic Math Verification payoff)
+    tl.call(() => {
+      const banner = document.getElementById("s3-math-banner");
+      const text = document.getElementById("s3-math-text");
+      const statusPill = document.getElementById("s3-status-pill");
+      const cellStatus = document.getElementById("s3-cell-status");
+      if (banner && text) {
+        banner.style.background = "#ECFDF5";
+        banner.style.borderColor = "#10B981";
+        banner.style.color = "#065F46";
+        text.innerHTML = "<span>✓</span> <span>Math Matches — Subtotal RM 13.68 + SST RM 0.82 = RM 14.50</span>";
+      }
+      if (statusPill) {
+        statusPill.className = "pill pill-verified";
+        statusPill.innerText = "✓ VERIFIED";
+      }
+      if (cellStatus) {
+        cellStatus.innerHTML = '<span class="pill pill-verified" style="font-size: 11px; padding: 2px 8px;">✓ OK</span>';
+      }
+    }, [], 11.06);
+
+    // Glow the approve button
+    tl.to("#s3-export-btn", {
+      boxShadow: "0 0 20px rgba(20, 184, 166, 0.6)",
+      scale: 1.05,
+      duration: 0.3,
+      yoyo: true,
+      repeat: 1
+    }, 11.20);
+
+    // Transition Scene 3 -> Scene 4
+    tl.to("#scene-3", { opacity: 0, duration: 0.25, ease: "power2.in" }, 14.25);
+
+    // ==========================================================
+    // SCENE 4 TIMELINE (14.50s – 18.50s)
+    // ==========================================================
+    // beat-locked: 14.50s
+    tl.to("#scene-4", { opacity: 1, duration: 0.25, ease: "power2.out" }, 14.50);
+
+    // beat-grid: 14.76s (Export card 1 - LHDN JSON)
+    tl.fromTo("#s4-card-1", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 14.76);
+
+    // beat-grid: 15.28s (Export card 2 - AutoCount CSV)
+    tl.fromTo("#s4-card-2", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.45, ease: "power3.out" }, 15.28);
+
+    // beat-locked: 16.00s (Brand payoff)
+    tl.fromTo("#s4-brand-lockup", { opacity: 0, scale: 0.95 }, { opacity: 1, scale: 1.0, duration: 0.5, ease: "back.out(1.2)" }, 16.00);
+    // beat-locked: 17.91s (Outro hold through 18.50s)
+    tl.seek(0);
+  </script>
+</body>
+</html>

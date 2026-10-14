@@ -17,6 +17,11 @@ from __future__ import annotations
 import logging
 import os
 import re
+try:
+    from dotenv import find_dotenv, load_dotenv
+    load_dotenv(find_dotenv(usecwd=True))
+except ImportError:
+    pass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from functools import lru_cache
@@ -155,9 +160,16 @@ def get_llm_client() -> instructor.Instructor:
     if not api_key:
         raise ExtractionError(f"{API_KEY_ENV} is not set; cannot run LLM extraction")
 
+    raw_base_url = (os.getenv(BASE_URL_ENV) or "").strip()
+    base_url = None
+    if raw_base_url:
+        base_url = raw_base_url.rstrip("/")
+        if not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+
     client = openai.OpenAI(
         api_key=api_key,
-        base_url=os.getenv(BASE_URL_ENV) or None,
+        base_url=base_url,
         timeout=LLM_TIMEOUT_SECONDS,
         # The SDK's own retry loop is bounded here so it cannot stack on top of
         # instructor's validation retries and blow the §5.3.2 time budget.
