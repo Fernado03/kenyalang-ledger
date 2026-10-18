@@ -83,3 +83,6 @@ Thumbs.db
 *.ntvs*
 *.njsproj
 *.sln
+
+# Graphify generated graph output
+graphify-out/

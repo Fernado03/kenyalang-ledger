@@ -20,7 +20,7 @@ from starlette.responses import Response
 from app.api.clients import API_VERSION, router as clients_router
 from app.api.exports import router as exports_router
 from app.api.receipts import router as receipts_router
-from app.core.database import init_db
+from app.models import init_db
 
 DESCRIPTION = (
     "Invoice and receipt digitizer for Malaysian micro-SMEs and accountants. "

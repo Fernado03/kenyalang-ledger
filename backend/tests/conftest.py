@@ -37,7 +37,7 @@ def _cleanup_tmp_dir() -> Iterator[None]:
 @pytest.fixture(scope="session", autouse=True)
 def _schema() -> None:
     """Create the schema once; the API lifespan would otherwise do it per test."""
-    from app.core.database import init_db
+    from app.models import init_db
 
     init_db()
 

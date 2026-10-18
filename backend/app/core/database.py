@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Numeric, create_engine, event, text
+from sqlalchemy import DateTime, Numeric, create_engine, event
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -162,15 +162,4 @@ def session_scope() -> Iterator[Session]:
         db.close()
 
 
-def init_db(target_engine: Engine | None = None) -> None:
-    """Create the ``pgcrypto`` extension and all tables if they do not exist."""
-    target_engine = engine if target_engine is None else target_engine
 
-    # Imported for side effects: registers every mapper on Base.metadata.
-    from app import models  # noqa: F401
-
-    if target_engine.dialect.name == "postgresql":
-        with target_engine.begin() as conn:
-            conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
-
-    Base.metadata.create_all(target_engine)
