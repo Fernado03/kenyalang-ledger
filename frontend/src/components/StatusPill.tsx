@@ -45,6 +45,28 @@ export default function StatusPill({
     );
   }
 
+  if (status === 'STATUS_EXPORTED') {
+    return (
+      <span
+        className={`${PILL_BASE} bg-surface-subtle border-border text-brand-900 font-medium`}
+        data-status={status}
+      >
+        <span aria-hidden="true">↗</span> Dieksport
+      </span>
+    );
+  }
+
+  if (status === 'STATUS_REJECTED') {
+    return (
+      <span
+        className={`${PILL_BASE} bg-mismatch-bg border-mismatch-border text-mismatch-text`}
+        data-status={status}
+      >
+        <span aria-hidden="true">✕</span> Ditolak
+      </span>
+    );
+  }
+
   if (status === 'STATUS_NEEDS_REVIEW') {
     const mismatchFlag = flags.find((flag) => flag.startsWith(DELTA_PREFIX));
     if (mismatchFlag !== undefined) {

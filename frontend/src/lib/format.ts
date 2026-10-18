@@ -19,9 +19,9 @@ export function parseMoneyToCents(value: string | number | null): bigint {
   const [, sign, whole, fraction] = match;
   // Scale to thousandths first so a 3rd decimal rounds half-away-from-zero.
   const thousandths = BigInt(`${whole || '0'}${(fraction ?? '').padEnd(3, '0')}`);
-  const rounded = thousandths / 100n;
-  const remainder = thousandths % 100n;
-  const halfUp = remainder !== 0n && remainder * 2n >= 100n;
+  const rounded = thousandths / 10n;
+  const remainder = thousandths % 10n;
+  const halfUp = remainder !== 0n && remainder * 2n >= 10n;
   const cents = halfUp ? rounded + 1n : rounded;
   return sign === '-' ? -cents : cents;
 }

@@ -138,6 +138,19 @@ export async function updateReceipt(
   );
 }
 
+/** `POST /api/v1/clients/{clientId}/receipts/{receiptId}/reject` — mark rejected. */
+export async function rejectReceipt(
+  clientId: string,
+  receiptId: string,
+): Promise<ReceiptUpdateResponse> {
+  return request<ReceiptUpdateResponse>(
+    `/api/v1/clients/${clientId}/receipts/${receiptId}/reject`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
 /**
  * `POST /api/v1/clients/{clientId}/receipts/upload` — single multipart request
  * with one repeated `files` field per file (max 50 per batch).

@@ -24,11 +24,13 @@ logger = logging.getLogger(__name__)
 
 OCR_LANGUAGES: Final = ["en", "ms"]
 # Below this, EasyOCR reports noise and half-characters that mislead the LLM stage.
-MIN_CONFIDENCE: Final = 0.30
+# Lowered from 0.30 to 0.10 to retain faint handwriting (e.g. Upah Pasang, Spark Plug).
+DEFAULT_MIN_CONFIDENCE: Final = 0.10
+MIN_CONFIDENCE: Final = DEFAULT_MIN_CONFIDENCE
+_MIN_CONFIDENCE_ENV: Final = "KENYALANG_OCR_MIN_CONFIDENCE"
 # Reader construction loads ~100MB of detection/recognition weights, so it is
 # cached process-wide: the ingest worker is long-lived and reuses one reader.
 _READER_GPU_FLAG_ENV: Final = "EASYOCR_USE_GPU"
-
 
 class OCRToken(BaseModel):
     """A recognized text run with its position in the source image."""
@@ -54,11 +56,17 @@ class OCRToken(BaseModel):
 def get_reader(gpu: bool | None = None) -> "easyocr.Reader":
     """Return the process-wide EasyOCR reader for English + Malay."""
     if gpu is None:
-        gpu = os.getenv(_READER_GPU_FLAG_ENV, "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-        }
+        flag = os.getenv(_READER_GPU_FLAG_ENV, "").strip().lower()
+        if flag in {"1", "true", "yes"}:
+            gpu = True
+        elif flag in {"0", "false", "no"}:
+            gpu = False
+        else:
+            try:
+                import torch
+                gpu = bool(torch.cuda.is_available())
+            except Exception:
+                gpu = False
     reader = easyocr.Reader(OCR_LANGUAGES, gpu=gpu, verbose=False)
     logger.info("EasyOCR reader ready (languages=%s, gpu=%s)", OCR_LANGUAGES, gpu)
     return reader
@@ -101,10 +109,11 @@ def extract_tokens(
 
     results = reader.readtext(cv_image, detail=1, paragraph=False)
     tokens: list[OCRToken] = []
-
+    min_conf_env = os.getenv(_MIN_CONFIDENCE_ENV)
+    threshold = float(min_conf_env) if min_conf_env else MIN_CONFIDENCE
     for line_num, (box, text, raw_confidence) in enumerate(results):
         confidence = float(raw_confidence)
-        if confidence < MIN_CONFIDENCE:
+        if confidence < threshold:
             continue
         cleaned = str(text).strip()
         if not cleaned:

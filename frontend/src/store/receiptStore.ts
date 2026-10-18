@@ -5,6 +5,7 @@ import {
   getReceipt,
   listClients,
   listReceipts,
+  rejectReceipt as rejectReceiptRequest,
   updateReceipt,
   uploadReceipts,
 } from '../api/client';
@@ -203,6 +204,7 @@ export interface ReceiptStoreState {
   updateDraftLine: (key: string, field: DraftLineField, value: string) => void;
   removeDraftLine: (key: string) => void;
   saveReceipt: () => Promise<ReceiptDetail>;
+  rejectReceipt: () => Promise<ReceiptDetail>;
   uploadFiles: (files: File[]) => Promise<void>;
 }
 
@@ -440,6 +442,34 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
     set({ saveState: 'saving', saveError: null });
     try {
       await updateReceipt(currentClientId, activeReceipt.id, updateRequestFromDraft(draft));
+      clearPersistedDraft(activeReceipt.id);
+      const detail = await getReceipt(currentClientId, activeReceipt.id);
+      set({
+        activeReceipt: detail,
+        draft: draftFromReceipt(detail),
+        saveState: 'saved',
+        saveError: null,
+      });
+      await get().loadClientReceipts(currentClientId);
+      return detail;
+    } catch (error) {
+      const message = receiptsFailure(error);
+      set({ saveState: 'error', saveError: message });
+      throw error instanceof ApiError ? error : new Error(message);
+    }
+  },
+
+  rejectReceipt: async () => {
+    const { currentClientId, activeReceipt } = get();
+    if (currentClientId === null || activeReceipt === null) {
+      const message = 'No receipt is open for rejection';
+      set({ saveState: 'error', saveError: message });
+      throw new Error(message);
+    }
+
+    set({ saveState: 'saving', saveError: null });
+    try {
+      await rejectReceiptRequest(currentClientId, activeReceipt.id);
       clearPersistedDraft(activeReceipt.id);
       const detail = await getReceipt(currentClientId, activeReceipt.id);
       set({

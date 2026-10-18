@@ -107,6 +107,7 @@ export default function ReviewPage(): JSX.Element {
   const updateDraftLine = useReceiptStore((state) => state.updateDraftLine);
   const removeDraftLine = useReceiptStore((state) => state.removeDraftLine);
   const saveReceipt = useReceiptStore((state) => state.saveReceipt);
+  const rejectReceipt = useReceiptStore((state) => state.rejectReceipt);
 
   const [scale, setScale] = useState(1);
   const [activeField, setActiveField] = useState<string | null>(null);
@@ -187,6 +188,21 @@ export default function ReviewPage(): JSX.Element {
     }
   }, [clientId, receiptId, receipts, saveReceipt, navigate]);
 
+  const rejectAndNext = useCallback(async (): Promise<void> => {
+    if (clientId === undefined || receiptId === undefined) {
+      return;
+    }
+    try {
+      await rejectReceipt();
+      const next = receipts.find(
+        (item) => item.status === 'STATUS_NEEDS_REVIEW' && item.id !== receiptId,
+      );
+      navigate(next !== undefined ? `/clients/${clientId}/review/${next.id}` : `/clients/${clientId}/inbox`);
+    } catch {
+      // saveState already holds the error message.
+    }
+  }, [clientId, receiptId, receipts, rejectReceipt, navigate]);
+
   // One window listener for the whole workflow.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -223,9 +239,7 @@ export default function ReviewPage(): JSX.Element {
 
       if (event.key === 'Escape') {
         event.preventDefault();
-        if (clientId !== undefined) {
-          navigate(`/clients/${clientId}/inbox`);
-        }
+        void rejectAndNext();
         return;
       }
 
@@ -256,6 +270,7 @@ export default function ReviewPage(): JSX.Element {
     onZoomIn,
     onZoomOut,
     removeDraftLine,
+    rejectAndNext,
     saveAndNext,
   ]);
 
@@ -311,6 +326,13 @@ export default function ReviewPage(): JSX.Element {
       <div className="min-h-0 min-w-0 overflow-y-auto">
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
           <div className="flex min-w-0 items-center gap-3">
+            <Link
+              to={clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`}
+              className="inline-flex items-center text-xs text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:underline"
+              title="Back to inbox without saving"
+            >
+              ← Inbox
+            </Link>
             <span className="font-mono-numbers text-xs text-text-muted">
               ID: {activeReceipt.id.slice(0, 8)}
             </span>
@@ -324,11 +346,10 @@ export default function ReviewPage(): JSX.Element {
             <button
               type="button"
               className={ACTION_BUTTON_CLASS}
-              onClick={() =>
-                navigate(clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`)
-              }
+              disabled={saveState === 'saving'}
+              onClick={() => void rejectAndNext()}
             >
-              Reject (Esc)
+              {saveState === 'saving' ? 'Rejecting…' : 'Reject (Esc)'}
             </button>
             {saveState === 'error' ? (
               <div className="border border-mismatch-border bg-mismatch-bg px-2 py-1 text-xs text-mismatch-text">

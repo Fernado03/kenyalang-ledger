@@ -24,6 +24,7 @@ except ImportError:
     pass
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 from functools import lru_cache
 from typing import Final, Iterable, Optional
 
@@ -117,34 +118,91 @@ class ExtractionTimeout(ExtractionError):
 # --------------------------------------------------------------------------- #
 
 
+def _find_best_slope(tokens: list[OCRToken]) -> float:
+    """Estimate document slant slope (dy/dx) from token positions.
+
+    Tests candidate slopes in [-0.20, +0.20] (approx ±11 degrees) and selects
+    the slope minimizing within-line vertical variance. Upright documents return 0.0.
+    """
+    if len(tokens) < 3:
+        return 0.0
+
+    best_slope = 0.0
+    best_cost = float("inf")
+    for i in range(-20, 21):
+        s = i * 0.01
+        projs = []
+        for t in tokens:
+            x_c = (t.bbox[0] + t.bbox[2]) / 2.0
+            y_c = (t.bbox[1] + t.bbox[3]) / 2.0
+            projs.append(y_c - s * x_c)
+        projs.sort()
+        diffs = [projs[j + 1] - projs[j] for j in range(len(projs) - 1)]
+        within = [d for d in diffs if d < 0.025]
+        if not within:
+            continue
+        cost = (sum(d * d for d in within) / (len(within) ** 2)) + 1e-6 * (s * s)
+        if cost < best_cost:
+            best_cost = cost
+            best_slope = s
+
+    return best_slope
+
+
+def group_tokens_into_rows(
+    tokens: Iterable[OCRToken], slope: Optional[float] = None
+) -> list[list[OCRToken]]:
+    """Group tokens into visual reading-order rows taking slant into account.
+
+    Within each row, tokens are ordered strictly left-to-right (x_min).
+    Rows are ordered top-to-bottom.
+    """
+    token_list = list(tokens)
+    if not token_list:
+        return []
+
+    if slope is None:
+        slope = _find_best_slope(token_list)
+
+    def get_y_proj(t: OCRToken) -> float:
+        x_c = (t.bbox[0] + t.bbox[2]) / 2.0
+        y_c = (t.bbox[1] + t.bbox[3]) / 2.0
+        return y_c - slope * x_c
+
+    sorted_tokens = sorted(token_list, key=lambda t: (get_y_proj(t), t.bbox[0]))
+    rows: list[list[OCRToken]] = []
+
+    for token in sorted_tokens:
+        y_p = get_y_proj(token)
+        if rows and abs(y_p - get_y_proj(rows[-1][0])) <= 0.022:
+            rows[-1].append(token)
+        else:
+            rows.append([token])
+
+    for row in rows:
+        row.sort(key=lambda t: t.bbox[0])
+
+    rows.sort(key=lambda r: min(t.bbox[1] for t in r))
+    return rows
+
+
 def sort_tokens(tokens: Iterable[OCRToken]) -> list[OCRToken]:
     """Reading order: top-to-bottom, then left-to-right (§5.3.2)."""
-    return sorted(tokens, key=lambda token: (token.bbox[1], token.bbox[0]))
+    rows = group_tokens_into_rows(tokens)
+    return [token for row in rows for token in row]
 
 
 def render_tokens(tokens: Iterable[OCRToken]) -> str:
     """Format tokens as a compact line-per-row text block for the LLM.
 
-    Tokens are grouped into visual rows by their ``y_min`` and emitted
-    top-to-bottom with the row's normalized ``y`` as a spatial hint; within a
-    row, tokens are joined left-to-right by ``x_min``. Sending rows instead of
-    one token per line is what keeps the prompt small enough to stay inside the
-    §5.3.2 token budget.
-
-    Grouping is geometric, not ``line_num``-based: a scrambled or interleaved
-    ``line_num`` must never split tokens that share a visual row, so the row a
-    token lands in is decided by where it actually is.
+    Tokens are grouped into visual rows by their slant-corrected geometry and
+    emitted top-to-bottom with the row's normalized ``y`` as a spatial hint;
+    within a row, tokens are joined left-to-right by ``x_min``.
     """
-    ordered = sort_tokens(tokens)
-    rows: list[list[OCRToken]] = []
-    for token in ordered:
-        if rows and abs(token.bbox[1] - rows[-1][0].bbox[1]) <= _ROW_TOLERANCE:
-            rows[-1].append(token)
-        else:
-            rows.append([token])
-
+    rows = group_tokens_into_rows(tokens)
     return "\n".join(
-        f"[{row[0].bbox[1]:.3f}] " + " ".join(t.text for t in row) for row in rows
+        f"[{min(t.bbox[1] for t in row):.3f}] " + " ".join(t.text for t in row)
+        for row in rows
     )
 
 
@@ -269,6 +327,22 @@ def _match_numeric(target: Decimal, tokens: list[OCRToken]) -> Optional[OCRToken
     return _pick([token for token in tokens if target in _token_numbers(token)])
 
 
+def _word_in_token(word: str, token: OCRToken) -> bool:
+    haystack = _normalize(token.text)
+    if not haystack:
+        return False
+    if word in haystack:
+        return True
+    if len(haystack) >= 3 and SequenceMatcher(None, word, haystack).ratio() >= 0.70:
+        return True
+    w_len = len(word)
+    if len(haystack) > w_len:
+        for i in range(len(haystack) - w_len + 1):
+            if SequenceMatcher(None, word, haystack[i : i + w_len]).ratio() >= 0.70:
+                return True
+    return False
+
+
 def _match_text(target: str, tokens: list[OCRToken]) -> Optional[OCRToken]:
     needle = _normalize(target)
     if len(needle) < 3:  # too short to be evidence; refuse to guess
@@ -287,15 +361,13 @@ def _match_text(target: str, tokens: list[OCRToken]) -> Optional[OCRToken]:
     words = [word for word in re.split(r"\W+", target.lower()) if len(word) >= 4]
     if not words:
         return None
-    covered = [
-        any(word in _normalize(token.text) for token in tokens) for word in words
-    ]
-    if not all(covered):
+    all_covered = all(any(_word_in_token(word, t) for t in tokens) for word in words)
+    if not all_covered:
         return None
     partial = [
         token
         for token in tokens
-        if any(word in _normalize(token.text) for word in words)
+        if any(_word_in_token(word, token) for word in words)
     ]
     return _pick(partial)
 
@@ -346,7 +418,12 @@ def attach_provenance(
         fields.append(_provenance(name, value, tokens))
 
     line_items = [
-        item.model_copy(update={"confidence": _line_item_confidence(item, tokens)})
+        item.model_copy(
+            update={
+                "confidence": _line_item_confidence(item, tokens),
+                "bbox": item.bbox or _line_item_bbox(item, tokens),
+            }
+        )
         for item in data.line_items
     ]
     return ParsedReceiptSchema(
@@ -369,6 +446,18 @@ def _line_item_confidence(item, tokens: list[OCRToken]) -> float:
     if description is None or amount is None:
         return UNSUPPORTED_CONFIDENCE
     return min(description.confidence, amount.confidence)
+
+def _line_item_bbox(item, tokens: list[OCRToken]) -> Optional[list[float]]:
+    description = _match_text(item.description, tokens)
+    amount = _match_numeric(item.line_total, tokens)
+    matched = [t for t in (description, amount) if t is not None]
+    if not matched:
+        return None
+    x_min = min(t.bbox[0] for t in matched)
+    y_min = min(t.bbox[1] for t in matched)
+    x_max = max(t.bbox[2] for t in matched)
+    y_max = max(t.bbox[3] for t in matched)
+    return [round(x_min, 4), round(y_min, 4), round(x_max, 4), round(y_max, 4)]
 
 
 def extract_receipt(

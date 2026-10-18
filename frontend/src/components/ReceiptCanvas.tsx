@@ -405,7 +405,7 @@ export default function ReceiptCanvas({
               <ReceiptImage src={imageUrl} alt={`Receipt ${receiptId}`} />
             )}
             <svg
-              className="pointer-events-none absolute inset-0"
+              className="pointer-events-none absolute inset-0 h-full w-full"
               viewBox={`0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}`}
               preserveAspectRatio="none"
               aria-hidden="true"

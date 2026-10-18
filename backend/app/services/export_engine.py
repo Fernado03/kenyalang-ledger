@@ -129,6 +129,16 @@ def _fetch_export_receipts(
     return list(db.execute(stmt).unique().scalars().all())
 
 
+def _mark_exported(session: Session, receipts: list[Receipt]) -> None:
+    """Advance verified receipts to STATUS_EXPORTED upon generation."""
+    updated = False
+    for r in receipts:
+        if r.status in (ReceiptStatus.STATUS_VERIFIED, ReceiptStatus.STATUS_AUTO_VERIFIED):
+            r.status = ReceiptStatus.STATUS_EXPORTED
+            updated = True
+    if updated:
+        session.commit()
+
 def _format_qty(qty: Decimal | float | None) -> str:
     """Format quantity cleanly (e.g. '1', '2.5')."""
     if qty is None:
@@ -245,7 +255,7 @@ def generate_accounting_csv(
                         f"{total_val:.2f}",
                     ]
                 )
-
+        _mark_exported(session, receipts)
         return output.getvalue()
 
     if db is not None:
@@ -470,6 +480,7 @@ def generate_myinvois_json(
                 "Invoice": invoices,
             }
         )
+        _mark_exported(session, receipts)
         return payload
 
     if db is not None:

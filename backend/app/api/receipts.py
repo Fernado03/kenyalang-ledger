@@ -85,6 +85,7 @@ INBOX_STATUS_FILTERS: Final = {
     "NEEDS_REVIEW": (ReceiptStatus.STATUS_NEEDS_REVIEW,),
     "VERIFIED": (ReceiptStatus.STATUS_AUTO_VERIFIED, ReceiptStatus.STATUS_VERIFIED),
     "EXPORTED": (ReceiptStatus.STATUS_EXPORTED,),
+    "REJECTED": (ReceiptStatus.STATUS_REJECTED,),
 }
 # Docs/06_schema_api.md §6.3.2: default page size, and a hard ceiling so a
 # misconfigured console cannot pull the whole ledger in one request.
@@ -467,7 +468,7 @@ def list_client_receipts(
     client_id: uuid.UUID,
     db: DbSession,
     accountant_id: AccountantId,
-    status: str = Query("ALL", pattern="^(ALL|NEEDS_REVIEW|VERIFIED|EXPORTED)$"),
+    status: str = Query("ALL", pattern="^(ALL|NEEDS_REVIEW|VERIFIED|EXPORTED|REJECTED)$"),
     limit: int = Query(DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     offset: int = Query(0, ge=0),
 ) -> ReceiptListResponse:
@@ -634,6 +635,46 @@ def update_client_receipt(
             )
         )
 
+    db.commit()
+    db.refresh(receipt)
+
+    return ReceiptUpdateResponse(
+        id=receipt.id,
+        status=receipt.status,
+        updated_at=receipt.updated_at,
+        verified_by=receipt.verified_by,
+        math_discrepancy=_money_text(receipt.math_discrepancy) or "0.00",
+    )
+
+
+@router.post(
+    "/clients/{client_id}/receipts/{receipt_id}/reject",
+    response_model=ReceiptUpdateResponse,
+)
+def reject_client_receipt(
+    client_id: uuid.UUID,
+    receipt_id: uuid.UUID,
+    db: DbSession,
+    accountant_id: AccountantId,
+) -> ReceiptUpdateResponse:
+    """Mark a receipt as rejected by the accountant."""
+    get_owned_client(db, client_id, accountant_id)
+    receipt = _receipt_or_404(db, client_id, receipt_id)
+
+    old_status = receipt.status.value if hasattr(receipt.status, "value") else str(receipt.status)
+    receipt.status = ReceiptStatus.STATUS_REJECTED
+    receipt.verified_by = accountant_id
+    receipt.verified_at = datetime.utcnow()
+
+    db.add(
+        ReceiptAuditLog(
+            receipt_id=receipt.id,
+            user_id=accountant_id,
+            field_name="status",
+            old_value=old_status,
+            new_value=ReceiptStatus.STATUS_REJECTED.value,
+        )
+    )
     db.commit()
     db.refresh(receipt)
 
