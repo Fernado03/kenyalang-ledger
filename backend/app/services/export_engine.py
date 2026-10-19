@@ -1,9 +1,13 @@
-"""Dual-format export engine for accounting systems and LHDN compliance.
+"""Dual-format export engine for accounting systems and MyInvois-shaped JSON.
 
 Implements docs/05_trd.md §5.5 and docs/06_schema_api.md §6.4:
 1. AutoCount / SQL Account purchase journal CSV.
-2. Official LHDN MyInvois v1.1 JSON payload matching
+2. LHDN MyInvois v1.1-shaped JSON envelope matching
    dataset/official_lhdn_sample/1.1-Invoice-MultiLineItem-Sample.json.
+
+The MyInvois output is a draft document shape. It is not validated against the
+official LHDN schema and is never submitted. Downloads are pure reads; the
+explicit :func:`mark_exported` action is the only state transition.
 """
 
 from __future__ import annotations
@@ -14,14 +18,23 @@ import io
 import re
 import uuid
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.database import session_scope
+from app.core.database import session_scope, utcnow
 from app.models.receipt import Receipt, ReceiptStatus
+from app.models.receipt_audit_log import ReceiptAuditLog
+
+MONTH_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
+MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+MONTH_ERROR = "month must be YYYY-MM"
+
+# Spreadsheet applications execute a cell whose text starts with one of these
+# characters. Prefixing a single quote forces the cell to stay text.
+CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 EXPORTABLE_STATUSES: tuple[ReceiptStatus, ...] = (
     ReceiptStatus.STATUS_VERIFIED,
@@ -76,17 +89,100 @@ class MyInvoisPayload(dict):
             and key in invoices[0]
         )
 
-def _parse_month_range(month: str | None) -> tuple[date, date] | None:
-    """Parse 'YYYY-MM' into inclusive (start_date, end_date), or None if unset."""
-    if not month:
+def parse_month_range(month: str | None) -> tuple[date, date] | None:
+    """Parse ``YYYY-MM`` into inclusive ``(start_date, end_date)``.
+
+    Returns ``None`` when no month is supplied. Raises :class:`ValueError` for
+    anything that is not a real calendar month, so callers never reach
+    ``calendar.monthrange`` with an impossible month number.
+    """
+    if month is None:
         return None
     cleaned = month.strip()
     if not cleaned:
         return None
-    year_str, month_str = cleaned.split("-")
-    year, month_num = int(year_str), int(month_str)
+    match = MONTH_RE.match(cleaned)
+    if match is None:
+        raise ValueError(MONTH_ERROR)
+    year, month_num = int(match.group(1)), int(match.group(2))
     _, last_day = calendar.monthrange(year, month_num)
     return date(year, month_num, 1), date(year, month_num, last_day)
+
+
+def month_clause(month: str | None):
+    """SQL predicate bounding receipts to ``month``, or ``None`` when unset."""
+    date_range = parse_month_range(month)
+    if date_range is None:
+        return None
+    start_date, end_date = date_range
+    return or_(
+        and_(
+            Receipt.invoice_date >= start_date,
+            Receipt.invoice_date <= end_date,
+        ),
+        and_(
+            Receipt.invoice_date.is_(None),
+            func.date(Receipt.created_at) >= start_date,
+            func.date(Receipt.created_at) <= end_date,
+        ),
+    )
+
+
+def _parse_month_range(month: str | None) -> tuple[date, date] | None:
+    """Backwards-compatible alias for :func:`parse_month_range`."""
+    return parse_month_range(month)
+
+
+def _csv_text(value: str | None) -> str:
+    """Neutralise spreadsheet formula injection in a text cell.
+
+    Cells beginning with ``=``, ``+``, ``-``, ``@``, tab, or carriage return are
+    prefixed with an apostrophe so Excel/Sheets treat them as literal text.
+    """
+    text = "" if value is None else str(value)
+    if text.startswith(CSV_DANGEROUS_PREFIXES):
+        return "'" + text
+    return text
+
+
+def _to_cents(value: Decimal | float | None) -> int:
+    """Convert a Ringgit amount to integer cents using half-up rounding."""
+    if value is None:
+        return 0
+    amount = Decimal(str(value))
+    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def allocate_tax_cents(
+    subtotal_cents: int,
+    tax_cents: int,
+    line_totals_cents: list[int],
+) -> list[int]:
+    """Split ``tax_cents`` across lines by largest remainder.
+
+    Each line receives its proportional floor; leftover cents go one at a time
+    to the largest fractional remainders, ties broken by line order. The result
+    always sums exactly to ``tax_cents`` when the tax is distributable.
+    """
+    count = len(line_totals_cents)
+    if count == 0 or subtotal_cents <= 0 or tax_cents <= 0:
+        return [0] * count
+
+    floors: list[int] = []
+    remainders: list[tuple[int, int]] = []
+    for index, line_cents in enumerate(line_totals_cents):
+        numerator = line_cents * tax_cents
+        floor_cents, remainder = divmod(numerator, subtotal_cents)
+        floors.append(floor_cents)
+        remainders.append((remainder, index))
+
+    leftover = tax_cents - sum(floors)
+    for _, index in sorted(remainders, key=lambda pair: (-pair[0], pair[1])):
+        if leftover <= 0:
+            break
+        floors[index] += 1
+        leftover -= 1
+    return floors
 
 
 def _fetch_export_receipts(
@@ -109,35 +205,63 @@ def _fetch_export_receipts(
         .order_by(Receipt.invoice_date.asc().nulls_last(), Receipt.created_at.asc())
     )
 
-    date_range = _parse_month_range(month)
-    if date_range is not None:
-        start_date, end_date = date_range
-        stmt = stmt.where(
-            or_(
-                and_(
-                    Receipt.invoice_date >= start_date,
-                    Receipt.invoice_date <= end_date,
-                ),
-                and_(
-                    Receipt.invoice_date.is_(None),
-                    func.date(Receipt.created_at) >= start_date,
-                    func.date(Receipt.created_at) <= end_date,
-                ),
-            )
-        )
+    clause = month_clause(month)
+    if clause is not None:
+        stmt = stmt.where(clause)
 
     return list(db.execute(stmt).unique().scalars().all())
 
 
-def _mark_exported(session: Session, receipts: list[Receipt]) -> None:
-    """Advance verified receipts to STATUS_EXPORTED upon generation."""
-    updated = False
-    for r in receipts:
-        if r.status in (ReceiptStatus.STATUS_VERIFIED, ReceiptStatus.STATUS_AUTO_VERIFIED):
-            r.status = ReceiptStatus.STATUS_EXPORTED
-            updated = True
-    if updated:
-        session.commit()
+def mark_exported(
+    db: Session,
+    client_id: uuid.UUID | str,
+    month: str | None = None,
+    actor_id: uuid.UUID | None = None,
+) -> int:
+    """Move verified receipts in the period to ``STATUS_EXPORTED``.
+
+    Only ``VERIFIED`` and ``AUTO_VERIFIED`` rows transition; already-exported
+    receipts are left untouched, so repeating the call returns ``0``. One audit
+    row per receipt records the status transition.
+    """
+    client_uuid = (
+        client_id if isinstance(client_id, uuid.UUID) else uuid.UUID(str(client_id))
+    )
+    stmt = (
+        select(Receipt)
+        .where(
+            Receipt.client_id == client_uuid,
+            Receipt.status.in_(
+                (ReceiptStatus.STATUS_VERIFIED, ReceiptStatus.STATUS_AUTO_VERIFIED)
+            ),
+        )
+        .order_by(Receipt.created_at.asc())
+    )
+    clause = month_clause(month)
+    if clause is not None:
+        stmt = stmt.where(clause)
+
+    receipts = list(db.execute(stmt).scalars().all())
+    if not receipts:
+        return 0
+
+    actor = actor_id or uuid.UUID(int=0)
+    now = utcnow()
+    for receipt in receipts:
+        previous = receipt.status.value
+        receipt.status = ReceiptStatus.STATUS_EXPORTED
+        receipt.exported_at = now
+        db.add(
+            ReceiptAuditLog(
+                receipt_id=receipt.id,
+                user_id=actor,
+                field_name="status",
+                old_value=previous,
+                new_value=ReceiptStatus.STATUS_EXPORTED.value,
+            )
+        )
+    db.commit()
+    return len(receipts)
 
 def _format_qty(qty: Decimal | float | None) -> str:
     """Format quantity cleanly (e.g. '1', '2.5')."""
@@ -197,32 +321,33 @@ def generate_accounting_csv(
                 subtotal = receipt.subtotal or sum(
                     (it.line_total for it in receipt.line_items), Decimal("0.00")
                 )
-                for item in receipt.line_items:
+                line_cents = [_to_cents(it.line_total) for it in receipt.line_items]
+                tax_cents = _to_cents(receipt.tax_amount) if has_tax else 0
+                tax_by_line = allocate_tax_cents(
+                    _to_cents(subtotal), tax_cents, line_cents
+                )
+                for item, allocated in zip(receipt.line_items, tax_by_line):
                     desc = item.description or "General Item"
                     item_code = f"ITEM-{item.line_index + 1:02d}"
                     qty_str = _format_qty(item.quantity)
                     unit_price_str = f"{item.unit_price:.2f}"
 
-                    if has_tax and subtotal > Decimal("0.00") and receipt.tax_amount:
-                        item_tax = (
-                            item.line_total / subtotal * receipt.tax_amount
-                        ).quantize(Decimal("0.01"))
-                    else:
-                        item_tax = Decimal("0.00")
-
-                    item_total = (item.line_total + item_tax).quantize(Decimal("0.01"))
+                    item_tax = Decimal(allocated) / 100
+                    item_total = (item.line_total + item_tax).quantize(
+                        Decimal("0.01")
+                    )
 
                     writer.writerow(
                         [
-                            doc_date,
-                            doc_no,
-                            supplier_code,
-                            supplier_name,
-                            desc,
-                            item_code,
+                            _csv_text(doc_date),
+                            _csv_text(doc_no),
+                            _csv_text(supplier_code),
+                            _csv_text(supplier_name),
+                            _csv_text(desc),
+                            _csv_text(item_code),
                             qty_str,
                             unit_price_str,
-                            tax_code,
+                            _csv_text(tax_code),
                             f"{item_tax:.2f}",
                             f"{item_total:.2f}",
                         ]
@@ -242,20 +367,19 @@ def generate_accounting_csv(
 
                 writer.writerow(
                     [
-                        doc_date,
-                        doc_no,
-                        supplier_code,
-                        supplier_name,
-                        desc,
-                        item_code,
+                        _csv_text(doc_date),
+                        _csv_text(doc_no),
+                        _csv_text(supplier_code),
+                        _csv_text(supplier_name),
+                        _csv_text(desc),
+                        _csv_text(item_code),
                         qty_str,
                         f"{subtotal_val:.2f}",
-                        tax_code,
+                        _csv_text(tax_code),
                         f"{tax_val:.2f}",
                         f"{total_val:.2f}",
                     ]
                 )
-        _mark_exported(session, receipts)
         return output.getvalue()
 
     if db is not None:
@@ -269,10 +393,12 @@ def generate_myinvois_json(
     month: str | None = None,
     db: Session | None = None,
 ) -> dict[str, Any]:
-    """Generate LHDN MyInvois v1.1 JSON payload.
+    """Generate the LHDN MyInvois v1.1-shaped JSON envelope.
 
-    Conforms to official SDK document envelope (1.1-Invoice-MultiLineItem-Sample.json)
-    and docs/06_schema_api.md §6.4.2.
+    Mirrors the official SDK sample layout
+    (1.1-Invoice-MultiLineItem-Sample.json) and docs/06_schema_api.md §6.4.2.
+    The output is a draft: it is not validated against the LHDN schema and is
+    never submitted. Generating it does not change any receipt status.
     """
 
     def _execute(session: Session) -> dict[str, Any]:
@@ -387,7 +513,14 @@ def generate_myinvois_json(
 
             invoice_lines: list[dict[str, Any]] = []
             if receipt.line_items:
-                for idx, item in enumerate(receipt.line_items):
+                line_cents = [_to_cents(item.line_total) for item in receipt.line_items]
+                tax_cents = _to_cents(tax_dec)
+                tax_by_line = allocate_tax_cents(
+                    _to_cents(subtotal_dec), tax_cents, line_cents
+                )
+                for idx, (item, allocated) in enumerate(
+                    zip(receipt.line_items, tax_by_line)
+                ):
                     qty_num = (
                         float(item.quantity)
                         if item.quantity is not None
@@ -404,10 +537,7 @@ def generate_myinvois_json(
                         else round(qty_num * unit_p_num, 2)
                     )
 
-                    if subtotal_num > 0 and tax_num > 0:
-                        item_tax_num = round((line_tot_num / subtotal_num) * tax_num, 2)
-                    else:
-                        item_tax_num = 0.0
+                    item_tax_num = round(allocated / 100, 2)
 
                     line_id = str(
                         item.line_index + 1
@@ -446,7 +576,7 @@ def generate_myinvois_json(
                             {"_": subtotal_num, "currencyID": "MYR"}
                         ],
                         "TaxTotal": [
-                            {"TaxAmount": [{"_": tax_num, "currencyID": "MYR"}]}
+                            {"TaxAmount": [{"_": 0.0, "currencyID": "MYR"}]}
                         ],
                         "Item": [{"Description": [{"_": merchant_name}]}],
                         "Price": [
@@ -480,7 +610,6 @@ def generate_myinvois_json(
                 "Invoice": invoices,
             }
         )
-        _mark_exported(session, receipts)
         return payload
 
     if db is not None:
@@ -492,7 +621,12 @@ def generate_myinvois_json(
 __all__ = [
     "CSV_COLUMNS",
     "EXPORTABLE_STATUSES",
+    "MONTH_PATTERN",
     "MyInvoisPayload",
+    "allocate_tax_cents",
     "generate_accounting_csv",
     "generate_myinvois_json",
+    "mark_exported",
+    "month_clause",
+    "parse_month_range",
 ]

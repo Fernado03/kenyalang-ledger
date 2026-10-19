@@ -15,7 +15,6 @@ from app.models.receipt import Receipt, ReceiptStatus
 from app.models.receipt_audit_log import ReceiptAuditLog
 from app.schemas.receipt import (
     ExtractedField,
-    ExtractedReceiptData,
     LineItemSchema,
     ParsedReceiptSchema,
 )
@@ -49,7 +48,7 @@ def stub_pipeline(monkeypatch: pytest.MonkeyPatch):
     def install(parsed_data: ParsedReceiptSchema | None = None):
         target_parsed = parsed_data or _parsed()
         monkeypatch.setattr(
-            "app.api.receipts.process_receipt_image", lambda _payload: _tokens()
+            "app.api.receipts.process_receipt_image", lambda *_a, **_k: _tokens()
         )
         monkeypatch.setattr(
             "app.api.receipts.extract_receipt", lambda _t, **_: target_parsed
@@ -148,7 +147,7 @@ def test_reject_client_receipt_updates_status_and_audit_log(
     assert client.get(base, params={"status": "REJECTED"}).json()["total"] == 1
 
 
-def test_export_transitions_verified_receipts_to_status_exported(
+def test_export_download_is_pure_and_mark_transitions_status(
     client: TestClient, stub_pipeline, _storage_root: Path
 ) -> None:
     stub_pipeline(_parsed(invoice_date=date(2026, 9, 12)))
@@ -161,23 +160,51 @@ def test_export_transitions_verified_receipts_to_status_exported(
     assert client.get(base, params={"status": "VERIFIED"}).json()["total"] == 1
     assert client.get(base, params={"status": "EXPORTED"}).json()["total"] == 0
 
-    # Call CSV export
-    csv_res = client.get(f"/api/v1/clients/{client_id}/exports/accounting-csv?month=2026-09")
+    # Both downloads are pure reads: neither one changes status
+    csv_res = client.get(
+        f"/api/v1/clients/{client_id}/exports/accounting-csv?month=2026-09"
+    )
     assert csv_res.status_code == 200
-    assert "PVC Pipe 2\"" in csv_res.text
+    assert 'PVC Pipe 2"' in csv_res.text
+    json_res = client.get(
+        f"/api/v1/clients/{client_id}/exports/myinvois-json?month=2026-09"
+    )
+    assert json_res.status_code == 200
+    assert len(json_res.json()["Invoice"]) == 1
+    assert client.get(base, params={"status": "EXPORTED"}).json()["total"] == 0
+    assert client.get(base, params={"status": "VERIFIED"}).json()["total"] == 1
 
-    # After export, status transitions to EXPORTED
+    # The explicit mark action performs the transition
+    mark = client.post(
+        f"/api/v1/clients/{client_id}/exports/mark?month=2026-09"
+    )
+    assert mark.status_code == 200
+    assert mark.json() == {"updated": 1}
     assert client.get(base, params={"status": "EXPORTED"}).json()["total"] == 1
     assert client.get(base, params={"status": "VERIFIED"}).json()["total"] == 0
-    assert client.get(base, params={"status": "ALL"}).json()["total"] == 1
 
-    # Verify database status
     with SessionLocal() as db:
         rec = db.get(Receipt, uuid.UUID(receipt_id))
         assert rec is not None
         assert rec.status == ReceiptStatus.STATUS_EXPORTED
+        assert rec.exported_at is not None
+        audit = db.execute(
+            select(ReceiptAuditLog).where(
+                ReceiptAuditLog.receipt_id == uuid.UUID(receipt_id),
+                ReceiptAuditLog.field_name == "status",
+            )
+        ).scalar_one()
+        assert audit.old_value == ReceiptStatus.STATUS_AUTO_VERIFIED.value
+        assert audit.new_value == ReceiptStatus.STATUS_EXPORTED.value
 
-    # Re-exporting via JSON still works and exports the receipt
-    json_res = client.get(f"/api/v1/clients/{client_id}/exports/myinvois-json?month=2026-09")
-    assert json_res.status_code == 200
-    assert len(json_res.json()["Invoice"]) == 1
+    # Idempotent: a second mark updates nothing, and the receipt still exports
+    second = client.post(
+        f"/api/v1/clients/{client_id}/exports/mark?month=2026-09"
+    )
+    assert second.status_code == 200
+    assert second.json() == {"updated": 0}
+    again = client.get(
+        f"/api/v1/clients/{client_id}/exports/accounting-csv?month=2026-09"
+    )
+    assert again.status_code == 200
+    assert 'PVC Pipe 2"' in again.text

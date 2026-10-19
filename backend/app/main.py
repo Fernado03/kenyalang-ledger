@@ -14,6 +14,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.api.clients import API_VERSION, router as clients_router
+from app.api.dashboard import router as dashboard_router
 from app.api.exports import router as exports_router
 from app.api.receipts import router as receipts_router
 from app.models import init_db
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     # client routes above predate it and stay where step 1 put them.
     app.include_router(receipts_router, prefix="/api/v1")
     app.include_router(exports_router, prefix="/api/v1")
+    app.include_router(dashboard_router, prefix="/api/v1")
     return app
 
 
