@@ -1,79 +1,115 @@
 # Kenyalang Ledger
 
-> **Invoice and receipt digitizer tailored for Malaysian micro-SMEs and freelance accountants.**
-> Built to bridge faded thermal receipts, handwritten Kuching chits, and WhatsApp photo dumps with LHDN MyInvois e-invoicing compliance and accounting software exports.
+> **Receipt digitizer and accounting review workspace for Malaysian micro-SMEs and freelance accountants.**
+> Upload phone photos of thermal receipts, review OCR-extracted fields side by side with the scan, and export a purchase journal CSV or a MyInvois-shaped draft JSON.
+
+This repository is a **portfolio demo**, not a production service. It runs locally with a
+forged demo identity, stores files on the local disk, and processes uploads in-process.
+Sections below state exactly where those demo boundaries are.
 
 ---
 
 ## Overview
 
-In Malaysia, the **LHDN MyInvois mandate** requires structured transaction records across business tiers, yet thousands of local hardware stores, automotive workshops, and kopitiams across Sarawak run on cash, thermal paper, and handwritten chits. Micro-SME owners often dump blurry monthly receipt photos into WhatsApp chats with freelance accountants, requiring hours of manual line-item data entry.
+Malaysian micro-SMEs — hardware shops, workshops, and kopitiams — hand their accountants
+shoeboxes of thermal receipts. Kenyalang Ledger digitizes that flow:
 
-**Kenyalang Ledger** provides an end-to-end digitizer and review console:
-- **Computer Vision Preprocessing:** Recovers faded thermal receipts using adaptive contrast (CLAHE), EXIF auto-rotation, and bilateral filtering.
-- **Localized Spatial Token Extraction:** EasyOCR coupled with Instructor-driven LLM parsing tuned for Malaysian business identifiers (BRN, SST) and local/Manglish terminology (*kopi c peng*, *upah pasang*, *minyak hitam*).
-- **Deterministic Math Reconciliation:** Verifies item totals, tax calculations, and grand totals with penny-level precision before human sign-off.
-- **Dual Export Engine:** One-click exports to **LHDN MyInvois v1.1 Consolidated JSON** and standard **AutoCount / SQL Account Purchase Journal CSV**.
-- **High-Density Review Console:** Split-pane web workspace with pan/zoom receipt canvas, bounding-box highlighting, and keyboard-driven line-item editing.
+- **Bounded async ingestion:** JPEG, PNG, HEIC, and PDF receipts upload in batches and are
+  processed in the background while the inbox shows their progress.
+- **Spatial OCR:** EasyOCR tokens keep normalized bounding boxes, which the review console
+  overlays on the scan so a field can be traced back to the pixels it came from.
+- **LLM structured extraction:** an OpenAI-compatible chat model turns OCR text into the
+  receipt header and line items.
+- **Deterministic reconciliation:** line totals plus tax are compared against the grand total
+  with a two-cent tolerance; low-confidence or unreconciled receipts route to human review.
+- **Fixed expense taxonomy:** line items are classified into `F&B`, `HARDWARE`, `WORKSHOP`,
+  `RETAIL`, or `OTHER` by keyword, with `OTHER` as the fallback.
+- **Export:** an AutoCount / SQL Account purchase journal CSV, and a MyInvois-shaped JSON
+  **draft** that has not been validated against the LHDN schema and is never submitted.
+- **Dashboard:** monthly spend, top five suppliers, and category breakdown over verified
+  receipts.
 
 ```mermaid
 flowchart LR
-    A[Receipt Image / Photo] --> B[OpenCV Normalizer<br/>EXIF, CLAHE, Denoise]
-    B --> C[EasyOCR Spatial Tokens<br/>Normalized BBoxes]
-    C --> D[Instructor + LLM<br/>Malaysian Lexicon & Schema]
-    D --> E[Deterministic Reconciler<br/>Math & SST Audit]
-    E --> F[(Database & Blob Storage<br/>PostgreSQL / SQLite)]
-    F --> G[Accountant Review Console<br/>React + Canvas Pan/Zoom]
-    G --> H1[LHDN MyInvois v1.1 JSON]
-    G --> H2[AutoCount / SQL Account CSV]
+    A[Upload: JPEG / PNG / HEIC / PDF] --> B[Stored blob<br/>local disk]
+    B --> C[Preprocess<br/>EXIF, CLAHE, 40 MP cap, PDF page 1 @ 200 DPI]
+    C --> D[EasyOCR<br/>normalized bboxes]
+    D --> E[LLM extraction<br/>header + line items]
+    E --> F[Reconciler<br/>math, confidence, date, SST]
+    F --> G[(SQLAlchemy<br/>PostgreSQL or SQLite)]
+    G --> H[Review console<br/>React + canvas]
+    H --> I1[Accounting CSV]
+    H --> I2[MyInvois-shaped draft JSON]
 ```
 
 ---
 
-## Architecture & Tech Stack
+## Demo boundaries
 
-| Layer | Technologies | Details |
+| Area | What this repository does | What a production system would need |
 |---|---|---|
-| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Zustand | High-density keyboard UI, HTML5 Canvas zoom/pan, client-side session store |
-| **Backend API** | FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2.0 | Async ASGI service with multi-tenant workspace isolation (`X-Accountant-Id`) |
-| **CV & OCR** | OpenCV (headless), EasyOCR, PyTorch (CPU) | LAB CLAHE contrast enhancement, deskew, normalized bounding boxes |
-| **LLM Extraction** | Instructor, OpenAI SDK (`gpt-4o-mini`) | Structured validation, retry logic, Manglish & local Sarawak lexicon parsing |
-| **Persistence** | PostgreSQL 15 / SQLite fallback | Portable column types (`GUID`, `JSONBType`, `UTCDateTime`), tenant-scoped storage |
-| **Containerization**| Docker, Docker Compose | Minimal Alpine PostgreSQL + Python 3.11 slim backend image |
+| Identity | `X-Accountant-Id` UUID header, accepted only when `KENYALANG_ENV` is `local` or `test` | A real IdP, signed sessions, per-user authorization |
+| Processing | FastAPI `BackgroundTasks` in the API process | A durable queue and worker with retries and a dead-letter path |
+| Schema evolution | `create_all` plus additive guards for the two fields added after launch | Alembic migrations and a reviewed migration history |
+| Storage | Local filesystem under `KENYALANG_STORAGE_ROOT` | Object storage with encryption and short-lived signed URLs |
+| MyInvois | A JSON envelope shaped like the LHDN sample | Schema validation and submission through LHDN's API |
+| Compliance | No claim of PDPA, WCAG, or LHDN certification | Legal and accessibility audits, data-processing agreements |
+
+The `X-Accountant-Id` header is a **forgeable demo identity, not authentication**: any caller
+who knows a UUID can act as that accountant. `KENYALANG_ENV` gates the header to `local` and
+`test`, and setting `KENYALANG_ENV=production` makes application startup raise
+`RuntimeError("Kenyalang Ledger demo auth must not run in production")`. Never expose this
+service on a public network.
 
 ---
 
-## Repository Structure
+## Architecture & tech stack
+
+| Layer | Technologies | Notes |
+|---|---|---|
+| **Frontend** | React 18, TypeScript 6, Vite 8, Tailwind CSS 3, Zustand 5, React Router 6 | High-density keyboard UI, canvas zoom/pan, object-URL image display |
+| **Backend API** | Python 3.11, FastAPI 0.115, Pydantic 2.11, SQLAlchemy 2.0, Uvicorn | Routers for clients, receipts, exports, and dashboard |
+| **CV & OCR** | OpenCV (headless), EasyOCR, Pillow, Pillow-HEIF, PyMuPDF | HEIC through `pillow-heif`, PDF page 1 rendered at 200 DPI |
+| **LLM extraction** | OpenAI SDK against any OpenAI-compatible base URL | Default model `gpt-4o-mini`, overridable with `KENYALANG_LLM_MODEL` |
+| **Persistence** | PostgreSQL 15 or SQLite | Portable column types (`GUID`, `JSONBType`, `UTCDateTime`) |
+| **Testing** | pytest, Vitest, Testing Library, ruff, ESLint | 229 backend tests, 34 frontend tests |
+| **Containerization** | Docker, Docker Compose | Non-root backend image; PostgreSQL 15 + API Compose stack |
+
+---
+
+## Repository structure
 
 ```text
 kenyalang-ledger/
 ├── backend/
 │   ├── app/
-│   │   ├── api/            # FastAPI routes: clients, receipts, exports
-│   │   ├── core/           # Database engine, tenancy guards, storage, auth
-│   │   ├── models/         # SQLAlchemy ORM models (Client, Receipt, LineItems, Audit)
-│   │   ├── pipeline/       # Image preprocessor, EasyOCR engine, LLM extractor
-│   │   ├── schemas/        # Pydantic v2 validation contracts
-│   │   ├── services/       # Export engine (MyInvois JSON, Accounting CSV), reconciler
-│   │   └── main.py         # ASGI app entrypoint and lifecycle
-│   ├── tests/              # 130+ test suite (unit, pipeline, API, E2E exports)
-│   ├── sql/                # Postgres extensions and migrations
-│   ├── Dockerfile          # Multi-stage optimized CPU backend container
-│   ├── pyproject.toml      # Build metadata and pytest configuration
-│   ├── requirements.txt    # Production dependencies
-│   └── constraints.txt     # Pinned OpenCV-headless to prevent ABI conflicts
+│   │   ├── api/            # clients + health, receipts, exports, dashboard routers
+│   │   ├── core/           # engine/session, tenancy guards, storage, demo auth
+│   │   ├── models/         # Client, Receipt, ReceiptLineItem, ReceiptAuditLog
+│   │   ├── pipeline/       # preprocessor, EasyOCR engine, LLM extractor
+│   │   ├── schemas/        # Pydantic v2 request/response contracts
+│   │   ├── services/       # reconciler, classifier, export engine
+│   │   └── main.py         # app factory, lifespan, CORS, router mounting
+│   ├── tests/              # 229 pytest tests
+│   ├── sql/                # pgcrypto extension for the Compose database
+│   ├── Dockerfile
+│   ├── pyproject.toml      # package metadata and pytest config
+│   ├── requirements.txt    # runtime dependencies
+│   ├── requirements-dev.txt# runtime + pytest, httpx, ruff
+│   └── constraints.txt     # OpenCV-headless pin (numpy 2.x ABI)
 ├── frontend/
 │   ├── src/
-│   │   ├── api/            # Typed API client wrapper
-│   │   ├── components/     # Canvas pan/zoom, line-item editor, math banner, dropzone
-│   │   ├── pages/          # Clients, Inbox, Review Console, Exports
-│   │   ├── store/          # Zustand receipt & accountant session stores
-│   │   └── types/          # TypeScript interfaces for API payloads
-│   ├── package.json        # Frontend scripts and dependencies
-│   └── vite.config.ts      # Vite dev server with /api proxy
-├── dataset/                # Benchmarking catalogs (SROIE, FUNSD, CORU, LHDN samples)
-├── docs/                   # Full product specs (PRD, TRD, Schema & APIs, UI specs)
-└── docker-compose.yml      # Local orchestration for PostgreSQL + Backend
+│   │   ├── api/            # typed fetch wrapper
+│   │   ├── components/     # AppShell, canvas, line editor, banners, pills, gate
+│   │   ├── lib/            # money/date formatting, math audit, shortcut resolution
+│   │   ├── pages/          # Clients, Inbox, Review, Exports, Dashboard, Upload
+│   │   ├── store/          # Zustand session and receipt stores
+│   │   └── test/           # Vitest setup
+│   ├── package.json
+│   └── vite.config.ts      # Vite dev server with /api proxy + Vitest config
+├── dataset/                # SROIE/FUNSD/CORU references and LHDN sample JSON
+├── docs/                   # PRD, appflow, UI specs, TRD, schema/API, RTM
+└── docker-compose.yml      # PostgreSQL 15 + backend
 ```
 
 ---
@@ -81,149 +117,260 @@ kenyalang-ledger/
 ## Prerequisites
 
 - **Python:** 3.11+
-- **Node.js:** 20+ (with npm 10+)
-- **Docker & Docker Compose** (optional, for running with PostgreSQL)
-- **OpenAI API Key** (required for the LLM extraction pipeline)
+- **Node.js:** 20+ with npm 10+
+- **Docker & Docker Compose** (optional, for the PostgreSQL stack)
+- **OpenAI-compatible API key** (required for LLM extraction; without it uploads end in
+  `ERR_EXTRACTION` rather than fabricating fields)
 
 ---
 
-## Quick Start (Local Development)
+## Quick start (local development)
 
-### 1. Backend Setup
+### 1. Backend
 
 ```bash
 cd backend
 
-# Create and activate a virtual environment
 python -m venv .venv
 # Linux/macOS:
 source .venv/bin/activate
 # Windows:
 .venv\Scripts\activate
 
-# Install dependencies with constraints (prevents OpenCV ABI collision)
+# Runtime dependencies, with the OpenCV constraint that avoids the numpy 2.x ABI clash
 pip install -c constraints.txt -r requirements.txt
 
-# Set required environment variables
-# Windows (PowerShell):
-$env:OPENAI_API_KEY="your-openai-api-key"
+# Required: demo auth is disabled unless the environment is local or test
 # Linux/macOS:
-export OPENAI_API_KEY="your-openai-api-key"
+export KENYALANG_ENV=local
+# Windows (PowerShell):
+$env:KENYALANG_ENV="local"
 
-# Run the FastAPI server
+# Required for extraction
+export OPENAI_API_KEY="your-api-key"
+
 uvicorn app.main:app --reload --port 8000
 ```
 
-> **Note on Database:** By default, if `DATABASE_URL` is unset, the backend runs seamlessly against local SQLite (`backend/kenyalang.db`). To use PostgreSQL, set:
-> `DATABASE_URL=postgresql+psycopg2://kenyalang:kenyalang@localhost:5432/kenyalang`
+Check the API:
 
-Check backend health:
 ```bash
-curl http://127.0.0.1:8000/api/health
+curl http://127.0.0.1:8000/api/health/live
+curl http://127.0.0.1:8000/api/health/ready
 ```
 
-### 2. Frontend Setup
+`/api/health/live` returns `200` whenever the process is up. `/api/health/ready` runs
+`SELECT 1` and returns `503 {"detail": "database unavailable"}` when the database does not
+answer.
 
-In a separate terminal:
+Database default: when `DATABASE_URL` is unset the backend uses local SQLite at
+`backend/kenyalang.db`. For PostgreSQL:
+
+```bash
+export DATABASE_URL=postgresql+psycopg2://kenyalang:kenyalang@localhost:5432/kenyalang
+```
+
+Schema bootstrap is `create_all` plus additive guards in `init_db()`; there are no migration
+files. Pointing the backend at an older demo database adds the `ERR_EXTRACTION` enum value and
+the `expense_category` column in place.
+
+### 2. Frontend
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start Vite development server
 npm run dev
 ```
 
-Open `http://localhost:5173` in your browser. The Vite development server automatically proxies all `/api` requests to `http://127.0.0.1:8000`.
+Open `http://localhost:5173`. Vite proxies `/api` to `http://127.0.0.1:8000`; override with
+`VITE_API_PROXY`. Setting `VITE_API_BASE_URL` makes the client call a different origin
+directly.
+
+On the gate, enter any UUID (for example `00000000-0000-4000-8000-000000000001`) as the demo
+accountant id. It is stored in the session store and sent as `X-Accountant-Id`.
 
 ---
 
 ## Running with Docker Compose
 
-To spin up the containerized backend with PostgreSQL 15:
-
 ```bash
-# Start PostgreSQL and Backend services
 docker compose up -d
-
-# View service logs
 docker compose logs -f backend
 ```
 
-- Backend API: `http://localhost:8000`
-- PostgreSQL: `localhost:5432` (`kenyalang` / `kenyalang`)
+- Backend API: `http://localhost:8000` (Compose sets `KENYALANG_ENV=local`)
+- PostgreSQL: `localhost:5432`, user/password/database `kenyalang`
+- Receipt blobs: named volume `kenyalang_storage` mounted at `/data/storage`
+
+The backend image copies only `app/`, runs as the non-root `app` user, and health-checks
+`/api/health/ready`.
 
 ---
 
-## Environment Variables
+## Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:///./kenyalang.db` | SQLAlchemy database connection string |
-| `OPENAI_API_KEY` | *(Required for LLM)* | API key for OpenAI / Instructor extraction |
-| `OPENAI_BASE_URL` | `None` | Alternative API base (e.g. OpenRouter, Azure, local vLLM) |
-| `KENYALANG_LLM_MODEL` | `gpt-4o-mini` | LLM model for extraction |
-| `KENYALANG_READER_GPU` | `0` | Set to `1` or `true` if running EasyOCR with CUDA GPU |
-| `KENYALANG_STORAGE_ROOT`| `./data/receipts` | Filesystem root for tenant-scoped receipt blobs |
-| `VITE_API_PROXY` | `http://127.0.0.1:8000` | Vite dev proxy target |
+| `KENYALANG_ENV` | *(unset)* | Must be `local` or `test` for demo auth to work; unset or any other value returns `401`, and `production` refuses startup |
+| `DATABASE_URL` | `sqlite:///./kenyalang.db` | SQLAlchemy URL; PostgreSQL 15 is the Compose default |
+| `KENYALANG_STORAGE_ROOT` | `storage` | Root directory for tenant receipt blobs |
+| `KENYALANG_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000` | Comma-separated allowed browser origins |
+| `OPENAI_API_KEY` | *(empty)* | Provider key; absent means extraction ends in `ERR_EXTRACTION` |
+| `OPENAI_BASE_URL` | *(SDK default)* | OpenAI-compatible endpoint (OpenRouter, Azure, vLLM) |
+| `KENYALANG_LLM_MODEL` | `gpt-4o-mini` | Chat model used for extraction |
+| `EASYOCR_USE_GPU` | *(auto-detect)* | `1`/`true` forces CUDA, `0`/`false` forces CPU, unset checks `torch.cuda` |
+| `KENYALANG_OCR_MIN_CONFIDENCE` | `0.10` | Drops OCR tokens below this confidence |
+| `VITE_API_PROXY` | `http://127.0.0.1:8000` | Vite dev-server proxy target |
+| `VITE_API_BASE_URL` | *(same origin)* | Absolute API base for the frontend build |
+
+Management of these values is your responsibility; `.env.example` contains placeholders only,
+and the backend does not autoload a dotenv file. Export the variables in the shell or pass
+them through Compose.
 
 ---
 
-## Key API Endpoints
+## Upload contract and limits
 
-All accountant endpoints expect tenant authentication via the `X-Accountant-Id` header (automatically supplied by the frontend session store).
+`POST /api/v1/clients/{client_id}/receipts/upload` accepts a multipart batch and returns
+`202 Accepted` immediately, with each new receipt in `PROCESSING_OCR`. Work continues in a
+FastAPI background task and settles into `STATUS_AUTO_VERIFIED`, `STATUS_NEEDS_REVIEW`, or a
+terminal `ERR_*` state.
+
+| Limit | Value | Failure |
+|---|---|---|
+| Files per batch | 50 | `413` |
+| File size | 15 MiB | `413` |
+| Batch size | 50 MiB | `413` |
+| Decoded image pixels | 40 MP | `ERR_FILE_CORRUPT` after acceptance |
+| Accepted formats | JPEG, PNG, HEIC, PDF (magic-byte detection) | `415` |
+| Empty file | — | `422` |
+
+Every file passes preflight before any blob is written; a rejected batch leaves no rows or
+files behind. A re-upload whose safe filename and byte length match an existing receipt
+returns that receipt's id and status instead of storing a second copy.
+
+Processing is in-process and best-effort: **restarting the API strands in-flight rows in a
+`PROCESSING_*` state, and there is no retry queue.** A duplicate upload returns the stranded
+row. Reset the row or the demo database to recover.
+
+---
+
+## Key API endpoints
+
+All accountant endpoints expect `X-Accountant-Id`. Tenant-scoped routes return `404` for a
+missing, foreign, or soft-deleted client.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/health` | Healthcheck (database connectivity & version) |
-| `GET` | `/api/clients` | List client workspaces for the current accountant |
-| `POST` | `/api/clients` | Create a new client workspace (BRN, SST, business name) |
-| `POST` | `/api/v1/clients/{client_id}/receipts/upload` | Batch multipart receipt image upload and synchronous pipeline execution |
-| `GET` | `/api/v1/clients/{client_id}/receipts` | Paginated inbox of client receipts |
-| `GET` | `/api/v1/clients/{client_id}/receipts/{receipt_id}` | Full receipt detail including OCR tokens, bounding boxes, and audit history |
-| `GET` | `/api/v1/clients/{client_id}/receipts/{receipt_id}/image` | Stream receipt image file with tenancy validation |
-| `PUT` | `/api/v1/clients/{client_id}/receipts/{receipt_id}` | Update, audit-log, and verify receipt line items |
-| `GET` | `/api/v1/clients/{client_id}/exports/accounting-csv` | Export AutoCount / SQL Account purchase journal batch CSV |
-| `GET` | `/api/v1/clients/{client_id}/exports/myinvois-json` | Export LHDN MyInvois v1.1 compliant JSON format |
+| `GET` | `/api/health/live` | Liveness; no database access |
+| `GET` | `/api/health/ready` | Readiness; `SELECT 1`, `503` when unavailable |
+| `GET` | `/api/clients` | Client workspaces with `unreviewed_count` / `verified_count` |
+| `POST` | `/api/clients` | Create a client workspace |
+| `GET/PUT/DELETE` | `/api/clients/{client_id}` | Read, update, soft-delete (`204`) |
+| `POST` | `/api/v1/clients/{client_id}/receipts/upload` | Batch upload; `202` + background processing |
+| `GET` | `/api/v1/clients/{client_id}/receipts` | Inbox page: `status`, `limit` (max 200), `offset` |
+| `GET` | `/api/v1/clients/{client_id}/receipts/{receipt_id}` | Full detail: header, fields, line items, OCR tokens |
+| `GET` | `/api/v1/clients/{client_id}/receipts/{receipt_id}/image` | Stored bytes, tenancy-checked |
+| `GET` | `/api/v1/clients/{client_id}/receipts/{receipt_id}/audit` | Manual-edit history, newest first |
+| `PUT` | `/api/v1/clients/{client_id}/receipts/{receipt_id}` | Update and verify; writes audit rows |
+| `POST` | `/api/v1/clients/{client_id}/receipts/{receipt_id}/reject` | Reject with an audit row |
+| `GET` | `/api/v1/clients/{client_id}/exports/accounting-csv?month=YYYY-MM` | Purchase journal CSV (read-only) |
+| `GET` | `/api/v1/clients/{client_id}/exports/myinvois-json?month=YYYY-MM` | MyInvois-shaped draft JSON (read-only) |
+| `POST` | `/api/v1/clients/{client_id}/exports/mark?month=YYYY-MM` | Move verified receipts to `EXPORTED` |
+| `GET` | `/api/v1/clients/{client_id}/dashboard/summary?month=YYYY-MM` | Monthly total, top suppliers, categories |
+
+Export downloads never change receipt state. `POST .../exports/mark` is the only transition;
+it moves `STATUS_VERIFIED` and `STATUS_AUTO_VERIFIED` receipts to `STATUS_EXPORTED`, writes one
+audit row per receipt, and returns `{"updated": n}`. A second call returns `0`.
+
+CSV columns: `DocDate`, `DocNo`, `SupplierCode`, `SupplierName`, `Description`, `ItemCode`,
+`Qty`, `UnitPrice`, `TaxCode`, `TaxAmount`, `TotalAmount`. Tax is allocated across lines in
+integer cents by largest remainder so the line taxes sum exactly to the receipt tax, and any
+text cell beginning with `=`, `+`, `-`, `@`, tab, or carriage return is prefixed with a single
+quote to neutralize spreadsheet formula injection.
 
 ---
 
-## Testing & Quality Gates
+## Expense categories and reconciliation
 
-### Backend Test Suite
-The backend contains 130 unit, integration, and E2E export tests covering the image preprocessor, OCR token parser, math reconciler, client workspaces, and export generators:
+Line items are classified by keyword into `F&B`, `HARDWARE`, `WORKSHOP`, `RETAIL`, or `OTHER`
+(`backend/app/services/classifier.py`). Unknown or blank descriptions fall back to `OTHER`.
+The dashboard always returns all five categories, including zeros.
+
+Reconciliation (`backend/app/services/reconciler.py`):
+
+- **Math:** `|sum(line_total) + tax_amount - grand_total| <= RM 0.02`. Missing line items fall
+  back to comparing `subtotal + tax`.
+- **Confidence:** any critical field below `0.80` routes the receipt to `STATUS_NEEDS_REVIEW`.
+- **Date sanity:** invoice dates in the future or older than 365 days are flagged.
+- **SST:** an SST-registered merchant with no tax amount is flagged.
+- **Critical fields:** `merchant_name`, `invoice_date`, `grand_total`.
+
+Failing any gate produces `STATUS_NEEDS_REVIEW`; passing all gates produces
+`STATUS_AUTO_VERIFIED`.
+
+---
+
+## Testing and quality gates
+
+### Backend
 
 ```bash
 cd backend
-pytest
+pip install -r requirements-dev.txt
+python -m pytest
+ruff check app tests
 ```
 
-### Frontend Build & Linting
-Type-checking, linting, and production bundling:
+The suite runs 229 tests over auth, tenancy, health, uploads, receipt updates, exports,
+dashboard, pipeline formats, and end-to-end export flows. It uses SQLite and a temporary
+storage root, so no Docker or network access is required. Tests that would need EasyOCR
+weights skip with an explicit reason.
+
+### Frontend
 
 ```bash
 cd frontend
+npm test        # vitest run
 npm run lint
-npm run build
+npm run build   # tsc -b && vite build
 ```
+
+34 Vitest tests cover money and date formatting, math auditing, keyboard shortcut resolution,
+and the status pill. Testing Library runs in jsdom with globals disabled, so tests import
+`describe`/`it`/`expect` from `vitest` explicitly.
 
 ---
 
-## Dataset & Benchmarking
+## Dataset & benchmarking references
 
-The `dataset/` directory contains benchmarks and reference schemas used to validate OCR accuracy and regulatory compliance:
-- **`official_lhdn_sample/`**: Official LHDN MyInvois v1.1 sample JSON and XML documents for output contract verification.
-- **`sroie/`**: SROIE thermal receipt dataset for merchant name, date, and total extraction under faded conditions.
-- **`funsd/`**: Key-value layout extraction for noisy forms and chits.
-- **`coru/`**: Line-item parsing schema reference from ReceiptSense.
-- **`hand_captured_receipts/`**: Phone-captured receipts with angles, blur, and uneven lighting simulating WhatsApp uploads.
+The `dataset/` directory holds reference material, not a benchmark harness:
 
-For details on dataset provenance, refer to [`dataset/README.md`](dataset/README.md).
+- **`official_lhdn_sample/`** — LHDN MyInvois v1.1 sample JSON used as the shape reference for
+  the draft export.
+- **`sroie/`** — SROIE thermal receipt dataset.
+- **`funsd/`** — Key-value layout extraction for noisy forms and chits.
+- **`coru/`** — Line-item parsing schema reference.
+- **`hand_captured_receipts/`** — Phone-captured receipts with angle, blur, and uneven light.
+
+No accuracy figure in this repository has been measured against these datasets; nothing here
+is a published benchmark result. See [`dataset/README.md`](dataset/README.md) for provenance.
+
+---
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [`docs/02_prd.md`](docs/02_prd.md) | Product requirements and acceptance criteria (`REQ-101` – `REQ-110`) |
+| [`docs/03_appflow.md`](docs/03_appflow.md) | Screen flow, status machine, error handling |
+| [`docs/04_ui_specs.md`](docs/04_ui_specs.md) | Design tokens, screens, keyboard and accessibility behaviour |
+| [`docs/05_trd.md`](docs/05_trd.md) | Pipeline, extraction contract, reconciliation, export architecture |
+| [`docs/06_schema_api.md`](docs/06_schema_api.md) | Database schema and HTTP contract |
+| [`docs/07_rtm.md`](docs/07_rtm.md) | Requirement-to-code-to-test traceability |
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT. See [LICENSE](LICENSE).

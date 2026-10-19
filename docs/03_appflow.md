@@ -32,63 +32,44 @@ The application runs two distinct user personas with distinct device contexts:
 
 ## 3.2 End-to-End State Machine & Pipeline Lifecycle
 
-Every uploaded receipt transitions through an asynchronous state machine:
+Every uploaded receipt transitions through a best-effort, in-process state machine:
 
 ```
-                  ┌──────────────────────┐
-                  │ 1. PENDING_UPLOAD    │ (File queued on client)
-                  └──────────┬───────────┘
-                             ▼
-                  ┌──────────────────────┐
-                  │ 2. UPLOADED          │ (Saved to storage, DB row created)
-                  └──────────┬───────────┘
-                             ▼
-                  ┌──────────────────────┐
-                  │ 3. PROCESSING_OCR    │ (EasyOCR bounding box extraction)
-                  └──────────┬───────────┘
-                             ▼
-                  ┌──────────────────────┐
-                  │ 4. PROCESSING_LLM    │ (Structured entity JSON extraction)
-                  └──────────┬───────────┘
-                             ▼
-                  ┌──────────────────────┐
-                  │ 5. VALIDATING_MATH   │ (Arithmetic reconciliation & sanity check)
-                  └──────────┬───────────┘
-                             │
-            ┌────────────────┴────────────────┐
-            ▼                                 ▼
-   [Math Valid & Conf ≥ 0.80]       [Math Mismatch OR Conf < 0.80]
-            │                                 │
-            ▼                                 ▼
-┌────────────────────────┐       ┌────────────────────────┐
-│  STATUS_AUTO_VERIFIED  │       │  STATUS_NEEDS_REVIEW   │
-└───────────┬────────────┘       └───────────┬────────────┘
-            │                                │
-            │                     ┌──────────┘ (Accountant edits & Cmd+Enter)
-            │                     ▼
-            │            ┌────────────────────────┐
-            │            │    STATUS_VERIFIED     │
-            │            └───────────┬────────────┘
-            │                        │
-            └───────────┬────────────┘
-                        ▼
-             ┌──────────────────────┐
-             │   STATUS_EXPORTED    │ (Included in CSV / MyInvois batch)
-             └──────────────────────┘
+UPLOAD (multipart batch)
+        │  preflight: type, 15 MiB/file, 50 MiB/batch, 50 files
+        ▼
+PROCESSING_OCR ──────────── rows persisted, upload returns 202
+        │  EasyOCR tokens (page 1 at 200 DPI for PDFs)
+        ▼
+PROCESSING_LLM
+        │  Instructor + LLM structured extraction
+        ▼
+VALIDATING_MATH
+        │  deterministic reconciliation
+        ├──────────────► AUTO_VERIFIED   (math valid, confidence ≥ 0.80)
+        ├──────────────► NEEDS_REVIEW    (mismatch or low confidence)
+        └──────────────► ERR_*           (see below)
+
+NEEDS_REVIEW ──(accountant edits and verifies)──► VERIFIED
+VERIFIED | AUTO_VERIFIED ──(POST /exports/mark)──► EXPORTED
+NEEDS_REVIEW ──(accountant rejects)──────────────► REJECTED
 ```
+
+The upload request returns `202` with `PROCESSING_OCR` for every new file; it does not wait for OCR. Processing runs in FastAPI `BackgroundTasks` on a fresh database session, so a browser refresh does not cancel it. There is no durable queue: a process restart strands rows in a `PROCESSING_*` state and they are not retried. Re-uploading an identical file returns the existing row instead of reprocessing it.
 
 ### Terminal Error States
 
-* `ERR_UNREADABLE`: OCR detected $< 5$ text tokens (e.g., photo of blank table or pitch-black image).
-* `ERR_TIMEOUT`: OCR or LLM pipeline exceeded 15 seconds.
-* `ERR_FILE_CORRUPT`: Image decoding failed at OpenCV level.
-* *Error Handling:* The UI renders a dedicated error badge with a "Re-upload" or "Force Manual Entry" button.
+* `ERR_UNREADABLE`: OCR detected fewer than 5 text tokens (e.g., a photo of a blank table or a pitch-black image).
+* `ERR_TIMEOUT`: OCR or LLM exceeded the provider timeout.
+* `ERR_FILE_CORRUPT`: the stored bytes could not be decoded (including images above the 40 MP cap and encrypted PDFs).
+* `ERR_EXTRACTION`: the LLM provider was unavailable. No receipt fields are fabricated.
+* *Error Handling:* the pill and the inbox render a terminal error badge. The row stays visible for audit; re-upload is a new batch action.
 
 ---
 
 ## 3.3 Screen Inventory (`SCR-01` to `SCR-05`)
 
-In adherence to production standards, every view must explicitly handle all **5 UX States**: Empty, Loading, Populated, Flagged/Review, and Error.
+Every view must explicitly handle all **5 UX States**: Empty, Loading, Populated, Flagged/Review, and Error.
 
 ### `SCR-01`: Client Workspace Switcher (`/clients`)
 
@@ -97,7 +78,7 @@ In adherence to production standards, every view must explicitly handle all **5 
 * **States:**
     * *Empty:* Zero clients configured $\rightarrow$ "Add your first client" modal with business name and SST/BRN inputs.
     * *Loading:* High-density table skeleton with subtle shimmer (`LoadingSkeleton`).
-    * *Populated:* Table showing: Client Name, Registration, SST, Industry, Unreviewed Receipt Count, Verified Count, and Open action. Counts are queried per client via `GET /api/v1/clients/{clientId}/receipts` (`limit=1`, status `NEEDS_REVIEW` and `VERIFIED`).
+    * *Populated:* Table showing: Client Name, Registration, SST, Industry, Unreviewed Receipt Count, Verified Count, and Open action. Both counts arrive with the client list (`GET /api/clients` → `unreviewed_count`, `verified_count`), so opening the page costs one request regardless of client count.
     * *Error:* Inline banner if workspace metadata fails to load with Retry action.
 
 ### `SCR-02`: Batch Inbox & Upload Dropzone (`/clients/:clientId/inbox`)
@@ -106,13 +87,14 @@ In adherence to production standards, every view must explicitly handle all **5 
 * **Primary Purpose:** Drag-and-drop batch upload area (up to 50 files) + receipt status list.
 * **Key Actions:**
     * Drag & Drop receipt images (`.jpg`, `.png`, `.pdf`, `.heic`).
-    * Filter list by: `All`, `Needs Review`, `Verified`, `Exported`.
-    * Multi-select for bulk delete or bulk verify.
+    * Filter list by: `All`, `Needs Review`, `Verified`, `Exported`, `Rejected`.
+    * Page through results 50 rows at a time (`offset` pagination, `Showing 1–50 of N`).
+    * Rows in a processing state are not reviewable and poll every 3 s until they settle.
 * **States:**
     * *Empty:* Large drag-and-drop target with label: *"Drop receipts here, or click to browse. Max 50 files per batch."*
     * *Loading:* High-density loading skeleton rows during fetch or upload.
-    * *Populated:* Dense tabular list (`h-dense-row`, 40px) showing Thumbnail (streamed from authenticated `image_url`), Merchant, Date (`font-mono-numbers`), Line Items count, Grand Total (`font-mono-numbers`, text-right), Status Badge (`StatusPill`), and Review action (`Review (↵)`).
-    * *Flagged:* Rows with `STATUS_NEEDS_REVIEW` render an amber left border (`border-l-2 border-warning-border`) and display specific warning badges (e.g., `[Math Mismatch: Δ RM 2.40]`, `[Missing Date]`). Error states render a red left border (`border-l-2 border-mismatch-border`).
+    * *Populated:* Dense tabular list (`h-dense-row`, 40px) showing Thumbnail (streamed from authenticated `image_url`), Merchant, Date (`font-mono-numbers`), Line Items count, Grand Total (`font-mono-numbers`, text-right), Status Badge (`StatusPill`), and Review action (`Review`).
+    * *Flagged:* Rows with `STATUS_NEEDS_REVIEW` render an amber left border (`border-l-2 border-warning-border`) and display specific warning badges (e.g., `[Math Mismatch: Δ RM 2.40]`). Processing states render a neutral badge; terminal `ERR_*` states render a red left border (`border-l-2 border-mismatch-border`) and the recorded `processing_error`.
     * *Error:* Inline banner (`ErrorBanner`) with Retry action if receipt list fetch fails.
 
 ### `SCR-03`: Split-Screen Review Console (`/clients/:clientId/review/:receiptId`)
@@ -159,11 +141,11 @@ In adherence to production standards, every view must explicitly handle all **5 
 ### `SCR-05`: Export Hub (`/clients/:clientId/exports`)
 
 * **Target Audience:** Accountant.
-* **Primary Purpose:** Generate accounting files and LHDN compliance payloads.
+* **Primary Purpose:** Generate accounting files and a MyInvois-shaped draft JSON envelope. The file is structurally modelled on the LHDN sample but is not submitted to or validated by LHDN.
 * **Components:**
     * **Date Range Selector:** Month-end filter (e.g., `September 2026`).
     * **Export Option A (CSV/Excel):** Radio options for *AutoCount Batch Format*, *SQL Account Purchase Journal*, and *Generic Clean CSV*.
-    * **Export Option B (LHDN MyInvois v1.1 JSON):** Formatted multi-line JSON conforming to `1.1-Invoice-MultiLineItem-Sample.json`. Includes schema validator badge showing `Schema Check: 100% Valid`.
+    * **Export Option B (LHDN MyInvois v1.1 JSON):** Formatted multi-line JSON modelled on `1.1-Invoice-MultiLineItem-Sample.json`, labelled *"Draft MyInvois envelope — validate before submission."* There is no schema-validator badge and no compliance claim. A separate **Mark exported** action moves verified receipts to `STATUS_EXPORTED`; downloading a file never changes receipt status.
 
 ---
 
@@ -174,12 +156,12 @@ To guarantee the **10-second review goal**, the AI agent implementing the fronte
 | Keybinding | Scope | Function |
 | --- | --- | --- |
 | `Tab` / `Shift+Tab` | Form Inputs | Move focus forward/backward between inputs. |
-| `Cmd + Enter` / `Ctrl + Enter` | Global Review | Mark receipt as `STATUS_VERIFIED` and advance immediately to the next flagged receipt. |
+| `Cmd + Enter` / `Ctrl + Enter` | Global Review | Mark receipt as `STATUS_VERIFIED` and advance immediately to the next flagged receipt. Ignored while typing in a field and blocked while any amount is invalid. |
 | `Alt + A` | Form Inputs | Append a new blank line-item row. |
 | `Alt + Backspace` | Line Items | Delete currently focused line-item row. |
 | `[` and `]` | Canvas | Zoom receipt image in (`+`) and out (`-`). |
 | `R` | Canvas | Reset image zoom to fit-to-width. |
-| `Esc` | Global Review | Return to Inbox list (`SCR-02`). |
+| `Esc` | Global Review | While an input is focused, blur it. Outside a field, open the inline "Reject this receipt?" confirmation. `Esc` again cancels. |
 | `Tab` focus on field | Canvas Link | When an input field gains focus, smoothly pan the canvas to that field's bounding box coordinates. |
 
 ---

@@ -4,84 +4,185 @@
 
 ## 5.1 System Architecture Topology
 
-Kenyalang Ledger is architected as an asynchronous, event-driven decoupled application. The core compute pipeline isolates compute-heavy computer vision (OpenCV/EasyOCR) and external API calls (LLMs) from the low-latency web layer.
+Kenyalang Ledger is a two-tier application: a React single-page console and one
+FastAPI process. There is **no broker, no worker process and no object storage**.
+Receipt bytes are written to the local filesystem under `KENYALANG_STORAGE_ROOT`;
+metadata lives in PostgreSQL or SQLite through SQLAlchemy 2.x. Uploads return
+immediately and the pipeline runs afterwards in the same process via a FastAPI
+`BackgroundTask`.
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                              CLIENT TIER                               │
-│  React 18 + Vite | Tailwind CSS | HTML5 Canvas (Pan/Zoom) | Zustand    │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ HTTPS / REST (Multipart uploads & JSON)
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                           API GATEWAY / APP                            │
-│  FastAPI (Python 3.11+) | Uvicorn ASGI | Pydantic v2 Validation        │
-│  • Auth / Session Guard        • Multi-tenant Tenant Isolation         │
-│  • File Type Magic Byte Check  • Rate Limiting & Pre-signed URL issuer │
-└──────────────┬──────────────────────────────────────────┬──────────────┘
-               │                                          │
-       Async Dispatch                             Sync Metadata / CRUD
-               │                                          │
-               ▼                                          ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                               CLIENT TIER                                │
+│  React 18 + Vite 8 | TypeScript 6 | Tailwind 3 | Zustand 5 | react-router │
+└─────────────────────────────────────┬────────────────────────────────────┘
+                                      │ REST over HTTP (multipart uploads & JSON)
+                                      │ X-Accountant-Id demo header
+                                      ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│                        API PROCESS (single Uvicorn)                      │
+│  FastAPI 0.115+ | Uvicorn | Pydantic 2 | SQLAlchemy 2.x                  │
+│  • Demo accountant header       • Per-client tenancy guard (404)         │
+│  • Magic-byte sniff + size caps • Security headers + CORS allowlist      │
+│                                                                          │
+│  BackgroundTasks ──► OCR ──► LLM extraction ──► reconciler (in-process)  │
+│  (same process; no queue, no separate worker)                            │
+└───────────────┬──────────────────────────────────────┬───────────────────┘
+                │                                      │
+       Local filesystem                       SQLAlchemy session
+                │                                      │
+                ▼                                      ▼
 ┌──────────────────────────────┐          ┌──────────────────────────────┐
-│     PROCESSING PIPELINE      │          │       PERSISTENCE TIER       │
-│  1. OpenCV Image Normalize   │          │  PostgreSQL 15 / SQLite*     │
-│  2. EasyOCR Token Extractor  │          │  (SQLAlchemy 2.0 / Alembic)  │
-│  3. LLM Parsing (Instructor) │          │                              │
-│  4. Deterministic Math Audit │          │  Blob Storage (MinIO / S3 /  │
-│                              │          │  Local Persistent Volume)    │
+│   RECEIPT BLOB DIRECTORY     │          │       PERSISTENCE TIER       │
+│  <KENYALANG_STORAGE_ROOT>/   │          │  PostgreSQL 15 or SQLite     │
+│  tenants/{client_id}/        │          │  (SQLAlchemy 2.x; schema     │
+│    {receipt_id}{ext}         │          │  created by init_db, no      │
+│  (JPEG/PNG/HEIC/PDF bytes)   │          │  migration framework)        │
 └──────────────────────────────┘          └──────────────────────────────┘
-(*SQLite supported for standalone single-tenant development; PostgreSQL for production multi-tenant.)
 ```
 
-> **Architecture intent vs. current implementation.** The decoupled async topology above is the
-> target design. The shipping ingest path (§6.3.1) runs the pipeline **inline and synchronously**
-> inside the upload request — no broker or worker process is configured — and returns each file's
-> *terminal* status in the `202` response instead of an intermediate `PROCESSING_*` placeholder.
-> The stage boundaries (`preprocessor` → `ocr_engine` → `extractor` → `reconciler`) are already
-> separate modules so a future worker can move them behind a queue without changing the contracts.
+There is no migration framework. `app.models.init_db()` runs
+`Base.metadata.create_all` and then a small set of **additive guards**: create the
+`pgcrypto` extension and add `ERR_EXTRACTION` to the `receipt_status` enum on
+Postgres, and add `receipt_line_items.expense_category` where it is missing (via
+`ALTER TABLE … IF NOT EXISTS` on Postgres and a `PRAGMA table_info` probe on
+SQLite). The guards widen an older database without destroying rows; they never
+drop or rewrite a column. Startup retries `init_db` five times so a Postgres
+container that is still booting does not crash the API.
+
+The API is mounted at `/api` for client management/health and `/api/v1` for
+receipts, exports and the dashboard.
+
+### 5.1.1 Demo limits vs. a production deployment
+
+| Concern | What this demo actually does | What production would need |
+| --- | --- | --- |
+| Pipeline execution | `BackgroundTasks` inside the API process | Durable queue, separate worker pool, idempotent retries |
+| Crash recovery | Best effort: a task lost to a restart leaves the row in a `PROCESSING_*` state; the accountant re-uploads | Leases/heartbeats, dead-letter handling, automatic re-drive |
+| Schema changes | `create_all` + additive guards | Versioned migration tooling with rollback |
+| Receipt storage | Local disk (a Docker volume in Compose) | Encrypted object storage, versioning, lifecycle rules |
+| Abuse control | Per-file 15 MiB, per-batch 50 MiB / 50 files, MIME sniff | Per-account throttling, quotas, WAF |
+| Identity | Forgeable `X-Accountant-Id` header, accepted only when `KENYALANG_ENV` is `local` or `test` | Identity provider, sessions, RBAC, access audit |
+| Observability | Uvicorn logs plus `/api/health/live` and `/api/health/ready` | Structured logs, metrics, tracing, alerting |
+| Encryption at rest | None beyond whatever the host volume provides | Disk/volume encryption and key management |
+
+### 5.1.2 Asynchronous upload contract
+
+`POST /api/v1/clients/{client_id}/receipts/upload` is a multipart batch endpoint
+(one repeated `files` field per file, max 50).
+
+1. **Preflight is atomic.** Every file's size and magic bytes are checked before
+   anything is written. A rejected batch leaves no receipt rows and no blobs on disk.
+2. **The response is `202 Accepted`.** Each accepted file appears as
+   `{id, filename, status}` with `status = PROCESSING_OCR`, alongside a `batch_id`
+   and `total_received`. A new upload never receives a terminal verdict in the
+   response itself.
+3. **Processing happens after the response.** Only once the placeholder rows are
+   committed are the `process_receipt_background` tasks queued. The worker advances
+   `PROCESSING_OCR → PROCESSING_LLM → VALIDATING_MATH`, committing each transition
+   in its own short session, and finishes in a terminal status.
+4. **Terminal statuses** are `STATUS_NEEDS_REVIEW`, `STATUS_AUTO_VERIFIED` (both
+   produced by the reconciler) and the error states `ERR_FILE_CORRUPT`,
+   `ERR_UNREADABLE`, `ERR_TIMEOUT` and `ERR_EXTRACTION`. Errors carry a
+   `processing_error` string so a bad file is auditable instead of silently stuck.
+5. **Restart loss is possible and accepted.** With no broker there is no
+   redelivery: a receipt whose task was lost stays in a `PROCESSING_*` state and the
+   console shows it as in-flight. Re-uploading the file is the recovery path.
+6. **Duplicate uploads dedupe.** A file whose sanitized filename and byte size match
+   an existing receipt in the same workspace returns that receipt's `id` and current
+   status instead of writing a second blob or scheduling a second run. The same
+   identity check applies within one batch. This is an identity heuristic on
+   (name, size), not a content hash.
+7. **Terminal rows are never overwritten.** The worker writes only while the row is
+   still in a `PROCESSING_*` state, so a duplicate or retried task cannot clobber an
+   accountant's review.
 
 ---
 
 ## 5.2 Image Preprocessing & Spatial OCR Engine
 
-Thermal paper fades, curls, and suffers from uneven shadows when snapped via mobile cameras in Kuching coffee shops or workshops. The backend must normalize images before text recognition.
+Thermal paper fades, curls and suffers from uneven shadows when photographed in a
+Kuching coffee shop or workshop. The backend normalizes each accepted container
+before text recognition.
 
 ### 5.2.1 OpenCV Image Preprocessing Pipeline (`pipeline/preprocessor.py`)
 
-1. **EXIF Auto-Orientation:** Inspect EXIF tag `0x0112` and rotate matrix ($90^\circ, 180^\circ, 270^\circ$) to correct smartphone camera orientation.
-2. **Dimension Scaling:** If $\max(\text{width}, \text{height}) > 2048\text{px}$, resize down while preserving aspect ratio (reduces EasyOCR memory overhead by ~60%).
-3. **Contrast-Limited Adaptive Histogram Equalization (CLAHE):**
-    * Convert image to LAB color space.
-    * Apply CLAHE (`clipLimit=2.0`, `tileGridSize=(8,8)`) to the L-channel to recover faded ink on thermal receipts without blowing out the paper background.
-    * Convert back to BGR.
-4. **Bilateral Filtering & Denoising:** Smooth background paper texture while preserving sharp character edge gradients (`cv2.bilateralFilter(img, d=9, sigmaColor=75, sigmaSpace=75)`).
+Supported containers are JPEG and PNG (OpenCV), HEIC/HEIF (`pillow-heif`) and PDF
+(PyMuPDF, page 1 only). Constants:
+
+```python
+MAX_DIMENSION = 2048          # longest edge after downscale
+MAX_IMAGE_PIXELS = 40_000_000 # decompression-bomb ceiling, checked before decode
+PDF_DPI = 200                 # PDF rasterization scale
+CLAHE_CLIP_LIMIT = 2.0
+CLAHE_TILE_GRID_SIZE = (8, 8)
+BILATERAL_D, BILATERAL_SIGMA_COLOR, BILATERAL_SIGMA_SPACE = 9, 75, 75
+```
+
+1. **Decode & pixel guard.** Raster dimensions are read from the header
+   (`_probe_size`) and checked against `MAX_IMAGE_PIXELS` *before* a
+   full-resolution buffer is allocated; an oversized or malformed payload becomes
+   `ImageDecodeError` → `ERR_FILE_CORRUPT`. PDFs are rejected when encrypted or when
+   they contain no pages.
+2. **EXIF auto-orientation.** Orientation tag `0x0112` is read with `piexif` and
+   orientations 2–8 are applied explicitly, including mirrored cases. OpenCV's own
+   EXIF rotation is disabled at decode time (`IMREAD_IGNORE_ORIENTATION`) so the
+   transform happens exactly once.
+3. **Dimension scaling.** If `max(width, height) > MAX_DIMENSION`, the image is
+   downscaled with `INTER_AREA`, preserving aspect ratio. Small images are never
+   upscaled.
+4. **Contrast-Limited Adaptive Histogram Equalization (CLAHE):** convert to LAB,
+   apply CLAHE to the L-channel only (the A/B channels carry paper tint that must
+   survive), convert back.
+5. **Bilateral filtering:** `cv2.bilateralFilter(img, d=9, sigmaColor=75,
+   sigmaSpace=75)` runs last, so denoising cannot smooth away the contrast CLAHE
+   just recovered.
+
+The chain is `auto_orient_image → resize_if_needed → apply_clahe_contrast →
+denoise`. There is no explicit deskew stage; the extractor estimates document slant
+when grouping tokens into rows (§5.3.2).
 
 ### 5.2.2 Spatial OCR Token Extraction (`pipeline/ocr_engine.py`)
 
-* **Engine:** EasyOCR with PyTorch CPU/CUDA backend.
+* **Engine:** EasyOCR 1.7 with PyTorch, CPU by default. `EASYOCR_USE_GPU` forces GPU
+  on/off; otherwise CUDA availability is probed. The reader is cached process-wide
+  because it loads roughly 100 MB of weights.
 * **Languages:** English (`en`) and Malay (`ms`).
-* **Spatial Coordinate Normalization:** Raw pixel bounding boxes $[(x_1, y_1), (x_2, y_2), (x_3, y_3), (x_4, y_4)]$ are converted into normalized relative coordinates ($0.000$ to $1.000$):
+* **Confidence floor:** tokens below `0.10` are dropped (`KENYALANG_OCR_MIN_CONFIDENCE`
+  overrides). Faint handwriting is why the floor is low.
+* **Spatial Coordinate Normalization:** EasyOCR's four-point pixel polygons are
+  flattened to an axis-aligned box, divided by the image dimensions, and clamped to
+  `0.0–1.0`:
 
 $$\bar{x}_{\min} = \frac{\min(x)}{W}, \quad \bar{y}_{\min} = \frac{\min(y)}{H}, \quad \bar{x}_{\max} = \frac{\max(x)}{W}, \quad \bar{y}_{\max} = \frac{\max(y)}{H}$$
 
+* **Entrypoints:** `process_receipt_image(payload, mime_type=None)` selects the
+  PDF/HEIC decoder through `preprocess_receipt(payload, mime_type, max_dim=2048)`
+  and otherwise runs `preprocess_image`. `tokens_to_dicts` serializes the list for the
+  JSON/JSONB `receipts.ocr_raw_tokens` column.
 * **Intermediate Representation (OCR Document Contract):**
 
 ```python
 class OCRToken(BaseModel):
     text: str
-    confidence: float # 0.00 to 1.00
-    bbox: list[float] # [x_min, y_min, x_max, y_max] normalized
-    line_num: int
+    confidence: float  # 0.0 to 1.0, rounded to 4 decimals
+    bbox: list[float]  # [x_min, y_min, x_max, y_max], normalized to 0.0-1.0
+    line_num: int      # index in EasyOCR's raw readtext output
 ```
+
+`line_num` is the index in EasyOCR's raw result list, assigned before the confidence
+filter, so it is not necessarily contiguous.
 
 ---
 
 ## 5.3 LLM Structured Entity Extraction Contract
 
-Raw OCR outputs spatial text tokens. The LLM translates these tokens into a structured accounting model, parsing mixed Bahasa Melayu, English, and Manglish terms.
+Raw OCR output is spatial text tokens. The LLM turns those tokens into a structured
+accounting model, parsing mixed Bahasa Melayu, English and Manglish terms.
 
 ### 5.3.1 System Prompt Architecture
+
+The prompt below is the literal `SYSTEM_PROMPT` in `pipeline/extractor.py`:
 
 ```text
 You are the core extraction engine for Kenyalang Ledger, an expert Malaysian accounting parser.
@@ -106,66 +207,78 @@ Return ONLY a validated JSON payload adhering to the requested schema.
 
 ### 5.3.2 Extraction Strategy
 
-* **Structured Output Framework:** `instructor` wrapping the OpenAI client in **`Mode.TOOLS`**
-  (function calling) for zero markdown wrapping and schema adherence. Anthropic/Ollama are not wired
-  in the shipping code.
-* **Flat extraction schema:** the LLM is handed `ExtractedReceiptData` — flat scalars plus a
-  `line_items` array — not a nested per-field `ExtractedField<T>` envelope. A `grand_total` that the
-  receipt does not state is parsed as `null` rather than forced to a number, so the reconciler can
-  flag it; per-field confidence and bounding boxes are attached deterministically *after* the model
-  returns (`attach_provenance`, §5.4), so confidence is measured from the OCR engine rather than
-  self-reported by the model.
-* **Token Pruning:** Sort OCR tokens vertically top-to-bottom, left-to-right (`y_min`, then `x_min`)
-  and emit them as a compact text block for the LLM.
+* **Structured output framework:** `instructor` wrapping the OpenAI client in
+  **`Mode.TOOLS`** (function calling). The client is built once per process with
+  `timeout=15.0` and `max_retries=0` (the SDK retry loop is disabled so it cannot
+  stack on instructor's); instructor itself retries schema validation twice
+  (`max_retries=2`). No Anthropic or Ollama provider is wired in. `OPENAI_BASE_URL`,
+  when set, is normalized to end in `/v1`.
+* **Flat extraction schema:** the model returns `ExtractedReceiptData` — flat header
+  scalars plus a `line_items` array. `grand_total` is `Optional[Decimal]`, so a
+  receipt that does not state a total parses as `null` and the reconciler flags it
+  rather than the model inventing one. Monetary fields reject NaN/Infinity at the
+  Pydantic boundary.
+* **Deterministic provenance:** after the model returns, `attach_provenance` matches
+  each populated header value to the OCR token that carries it (numeric, date-format
+  or text match, with a similarity fallback for single tokens). No supporting token
+  means confidence `0.0` and no bbox — never a model-reported confidence. Line-item
+  confidence is the model's own score when it is below `1.0`; otherwise it is the
+  minimum of the description and amount token confidences, and `0.0` if either is
+  missing.
+* **Token pruning:** tokens are grouped into visual rows using an estimated document
+  slant (searched over slopes ±0.20, about ±11°), ordered top-to-bottom and joined
+  left-to-right within a row. Each row is sent with its normalized `y` as a spatial
+  hint: `[0.412] KIM GUAN HARDWARE RM 105.47`.
 * **Configuration (environment variables):**
 
   | Variable | Purpose | Default |
   | --- | --- | --- |
-  | `OPENAI_API_KEY` | Required; the client refuses to start LLM extraction without it. | — |
-  | `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint override. | SDK default |
+  | `OPENAI_API_KEY` | Required; extraction raises without it. | — |
+  | `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint; `/v1` appended if absent. | SDK default |
   | `KENYALANG_LLM_MODEL` | Extraction model. | `gpt-4o-mini` |
-  | `KENYALANG_STORAGE_ROOT` | Receipt blob root (§5.6.1). | `storage` |
-  | `DATABASE_URL` | SQLAlchemy URL (§6.1). | `sqlite:///./kenyalang.db` |
+  | `KENYALANG_STORAGE_ROOT` | Receipt blob root (§5.6). | `storage` |
+  | `DATABASE_URL` | SQLAlchemy URL. | `sqlite:///./kenyalang.db` |
+  | `KENYALANG_OCR_MIN_CONFIDENCE` | EasyOCR token confidence floor. | `0.10` |
+  | `EASYOCR_USE_GPU` | Force EasyOCR GPU on/off. | auto-detect |
 
-  The API key is read from the **backend process environment only** — never exposed to the client
-  bundle (§5.6.3). Extraction is exercised against an OpenAI-compatible endpoint; no live accuracy
-  claim is made here. The SDK call itself carries a 15-second timeout; there is no hard wall-clock
-  guarantee on the OCR stage.
-
+  The API key is read from the **backend process environment only** and is never
+  exposed to the client bundle (§5.6). The SDK call carries a 15-second timeout, so a
+  slow provider ends the receipt at `ERR_TIMEOUT`; there is no separate wall-clock
+  budget for OCR.
 
 ---
 
 ## 5.4 Deterministic Rule-Based Math & Verification Engine
 
-Before writing to the database, a pure Python validation service (`services/reconciler.py`) executes
-deterministic audits. It is I/O-free, accepts an optional `today` (defaults to the local date), and never calls
-the LLM. Every flag string it emits is persisted verbatim into `receipts.validation_flags` and
-rendered by the review console, so the names are part of the API surface.
+Before writing to the database, a pure Python service (`services/reconciler.py`)
+runs deterministic audits. It performs no I/O, accepts an optional `today`
+(defaulting to the local date) and never calls the LLM. Every flag string it emits is
+persisted verbatim into `receipts.validation_flags` and rendered by the review
+console, so the names are part of the API surface.
 
-The audit consumes a `ParsedReceiptSchema` (§6.2): the flat extraction payload plus `fields`, a list
-of per-field `ExtractedField` provenance entries attached by `extractor.attach_provenance`. Each
-populated header value is matched back to the OCR token that carries it (numeric, date or text
-match); when no token supports a value — or the evidence is ambiguous — the field is recorded with
-confidence `0.0` and no bbox. This is **fail closed**: an unsupported critical field cannot pass the
-confidence gate, so it always routes to a human. A line item requires both its complete description
-and amount on the same geometrical row. Its confidence is the minimum of the supporting OCR
-confidence and model-cited confidence. Header amounts require a matching labeled row, such as
-`Subtotal`, `Cukai`, or `Jumlah`/`Total`; an unrelated occurrence of the same amount is not evidence.
+The audit consumes a `ParsedReceiptSchema`: the flat extraction payload plus
+`fields`, a list of per-field `ExtractedField` provenance entries attached by
+`extractor.attach_provenance`. Each populated header value is matched back to the
+OCR token that carries it; when no token supports a value, the field is recorded
+with confidence `0.0` and no bbox. This is **fail closed**: an unsupported critical
+field cannot pass the confidence gate, so it always routes to a human. A line item
+requires both its description and its amount in the OCR. Its confidence is the
+minimum of the supporting OCR confidences, and `0.0` if either is missing.
 
 ```python
 # services/reconciler.py
-MATH_TOLERANCE = Decimal("0.02")   # exact Decimal slack on the arithmetic identity
-CONFIDENCE_THRESHOLD = 0.80        # below this, a human confirms the field
-MAX_RECEIPT_AGE_DAYS = 365
-CRITICAL_FIELDS = ("merchant_name", "invoice_date", "grand_total")  # must have OCR evidence
+MATH_TOLERANCE: Decimal = Decimal("0.02")  # rounding slack on the arithmetic identity
+CONFIDENCE_THRESHOLD: float = 0.80        # below this, a human confirms the field
+MAX_RECEIPT_AGE_DAYS: int = 365
+CRITICAL_FIELDS: tuple[str, ...] = ("merchant_name", "invoice_date", "grand_total")
+SST_NUMBER_RE = re.compile(r"^[A-Z]\d+-\d+-\d+$")
 
 class ReconcilerService:
     @staticmethod
     def audit_receipt(data: ParsedReceiptSchema, today: date | None = None) -> AuditResult:
-        flags = []
+        flags: list[str] = []
 
-        # 1. Mandatory fields (grand_total is nullable so a faded receipt still
-        #    parses; the audit is what flags it)
+        # 1. Mandatory fields (grand_total is nullable, so a faded receipt still parses)
         if not data.merchant_name or len(data.merchant_name.strip()) < 2:
             flags.append("MISSING_MERCHANT_NAME")
         if not data.invoice_date:
@@ -186,7 +299,7 @@ class ReconcilerService:
         if discrepancy is None:
             if not data.line_items and data.subtotal is None:
                 flags.append("MISSING_SUBTOTAL")
-        elif discrepancy > MATH_TOLERANCE:     # raw Decimal compared before any rounding
+        elif discrepancy > MATH_TOLERANCE:      # raw Decimal, compared before rounding
             flags.append(f"MATH_MISMATCH_DELTA_{discrepancy:.2f}")
 
         # 3b. SST-registered merchant that charged no tax (documented review heuristic)
@@ -194,20 +307,29 @@ class ReconcilerService:
             flags.append("MISSING_SST_ON_REGISTERED_MERCHANT")
 
         # 4. Confidence gate: the least-trusted audited field bounds the record
-        low_confidence = [f.name for f in data.get_fields() if f.confidence < CONFIDENCE_THRESHOLD]
+        low_confidence = [
+            f.name for f in data.get_fields() if f.confidence < CONFIDENCE_THRESHOLD
+        ]
         if low_confidence:
             flags.append(f"LOW_CONFIDENCE_{'_'.join(low_confidence)}")
 
-        # 4b. Fail closed when a critical value or provenance entry is missing.
-        provenance = {field.name for field in data.fields}
-        missing_critical = [
+        # 5. Fail closed when a critical value or its provenance entry is missing
+        provenance = {f.name for f in data.fields}
+        unsupported = [
             name for name in CRITICAL_FIELDS
-            if name not in provenance or getattr(data, name) in (None, "", Decimal("0"))
+            if name in provenance and _is_unsupported(data, name)
         ]
-        if missing_critical:
-            flags.append(f"MISSING_CRITICAL_EVIDENCE_{'_'.join(missing_critical)}")
+        missing = [name for name in CRITICAL_FIELDS if name not in provenance]
+        if unsupported or missing:
+            flags.append(
+                f"MISSING_CRITICAL_EVIDENCE_{'_'.join([*unsupported, *missing])}"
+            )
 
-        status = ReceiptStatus.STATUS_NEEDS_REVIEW if flags else ReceiptStatus.STATUS_AUTO_VERIFIED
+        status = (
+            ReceiptStatus.STATUS_NEEDS_REVIEW
+            if flags
+            else ReceiptStatus.STATUS_AUTO_VERIFIED
+        )
         return AuditResult(
             status=status,
             flags=flags,
@@ -216,99 +338,233 @@ class ReconcilerService:
         )
 ```
 
-**Reconciliation source of truth.** `_math_discrepancy` computes `abs((expected + tax) -
-grand_total)` as exact `Decimal` and compares it against `MATH_TOLERANCE` **before** any rounding
-(the stored `math_discrepancy` may be quantized to `0.01`, but the flag decision uses the raw
-value). `expected` is the sum of `line_total` when line items exist; otherwise it falls back to the
-printed `subtotal`; otherwise there is nothing to reconcile and it returns `None` (→
-`MISSING_SUBTOTAL`). A missing or non-positive `grand_total` is flagged `INVALID_GRAND_TOTAL`
-independently, not reported as a subtotal problem. `tax_amount` is coerced to `Decimal("0.00")` when
-absent. Flag text is formatted from the `Decimal` itself (`:.2f`), not via `float()`. The `0.02`
-slack absorbs printed-rounding drift, not binary float error.
+**Reconciliation source of truth.** `_math_discrepancy` returns
+`abs((expected + tax) - grand_total)` as an exact `Decimal`, or `None` when there is
+no `grand_total`. The flag decision compares that raw value against `MATH_TOLERANCE`
+**before** any rounding; only the stored `math_discrepancy` is quantized by the
+database column. `expected` is the sum of `line_total` when line items exist;
+otherwise it falls back to the printed `subtotal`; otherwise the result is `None`.
+`tax_amount` is coerced to `Decimal("0.00")` when absent. Flag text is formatted from
+the `Decimal` itself (`:.2f`), not via `float()`. The `0.02` slack absorbs printed
+rounding drift, not binary float error.
 
-**SST review heuristic (not a legal rule).** When `tax_amount` is absent and the receipt's
-`merchant_sst` matches the SST format `^[A-Z]\d+-\d+-\d+$` (e.g. `W10-1808-32000018`), the audit
-raises `MISSING_SST_ON_REGISTERED_MERCHANT` for a human to check. This is a documented triage
-heuristic for the review console — it does **not** assert that every SST registrant must charge tax
-on every receipt (exempt supplies, zero-rated items and non-taxable turnover exist).
-`merchant_sst` is the dedicated SST field; there is no combined `brn_tin` stored column or alias.
+A missing `grand_total` yields `INVALID_GRAND_TOTAL` and can also yield
+`MISSING_SUBTOTAL` when there are no line items and no printed subtotal, since both
+checks see the same absence. A non-positive total with a printed subtotal is flagged
+once, by `INVALID_GRAND_TOTAL`.
 
-**Confidence gate and critical fields.** `_overall_confidence` is the minimum confidence across every
-audited field (header provenance followed by line items), rounded to two decimals. Missing critical
-values or provenance floor it at `0.0`. The critical header fields — `merchant_name`, `invoice_date`,
-`grand_total` — must carry provenance. Missing values or entries block auto-verification and raise
-`MISSING_CRITICAL_EVIDENCE_{field}`; unsupported OCR evidence is recorded with confidence `0.0`
-and raises `LOW_CONFIDENCE_{field}`. `math_discrepancy` remains exact in the audit result; the database
-stores two decimal places. Flag text uses Decimal money formatting, not binary float conversion.
+**SST review heuristic (not a legal rule).** When `tax_amount` is absent/zero and
+`merchant_sst` matches `^[A-Z]\d+-\d+-\d+$` (upper-cased before matching, e.g.
+`W10-1808-32000018`), the audit raises `MISSING_SST_ON_REGISTERED_MERCHANT` for a
+human to check. This is triage for the review console; it does not assert that every
+SST registrant must charge tax on every receipt (exempt supplies, zero-rated items
+and non-taxable turnover exist). `merchant_sst` is the dedicated SST field; there is
+no combined `brn_tin` column or alias.
 
+**Confidence gate and critical fields.** `_overall_confidence` returns `0.0` when any
+critical field is absent from provenance or holds `None`/`""`; otherwise it is the
+minimum confidence across every audited field (header provenance followed by line
+items), rounded to two decimals, and `0.0` when there are no fields at all. Missing
+entries or values block auto-verification and raise
+`MISSING_CRITICAL_EVIDENCE_{fields}`; unsupported OCR evidence is recorded with
+confidence `0.0` and additionally raises `LOW_CONFIDENCE_{field}`.
 
 ---
 
 ## 5.5 Dual-Format Export Architecture (`services/export_engine.py`)
 
-Kenyalang Ledger exports data into two distinct operational targets:
+Kenyalang Ledger produces two outputs. Both are **pure reads**: generating or
+downloading either file changes no receipt status.
 
-### 1. Accounting CSV / Excel (AutoCount & SQL Account Import)
+### 1. Accounting CSV — purchase journal (AutoCount & SQL Account import)
 
-* Formats records into Purchase Journal Batch specifications:
-* Columns: `Date`, `Supplier_Name`, `Invoice_No`, `Account_Code`, `Item_Description`, `Qty`, `Unit_Price`, `Tax_Code (SST)`, `Total_Amount`.
+`GET /api/v1/clients/{client_id}/exports/accounting-csv?month=YYYY-MM` returns
+`Kenyalang_PurJournal_{YYYYMM|all}.csv` with `Content-Type: text/csv; charset=utf-8`.
+Columns, in order:
 
-### 2. LHDN MyInvois v1.1 JSON Payload
+| # | Column | Notes |
+| --- | --- | --- |
+| 1 | `DocDate` | `DD/MM/YYYY`; falls back to `created_at` when `invoice_date` is null |
+| 2 | `DocNo` | `invoice_number`, else `REC-{first 8 chars of the UUID, upper-cased}` |
+| 3 | `SupplierCode` | `SUPP-{first 10 alphanumerics of BRN}`, else of the name, else `SUPP-CASH` |
+| 4 | `SupplierName` | `merchant_name`, else `Cash Supplier` |
+| 5 | `Description` | Line description, else `General Item` |
+| 6 | `ItemCode` | `ITEM-{line_index + 1}`, zero-padded to two digits |
+| 7 | `Qty` | Trailing-zero-trimmed decimal, e.g. `1`, `2.5` |
+| 8 | `UnitPrice` | Two decimals |
+| 9 | `TaxCode` | `SST-6` when tax > 0, else `NONE` (a fixed label, not a computed rate) |
+| 10 | `TaxAmount` | Tax allocated to this line, two decimals |
+| 11 | `TotalAmount` | `line_total + allocated tax`, two decimals |
 
-* Direct transformation from internal DB model to the official LHDN SDK sample schema (`1.1-Invoice-MultiLineItem-Sample.json`).
-* Mandatory mapped fields:
-    * `Invoice.IssueDate` & `Invoice.IssueTime`
-    * `Invoice.InvoiceTypeCode` (Code `01` for standard invoice, `02` for consolidated receipt)
-    * `Invoice.SupplierParty.PartyIdentification` (TIN / BRN)
-    * `Invoice.InvoiceLine` array: `ID`, `InvoicedQuantity`, `LineExtensionAmount`, `TaxTotal`
+Tax is allocated in **integer cents**: `allocate_tax_cents` gives each line its
+proportional floor and distributes the leftover cents one at a time to the largest
+remainders, ties broken by line order. The allocated amounts therefore sum exactly to
+the receipt's tax. A receipt with no line items is emitted as a single summary row
+(`General Purchase`, qty `1`) that uses the receipt subtotal, tax and total.
+
+Every text cell passes through `_csv_text`, which prefixes an apostrophe when the
+value starts with `=`, `+`, `-`, `@`, tab or carriage return, neutralising
+spreadsheet formula injection.
+
+### 2. MyInvois-shaped JSON — a draft envelope, never submitted
+
+`GET /api/v1/clients/{client_id}/exports/myinvois-json?month=YYYY-MM` returns
+`Kenyalang_MyInvois_{YYYYMM|all}.json`. It is a **draft document envelope** shaped
+after `dataset/official_lhdn_sample/1.1-Invoice-MultiLineItem-Sample.json`. It is
+**not validated against the LHDN schema and is never submitted** to MyInvois: there
+is no signing, no TIN mapping, no submission client and no acknowledgement tracking.
+
+Mapped shape:
+
+* Root namespaces `_D`, `_A`, `_B`, and an `Invoice` **array** (one entry per
+  receipt).
+* `ID`, `IssueDate` (`YYYY-MM-DD`), `IssueTime` (`created_at` as `HH:MM:SSZ`).
+* `InvoiceTypeCode` = `01` with `listVersionID` = `1.1`; `DocumentCurrencyCode` and
+  `TaxCurrencyCode` = `MYR`.
+* `AccountingSupplierParty`: `PartyName` and `PartyLegalEntity` from the merchant
+  name, and `PartyIdentification` with `BRN` and/or `SST` scheme IDs when present
+  (fallback `{"_": "NA", "schemeID": "BRN"}`). There is no TIN field.
+* `LegalMonetaryTotal` (`LineExtensionAmount`, `TaxExclusiveAmount`,
+  `TaxInclusiveAmount`, `AllowanceTotalAmount`, `ChargeTotalAmount`,
+  `PayableRoundingAmount`, `PayableAmount`) and `TaxTotal` (category `01`, scheme
+  `OTH` / `UN/ECE 5153`).
+* `InvoiceLine` per line item: `ID`, `InvoicedQuantity` (unit code `C62`),
+  `LineExtensionAmount`, `TaxTotal`, `Item.Description`, `Price`,
+  `ItemPriceExtension`. Per-line tax uses the same integer-cent allocation as the CSV.
+  A receipt with no line items emits one line for the merchant total.
+
+Amounts in this envelope are emitted as JSON numbers via `float`/`round(..., 2)`; the
+CSV and the API's receipt payloads use exact decimal strings. The envelope is a
+convenience export, not a money-of-record format.
+
+### 3. Marking receipts as exported
+
+`POST /api/v1/clients/{client_id}/exports/mark?month=YYYY-MM` is the **only** state
+change: it moves `STATUS_VERIFIED` and `STATUS_AUTO_VERIFIED` receipts in the period
+to `STATUS_EXPORTED`, stamps `exported_at`, writes one `receipt_audit_log` row per
+receipt, and returns `{updated: n}`. It is idempotent — a repeat call returns
+`updated: 0`. Already exported receipts remain in later downloads, which is why both
+downloads read rows in `VERIFIED`, `AUTO_VERIFIED` or `EXPORTED`.
 
 ---
 
-## 5.6 Security & PDPA Compliance Architecture
+## 5.6 Security Model & Data Handling
 
-1. **Storage Isolation:** Original uploaded bytes are written to tenant-scoped storage under
-   `<KENYALANG_STORAGE_ROOT>/tenants/{client_id}/{receipt_id}{ext}` (`core/storage.py`). The
-   client-supplied filename is never used to build the path — only a sanitized extension is — so a
-   crafted upload name cannot escape the tenant directory. Each write goes to a temp file and is
-   atomically renamed into place, so a crash mid-write cannot leave a truncated blob that later looks
-   URLs (15 minutes), which is *architecture intent* — the review console streams images directly
-   through the authenticated backend endpoint `GET /api/v1/clients/{client_id}/receipts/{receipt_id}/image`
-   (`core/storage.py`), validating workspace ownership on every request.
-2. **File Ingestion Guards:**
-    * Maximum file size: 15 MiB per file; maximum 50 files per batch.
-    * **Magic-byte verification** (extension ignored): JPEG (`FF D8 FF`), PNG, PDF (`%PDF-`), and
-      HEIC detected structurally as an ISO-BMFF `ftyp` box with a `hei*` brand. Unrecognized
-      containers are rejected `415`. See §6.3.1 for the supported-format decision.
-3. **No PII Leaks:** API keys (`OPENAI_API_KEY`, etc.) are read only from the backend process
-   environment and must never be injected into the client bundle (`VITE_`). All inference routes
-   through internal backend endpoints.
+This is a demo build. It makes **no PDPA compliance claim**: there is no consent
+capture, no data-subject request workflow, no retention/purge job, no encryption at
+rest, and no access log for reading a receipt image beyond the standard request log.
+Receipt images and PDFs live as plain files on the local disk path described below; a
+production deployment would need encryption, retention limits and an access-audit
+trail before handling real client data.
 
+1. **Local-disk storage isolation.** Uploaded bytes are written under
+   `<KENYALANG_STORAGE_ROOT>/tenants/{client_id}/{receipt_id}{ext}`
+   (`core/storage.py`). The client-supplied filename is never used to build the path
+   — only a sanitized extension (`^\.[a-z0-9]{1,8}$`, else `.bin`) is — so a crafted
+   upload name cannot escape the tenant directory. Each write goes to a randomly
+   suffixed `.part` temp file and is atomically renamed into place. Blobs written by
+   a batch that fails to commit are deleted.
+2. **Path-escape rejection on read.** `load_receipt_file` resolves the stored
+   relative path against the resolved storage root and raises `ValueError` unless the
+   candidate is inside it, so a corrupted or tampered `storage_path` cannot become an
+   arbitrary file read. The image route turns that into `404`.
+3. **Tenancy guard.** Every receipt, export and dashboard route calls
+   `get_active_owned_client`, which filters on
+   `clients.accountant_id == <caller>` **and** `is_active`; client management uses
+   the plainer `get_owned_client` so a soft-deleted workspace can be reactivated.
+   A workspace or receipt
+   belonging to another accountant is indistinguishable from a missing one: the API
+   returns `404`, never `403`, and never leaks existence. `_receipt_or_404` folds the
+   `client_id` predicate into the receipt lookup for the same reason.
+4. **Demo authentication is not authentication.** `X-Accountant-Id` is a forgeable
+   header. It is honoured only when `KENYALANG_ENV` is `local` or `test`; any other
+   or missing value returns `401`. `create_app()` additionally refuses to start when
+   `KENYALANG_ENV=production`. Do not expose this service on a public network.
+5. **File ingestion guards.**
+   * Maximum 15 MiB per file, 50 MiB and 50 files per batch; violations are `413`.
+   * **Magic-byte verification** (the extension is ignored): JPEG (`FF D8 FF`), PNG
+     (`89 50 4E 47 0D 0A 1A 0A`), PDF (`%PDF-`), and HEIC detected structurally as an
+     ISO-BMFF `ftyp` box with a `hei*` brand. Unrecognized containers are `415`;
+     empty files are `422`.
+   * Decode limits (§5.2.1): 40 MP ceiling checked before allocation; PDFs render
+     page 1 only; encrypted PDFs are rejected.
+6. **Spreadsheet formula-injection escaping.** Every CSV text cell beginning with
+   `=`, `+`, `-`, `@`, tab or carriage return is prefixed with `'` (§5.5).
+7. **No key leakage.** `OPENAI_API_KEY` and friends are read only from the backend
+   process environment and are never injected into the client bundle (`VITE_`
+   variables are the only ones Vite exposes). All inference runs through the backend.
+8. **Transport hardening.** Every response carries `X-Content-Type-Options: nosniff`,
+   `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`,
+   `Permissions-Policy: geolocation=(), camera=(), microphone=()`, and
+   `Content-Security-Policy: frame-ancestors 'none';`. CORS is an explicit origin
+   allowlist from `KENYALANG_CORS_ORIGINS`.
 
 ### 5.6.1 Review Console Frontend Architecture (`frontend/`)
 
-The accountant review console is implemented as a high-density, keyboard-driven Single Page Application (SPA) in `frontend/`:
+The accountant review console is a keyboard-driven single-page application built with
+react-router 6, lazy-loaded route chunks and a shared authenticated layout:
+`RootLayout` runs `AccountantGate` inside a `Suspense` boundary, and each page
+renders its own `AppShell` chrome.
 
-1. **Core Framework:** React 18.3 + TypeScript (strict) + Vite 8.
-2. **Styling & Tokens:** Tailwind CSS 3.4 using the custom Slate & Sarawak Hornbill Teal palette defined in `docs/04_ui_specs.md` (§4.1), dense 40px rows, and `.font-mono-numbers` tabular numerals for financial figures.
-3. **State Management:**
-   * `sessionStore.ts` (Zustand 5): stores authenticated accountant UUID (`kenyalang.accountant_id` in `localStorage`), passed as `X-Accountant-Id` header on all API calls.
-   * `receiptStore.ts` (Zustand 5): workspace client selection, inbox pagination & status filters (`ALL`, `NEEDS_REVIEW`, `VERIFIED`, `EXPORTED`), active review receipt, and draft form state. Form drafts are persisted to `localStorage` under `kenyalang.draft.{receipt_id}` so dirty inputs survive browser refreshes without data loss.
-4. **Client-Side Math Audit (`lib/audit.ts`):** Exact BigInt cents arithmetic; verifies $\Delta = \left| \sum \text{line\_total} + \text{tax} - \text{grand\_total} \right| \le 0.02$, providing real-time visual feedback (`MathBanner.tsx`) on every keystroke.
-5. **Wire Formatting:** All monetary amounts on the wire are serialized as decimal strings (e.g. `"105.47"`) to eliminate JSON floating-point inaccuracies.
-6. **Dev Proxy:** `vite.config.ts` proxies `/api` requests to `http://127.0.0.1:8000`.
+1. **Core framework:** React 18.3, TypeScript 6, Vite 8 (`tsc -b` with `noUnusedLocals`, `noUnusedParameters`).
+2. **Styling & tokens:** Tailwind CSS 3.4 with the brand teal palette defined in
+   `tailwind.config.js`, dense 40px image rows (`dense-row`), and
+   `.font-mono-numbers` tabular numerals for financial figures.
+3. **Image viewport:** the receipt is **not** a public URL. `ReceiptCanvas` issues
+   `fetch(receiptImageUrl(clientId, receiptId), { headers: { 'X-Accountant-Id': … } })`,
+   converts the response blob to an object URL (`URL.createObjectURL`) and renders it
+   in an `<img>`; the URL is revoked on cleanup/unmount. Inbox thumbnails use the same
+   authenticated-blob pattern. Pan/drag and wheel zoom are applied as a GPU
+   `translate3d(...) scale(...)` transform on a DOM node; the provenance boxes are an
+   SVG overlay in a 0–1000 viewBox, not a rasterized HTML canvas.
+4. **Flat receipt schema:** the review form is bound to flat header fields
+   (`merchant_name`, `merchant_brn`, `merchant_sst`, `invoice_date`,
+   `invoice_number`, `subtotal`, `tax_amount`, `grand_total`) plus a `line_items[]`
+   array, mirroring the API's `ReceiptDetailResponse`. Confidence and bboxes arrive
+   separately in a `fields[]` provenance list and are drawn as overlays; they are not
+   nested per-field wrappers.
+5. **State management (Zustand 5):**
+   * `sessionStore.ts`: the acting accountant UUID in `localStorage`
+     (`kenyalang.accountant_id`), sent as `X-Accountant-Id` on every API call.
+   * `receiptStore.ts`: client selection (`kenyalang.current_client_id`), inbox
+     pagination and status filter (`ALL`, `NEEDS_REVIEW`, `VERIFIED`, `EXPORTED`,
+     `REJECTED`), active receipt, and draft form state. Drafts persist to
+     `localStorage` under `kenyalang.draft.{receipt_id}` and are compared against a
+     server-truth baseline to compute dirtiness; a dirty draft blocks navigation
+     (`useBlocker`) and page unload (`useBeforeUnload`).
+6. **Keyboard shortcuts (`lib/reviewShortcuts.ts`):** one pure resolver maps a keydown
+   plus context (`typing`, `focusedLine`) to an action — `Escape` blurs a focused
+   field or asks to reject (the page confirms first), `⌘/Ctrl+Enter` saves and
+   advances, `Alt+A` adds a line, `Alt+Backspace` deletes the focused line. Save, add
+   and delete are suppressed while typing. Zoom keys (`[`, `]`, `R`) and the
+   confirm/reject strip are handled in `ReviewPage`.
+7. **Client-side math audit (`lib/audit.ts`):** exact `BigInt` cents; checks
+   $\Delta = \left| \sum \text{line\_total} + \text{tax} - \text{grand\_total} \right| \le 2$ cents
+   and also validates `line_total` against `qty × unit_price`. `MathBanner.tsx`
+   re-renders the verdict on every keystroke.
+8. **Wire formatting:** monetary amounts in API payloads are decimal strings (e.g.
+   `"105.47"`) so the BigInt cents parser never sees a JSON float.
+9. **Dev proxy:** `vite.config.ts` proxies `/api` to `VITE_API_PROXY` or
+   `http://127.0.0.1:8000`; Vitest runs in jsdom with `src/test/setup.ts`.
 
 ---
 
 ## 5.7 Tech Stack Matrix
 
-| Layer | Technology | Version | Justification |
+| Layer | Technology | Version | Notes |
 | --- | --- | --- | --- |
-| **Frontend** | React + Vite + TypeScript | 18.x / 5.x | Ultra-fast build times, strict typing for receipt state interfaces. |
-| **Styling** | Tailwind CSS | 3.4+ | Utility-first, strict anti-slop color tokens, zero runtime CSS bloat. |
-| **State Management** | Zustand | 4.5+ | Minimal footprint (<2kB) for active receipt state & dirty form cache. |
-| **Backend API** | FastAPI | 0.110+ | High throughput async Python, native Pydantic v2 serialization. |
-| **Image Preprocessing** | OpenCV (headless) | 4.9+ | Industrial CLAHE contrast recovery, deskewing, auto-rotation. |
-| **OCR Engine** | EasyOCR | 1.7+ | PyTorch-backed, native support for Malay and English characters. |
-| **LLM Interface** | `instructor` / Native SDK | Latest | Strict JSON schema extraction, automatic Pydantic retries on error. |
-| **Database** | PostgreSQL / SQLite | 15+ / 3.x | Relational consistency, JSONB support for OCR bounding box store. |
-| **Containerization** | Docker + Docker Compose | 24+ | Single-command local spin-up for development and demo environments. |
+| **Frontend** | React + Vite + TypeScript | 18.3 / 8.3 / 6.0 | Typed receipt state; route-level lazy chunks. |
+| **Routing** | react-router-dom | 6.30 | `createBrowserRouter` with a shared authenticated layout. |
+| **Styling** | Tailwind CSS | 3.4 | Utility-first tokens; no runtime CSS-in-JS. |
+| **State management** | Zustand | 5.0 | Session, workspace and review-draft stores. |
+| **Client math** | TypeScript `BigInt` | — | Cents arithmetic in `lib/audit.ts`, no float money. |
+| **Backend API** | Python + FastAPI + Uvicorn | 3.11 / 0.115+ / 0.30+ | Single ASGI process; Pydantic 2 serialization. |
+| **Validation** | Pydantic | 2.x (2.11+) | Flat extraction schema, Decimal/date coercion, bbox validation. |
+| **ORM & database** | SQLAlchemy + PostgreSQL / SQLite | 2.0+ / 15 / 3.x | Portable GUID/JSONB/UTCDateTime column types; `init_db` bootstrap. |
+| **Image preprocessing** | OpenCV (headless) | 4.9+ | EXIF orientation, CLAHE on LAB-L, bilateral filter, INTER_AREA resize. |
+| **Container decoding** | PyMuPDF + pillow-heif + Pillow | 1.24+ / 0.18+ / 10.3+ | PDF page 1 at 200 DPI, HEIC decode, header pixel probing. |
+| **OCR engine** | EasyOCR (PyTorch) | 1.7+ | English + Malay, normalized polygon boxes, cached reader. |
+| **LLM interface** | `instructor` + OpenAI SDK | 1.7+ / 1.60+ | `Mode.TOOLS`, Pydantic validation retries, 15 s timeout. |
+| **Async processing** | FastAPI `BackgroundTasks` | — | In-process, no broker or worker. |
+| **Testing** | pytest / Vitest + Testing Library | 8.2+ / 5.0 + 16.3 | 229 backend tests, 34 frontend tests. |
+| **Containerization** | Docker + Docker Compose | — | Postgres 15 + Python 3.11-slim API with a storage volume. |
