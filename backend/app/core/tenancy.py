@@ -33,4 +33,21 @@ def get_owned_client(
     return client
 
 
-__all__ = ["get_owned_client"]
+def get_active_owned_client(
+    db: Session, client_id: uuid.UUID, accountant_id: uuid.UUID
+) -> Client:
+    """Like :func:`get_owned_client`, but soft-deleted workspaces are 404.
+
+    Client management keeps using the plain guard so a workspace can be
+    reactivated; every receipt/export/dashboard route uses this one, so a
+    deletion actually revokes data access.
+    """
+    client = get_owned_client(db, client_id, accountant_id)
+    if not client.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
+        )
+    return client
+
+
+__all__ = ["get_active_owned_client", "get_owned_client"]

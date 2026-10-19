@@ -11,19 +11,22 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import case, func, select, text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_accountant_id
 from app.core.database import get_db
 from app.core.tenancy import get_owned_client
 from app.models.client import Client
+from app.models.receipt import Receipt, ReceiptStatus
 from app.schemas.client import (
     ClientCreate,
     ClientListResponse,
     ClientRead,
+    ClientSummary,
     ClientUpdate,
+    HealthLiveResponse,
     HealthResponse,
 )
 
@@ -35,23 +38,31 @@ AccountantId = Annotated[uuid.UUID, Depends(get_current_accountant_id)]
 API_VERSION = "0.1.0"
 
 
-@router.get("/health", response_model=HealthResponse)
-def health(db: DbSession) -> HealthResponse:
-    """Liveness/readiness probe: reports database reachability and active dialect."""
+@router.get("/health/live", response_model=HealthLiveResponse)
+def health_live() -> HealthLiveResponse:
+    """Liveness: the process is up. Deliberately does not touch the database."""
+    return HealthLiveResponse(status="ok", version=API_VERSION)
+
+
+@router.get("/health/ready", response_model=HealthResponse)
+def health_ready(db: DbSession) -> HealthResponse:
+    """Readiness: return 200 only when the database answers a trivial query."""
     dialect = db.bind.dialect.name if db.bind is not None else "unknown"
     try:
         db.execute(text("SELECT 1"))
-        db_status = "connected"
-    except Exception:  # pragma: no cover - only on a broken database
-        db_status = "unavailable"
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="database unavailable",
+        ) from exc
     return HealthResponse(
-        status="ok", database=db_status, dialect=dialect, version=API_VERSION
+        status="ok", database="connected", dialect=dialect, version=API_VERSION
     )
 
 
 @router.get("/clients", response_model=ClientListResponse)
 def list_clients(db: DbSession, accountant_id: AccountantId) -> ClientListResponse:
-    """All workspaces owned by the authenticated accountant."""
+    """All workspaces owned by the authenticated accountant, with receipt counts."""
     clients = (
         db.execute(
             select(Client)
@@ -61,7 +72,49 @@ def list_clients(db: DbSession, accountant_id: AccountantId) -> ClientListRespon
         .scalars()
         .all()
     )
-    return ClientListResponse(items=[ClientRead.model_validate(c) for c in clients])
+    if not clients:
+        return ClientListResponse(items=[])
+
+    unreviewed = func.coalesce(
+        func.sum(
+            case((Receipt.status == ReceiptStatus.STATUS_NEEDS_REVIEW, 1), else_=0)
+        ),
+        0,
+    )
+    verified = func.coalesce(
+        func.sum(
+            case(
+                (
+                    Receipt.status.in_(
+                        (
+                            ReceiptStatus.STATUS_AUTO_VERIFIED,
+                            ReceiptStatus.STATUS_VERIFIED,
+                        )
+                    ),
+                    1,
+                ),
+                else_=0,
+            )
+        ),
+        0,
+    )
+    rows = db.execute(
+        select(Receipt.client_id, unreviewed, verified)
+        .where(Receipt.client_id.in_([c.id for c in clients]))
+        .group_by(Receipt.client_id)
+    ).all()
+    counts = {row[0]: (int(row[1]), int(row[2])) for row in rows}
+
+    return ClientListResponse(
+        items=[
+            ClientSummary(
+                **ClientRead.model_validate(c).model_dump(),
+                unreviewed_count=counts.get(c.id, (0, 0))[0],
+                verified_count=counts.get(c.id, (0, 0))[1],
+            )
+            for c in clients
+        ]
+    )
 
 
 @router.post("/clients", response_model=ClientRead, status_code=status.HTTP_201_CREATED)

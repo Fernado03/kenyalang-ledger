@@ -40,11 +40,30 @@ class ClientRead(ClientBase):
     updated_at: datetime
 
 
+class ClientSummary(ClientRead):
+    """Client row plus the aggregates the clients list needs.
+
+    Carrying both counts here removes the frontend's per-client receipt fetch.
+    """
+
+    unreviewed_count: int = 0
+    verified_count: int = 0
+
+
 class ClientListResponse(BaseModel):
-    items: list[ClientRead]
+    items: list[ClientSummary]
+
+
+class HealthLiveResponse(BaseModel):
+    """Process liveness: no database access."""
+
+    status: str
+    version: str
 
 
 class HealthResponse(BaseModel):
+    """Readiness: the API can serve traffic because the database answered."""
+
     status: str
     database: str
     dialect: str
@@ -56,6 +75,8 @@ __all__ = [
     "ClientCreate",
     "ClientListResponse",
     "ClientRead",
+    "ClientSummary",
     "ClientUpdate",
+    "HealthLiveResponse",
     "HealthResponse",
 ]
