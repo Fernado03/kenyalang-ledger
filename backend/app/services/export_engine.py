@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.database import session_scope, utcnow
 from app.models.receipt import Receipt, ReceiptStatus
 from app.models.receipt_audit_log import ReceiptAuditLog
+from app.services.reconciler import extract_sst_number
 
 MONTH_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
 MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
@@ -426,10 +427,13 @@ def generate_myinvois_json(
                 party_ids.append(
                     {"ID": [{"_": receipt.merchant_brn, "schemeID": "BRN"}]}
                 )
-            if receipt.merchant_sst:
-                party_ids.append(
-                    {"ID": [{"_": receipt.merchant_sst, "schemeID": "SST"}]}
-                )
+            # The SST scheme ID admits only the registration token itself. Stored
+            # values can carry a BRN alongside it ("200401032489 / Y24-..."), so
+            # canonicalise before shipping; an unparseable value is omitted rather
+            # than exported as a malformed party ID.
+            sst_number = extract_sst_number(receipt.merchant_sst)
+            if sst_number:
+                party_ids.append({"ID": [{"_": sst_number, "schemeID": "SST"}]})
             if not party_ids:
                 party_ids.append({"ID": [{"_": "NA", "schemeID": "BRN"}]})
 

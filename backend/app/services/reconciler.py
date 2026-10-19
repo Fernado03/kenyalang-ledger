@@ -26,6 +26,25 @@ MAX_RECEIPT_AGE_DAYS: int = 365
 
 # SST registration format, e.g. W10-1808-32000018 (docs/05_trd.md §5.3.1).
 SST_NUMBER_RE = re.compile(r"^[A-Z]\d+-\d+-\d+$")
+# Receipts print the SST ID next to the BRN ("200401032489 / Y24-1808-31015655"),
+# so extraction and manual entry both concatenate the two. Search anywhere in the
+# field for the first well-formed SST number instead of demanding the whole string.
+_SST_TOKEN_RE = re.compile(r"[A-Z]\d+-\d+-\d+")
+
+
+def extract_sst_number(value: str | None) -> str | None:
+    """Return the canonical SST number inside ``value``, or ``None``.
+
+    The registration format is fixed, so a value that carries other identifiers
+    alongside it (a BRN, "SST ID:" label, separators) still yields the real SST
+    number. Used by both the audit (is this merchant SST-registered?) and the
+    MyInvois export (which must not ship a compound party ID).
+    """
+    if not value:
+        return None
+    match = _SST_TOKEN_RE.search(value.strip().upper())
+    return match.group(0) if match else None
+
 
 MONEY = Decimal("0.01")
 
@@ -151,8 +170,7 @@ class ReconcilerService:
 
     @staticmethod
     def _is_sst_registered(data: ParsedReceiptSchema) -> bool:
-        candidate = (data.merchant_sst or "").strip().upper()
-        return bool(SST_NUMBER_RE.match(candidate))
+        return extract_sst_number(data.merchant_sst) is not None
 
     @staticmethod
     def _overall_confidence(data: ParsedReceiptSchema) -> float:
@@ -174,9 +192,10 @@ class ReconcilerService:
 
 
 __all__ = [
-    "AuditResult",
     "CONFIDENCE_THRESHOLD",
     "MATH_TOLERANCE",
     "MAX_RECEIPT_AGE_DAYS",
+    "AuditResult",
     "ReconcilerService",
+    "extract_sst_number",
 ]
