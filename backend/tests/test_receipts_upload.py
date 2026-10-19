@@ -13,7 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -101,13 +101,13 @@ def stub_pipeline(monkeypatch: pytest.MonkeyPatch):
     ):
         if error is not None:
 
-            def _ocr(_payload: bytes):
+            def _ocr(*_args, **_kwargs):
                 raise error
 
             monkeypatch.setattr("app.api.receipts.process_receipt_image", _ocr)
             return
         monkeypatch.setattr(
-            "app.api.receipts.process_receipt_image", lambda _payload: _tokens()
+            "app.api.receipts.process_receipt_image", lambda *_a, **_k: _tokens()
         )
         monkeypatch.setattr(
             "app.api.receipts.extract_receipt",
@@ -151,7 +151,8 @@ def test_upload_persists_receipt_and_line_items(
     uuid.UUID(body["batch_id"])
     item = body["receipts"][0]
     assert item["filename"] == "receipt.jpg"
-    assert item["status"] == ReceiptStatus.STATUS_AUTO_VERIFIED.value
+    # The response is built before the background task runs (docs §6.3.1).
+    assert item["status"] == ReceiptStatus.PROCESSING_OCR.value
 
     with SessionLocal() as db:
         receipt = db.get(Receipt, uuid.UUID(item["id"]))
@@ -183,13 +184,11 @@ def test_upload_flags_math_mismatch_for_review(
     response = _upload(client, client_id)
 
     assert response.status_code == 202
-    assert (
-        response.json()["receipts"][0]["status"]
-        == ReceiptStatus.STATUS_NEEDS_REVIEW.value
-    )
+    assert response.json()["receipts"][0]["status"] == ReceiptStatus.PROCESSING_OCR.value
 
     with SessionLocal() as db:
         receipt = db.execute(select(Receipt)).scalar_one()
+        assert receipt.status is ReceiptStatus.STATUS_NEEDS_REVIEW
         assert "MATH_MISMATCH_DELTA_20.00" in receipt.validation_flags
         assert receipt.math_discrepancy == Decimal("20.00")
 
@@ -227,11 +226,10 @@ def test_corrupt_image_is_persisted_as_error(client: TestClient, stub_pipeline) 
     response = _upload(client, client_id)
 
     assert response.status_code == 202
-    assert (
-        response.json()["receipts"][0]["status"] == ReceiptStatus.ERR_FILE_CORRUPT.value
-    )
+    assert response.json()["receipts"][0]["status"] == ReceiptStatus.PROCESSING_OCR.value
     with SessionLocal() as db:
         receipt = db.execute(select(Receipt)).scalar_one()
+        assert receipt.status is ReceiptStatus.ERR_FILE_CORRUPT
         assert receipt.processing_error
         assert receipt.grand_total is None
 
@@ -240,24 +238,25 @@ def test_too_few_ocr_tokens_is_persisted_as_unreadable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.api.receipts.process_receipt_image", lambda _payload: _tokens()[:2]
+        "app.api.receipts.process_receipt_image", lambda *_a, **_k: _tokens()[:2]
     )
     client_id = _create_client(client)
 
     response = _upload(client, client_id)
 
     assert response.status_code == 202
-    assert (
-        response.json()["receipts"][0]["status"] == ReceiptStatus.ERR_UNREADABLE.value
-    )
+    assert response.json()["receipts"][0]["status"] == ReceiptStatus.PROCESSING_OCR.value
+    with SessionLocal() as db:
+        receipt = db.execute(select(Receipt)).scalar_one()
+        assert receipt.status is ReceiptStatus.ERR_UNREADABLE
 
 
-def test_infrastructure_failure_is_503_and_leaves_no_rows(
+def test_extraction_outage_is_persisted_as_extraction_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, _storage_root: Path
 ) -> None:
-    """A provider/credential failure is not a receipt defect: no row, no blob, 503."""
+    """A provider outage is terminal for the receipt, not a fabricated success."""
     monkeypatch.setattr(
-        "app.api.receipts.process_receipt_image", lambda _payload: _tokens()
+        "app.api.receipts.process_receipt_image", lambda *_a, **_k: _tokens()
     )
 
     def _boom(_tokens, **_):
@@ -268,17 +267,19 @@ def test_infrastructure_failure_is_503_and_leaves_no_rows(
 
     response = _upload(client, client_id)
 
-    assert response.status_code == 503
+    assert response.status_code == 202
     with SessionLocal() as db:
-        assert db.execute(select(Receipt)).scalars().all() == []
-    assert not list(_storage_root.rglob("*.jpg"))
+        receipt = db.execute(select(Receipt)).scalar_one()
+        assert receipt.status is ReceiptStatus.ERR_EXTRACTION
+        assert receipt.processing_error == "extraction provider unavailable"
+        assert receipt.grand_total is None
 
 
 def test_genuine_timeout_is_persisted_as_timeout(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.api.receipts.process_receipt_image", lambda _payload: _tokens()
+        "app.api.receipts.process_receipt_image", lambda *_a, **_k: _tokens()
     )
 
     def _slow(_tokens, **_):
@@ -290,7 +291,10 @@ def test_genuine_timeout_is_persisted_as_timeout(
     response = _upload(client, client_id)
 
     assert response.status_code == 202
-    assert response.json()["receipts"][0]["status"] == ReceiptStatus.ERR_TIMEOUT.value
+    assert response.json()["receipts"][0]["status"] == ReceiptStatus.PROCESSING_OCR.value
+    with SessionLocal() as db:
+        receipt = db.execute(select(Receipt)).scalar_one()
+        assert receipt.status is ReceiptStatus.ERR_TIMEOUT
 
 
 # --------------------------------------------------------------------------- #
@@ -384,7 +388,7 @@ def test_invalid_later_file_leaves_no_partial_batch(
     assert not any(path.is_file() for path in _storage_root.rglob("*"))
 
 
-@pytest.mark.parametrize("stage", ["storage", "pipeline", "database"])
+@pytest.mark.parametrize("stage", ["storage", "database"])
 def test_later_infrastructure_failure_rolls_back_only_current_batch(
     client: TestClient,
     stub_pipeline,
@@ -397,7 +401,6 @@ def test_later_infrastructure_failure_rolls_back_only_current_batch(
     existing = _upload(client, client_id).json()["receipts"][0]["id"]
     target = {
         "storage": "save_receipt_file",
-        "pipeline": "extract_receipt",
         "database": "_persist_receipt",
     }[stage]
     original = getattr(receipts_api, target)
@@ -407,8 +410,6 @@ def test_later_infrastructure_failure_rolls_back_only_current_batch(
         nonlocal calls
         calls += 1
         if calls == 2:
-            if stage == "pipeline":
-                raise ExtractionError("provider unavailable")
             raise RuntimeError("infrastructure unavailable")
         result = original(*args, **kwargs)
         if stage == "database":
@@ -417,11 +418,8 @@ def test_later_infrastructure_failure_rolls_back_only_current_batch(
 
     monkeypatch.setattr(receipts_api, target, fail_second)
     files = [("files", (name, JPEG_BYTES, "image/jpeg")) for name in ("a.jpg", "b.jpg")]
-    if stage == "pipeline":
-        assert _upload(client, client_id, files=files).status_code == 503
-    else:
-        with pytest.raises(RuntimeError):
-            _upload(client, client_id, files=files)
+    with pytest.raises(RuntimeError):
+        _upload(client, client_id, files=files)
 
     with SessionLocal() as db:
         assert [str(row.id) for row in db.execute(select(Receipt)).scalars()] == [
@@ -450,9 +448,12 @@ def test_upload_reads_only_size_limit_plus_one(
             return JPEG_BYTES[:size]
 
     upload = UploadFile(filename="big.jpg", file=BoundedStream())
+    background = BackgroundTasks()
     with SessionLocal() as db:
         with pytest.raises(HTTPException) as error:
-            receipts_api.upload_receipts(client_id, db, accountant_id, [upload])
+            receipts_api.upload_receipts(
+                client_id, db, accountant_id, background, [upload]
+            )
         assert error.value.status_code == 413
         assert db.execute(select(Receipt)).scalars().all() == []
     assert reads == [9]

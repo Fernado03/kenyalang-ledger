@@ -200,6 +200,7 @@ class ReceiptDetailLineItem(BaseModel):
     quantity: Decimal
     unit_price: Decimal
     line_total: Decimal
+    expense_category: str = "OTHER"
     confidence: float
     # [x_min, y_min, x_max, y_max] normalized to 0.0-1.0, or null when unsupported.
     bbox: Optional[list[float]] = None
@@ -252,8 +253,10 @@ class ReceiptUpdateRequest(BaseModel):
     """``PUT`` body: every header field nullable, line items replaced wholesale.
 
     A missing header key means "leave it alone"; an explicit ``null`` clears it
-    (docs/06_schema_api.md §6.3.4). Line items are always replaced, and an empty
-    list is a legitimate state for a receipt the accountant re-keyed by hand.
+    (docs/06_schema_api.md §6.3.4). ``line_items`` is optional: when the key is
+    absent the stored rows are kept, so a header-only save cannot silently
+    delete a receipt's lines. An explicit empty list clears them, which is the
+    legitimate state for a receipt the accountant re-keyed by hand.
     """
 
     merchant_name: Optional[str] = None
@@ -264,7 +267,7 @@ class ReceiptUpdateRequest(BaseModel):
     subtotal: Optional[Decimal] = None
     tax_amount: Optional[Decimal] = None
     grand_total: Optional[Decimal] = None
-    line_items: list[ReceiptUpdateLineItem] = Field(default_factory=list)
+    line_items: Optional[list[ReceiptUpdateLineItem]] = None
 
     _finite_money = field_validator("subtotal", "tax_amount", "grand_total")(
         _finite_money
@@ -283,11 +286,32 @@ class ReceiptUpdateResponse(BaseModel):
     math_discrepancy: Optional[Decimal]
 
 
+class ReceiptAuditRead(BaseModel):
+    """One manual-override audit entry (docs/06_schema_api.md §6.1.4)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    user_id: UUID
+    field_name: str
+    old_value: Optional[str]
+    new_value: Optional[str]
+    created_at: datetime
+
+
+class ReceiptAuditResponse(BaseModel):
+    """``200 OK`` envelope for the receipt audit trail (§6.3.7)."""
+
+    items: list[ReceiptAuditRead]
+
+
 __all__ = [
     "ExtractedField",
     "ExtractedReceiptData",
     "LineItemSchema",
     "ParsedReceiptSchema",
+    "ReceiptAuditRead",
+    "ReceiptAuditResponse",
     "ReceiptDetailLineItem",
     "ReceiptDetailResponse",
     "ReceiptField",

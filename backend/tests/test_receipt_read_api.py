@@ -98,7 +98,7 @@ def stub_pipeline(monkeypatch: pytest.MonkeyPatch):
 
     def install():
         monkeypatch.setattr(
-            "app.api.receipts.process_receipt_image", lambda _payload: _tokens()
+            "app.api.receipts.process_receipt_image", lambda *_a, **_k: _tokens()
         )
         monkeypatch.setattr(
             "app.api.receipts.extract_receipt", lambda _t, **_: _parsed()
