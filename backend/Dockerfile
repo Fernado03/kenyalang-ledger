@@ -19,11 +19,19 @@ RUN pip install --no-cache-dir \
         --extra-index-url https://download.pytorch.org/whl/cpu \
         -c constraints.txt -r requirements.txt
 
-COPY . .
+# Copy only the application package: never the build context (no .env, no
+# local SQLite DB, no tests).
+COPY app ./app
+
+RUN useradd --create-home app \
+    && mkdir -p /data/storage \
+    && chown -R app:app /app /data
+
+USER app
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:8000/api/health || exit 1
+    CMD curl -fsS http://localhost:8000/api/health/ready || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

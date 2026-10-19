@@ -25,12 +25,17 @@ services:
       dockerfile: Dockerfile
     container_name: kenyalang-backend
     environment:
+      KENYALANG_ENV: local
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-kenyalang}:${POSTGRES_PASSWORD:-kenyalang}@db:5432/${POSTGRES_DB:-kenyalang}
+      KENYALANG_STORAGE_ROOT: /data/storage
+      KENYALANG_CORS_ORIGINS: ${KENYALANG_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       KENYALANG_LLM_MODEL: ${KENYALANG_LLM_MODEL:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - kenyalang_storage:/data/storage
     depends_on:
       db:
         condition: service_healthy
@@ -38,3 +43,4 @@ services:
 
 volumes:
   pgdata:
+  kenyalang_storage:

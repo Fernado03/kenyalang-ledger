@@ -86,3 +86,7 @@ Thumbs.db
 
 # Graphify generated graph output
 graphify-out/
+
+# Local scratch files that must never be committed
+omp-session-*.html
+receipt_crop.jpg

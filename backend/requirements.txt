@@ -1,18 +1,16 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
 sqlalchemy>=2.0
-alembic>=1.13
 psycopg2-binary>=2.9
 pydantic>=2.7
 python-multipart>=0.0.9
 pillow>=10.3
+pymupdf>=1.24
+pillow-heif>=0.18
 easyocr>=1.7
 piexif>=1.1.3
-pytest>=8.2
-httpx>=0.27
 instructor>=1.7
 openai>=1.60
-python-dotenv>=1.0.0
 
 # OpenCV is pinned in constraints.txt to prevent the opencv-python vs
 # opencv-python-headless `cv2` clash that breaks against numpy 2.x.
