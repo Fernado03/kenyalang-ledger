@@ -4,7 +4,7 @@ import type { ReceiptStatus } from '../types/receipt';
 interface StatusPillProps {
   status: ReceiptStatus;
   flags: string[];
-  confidence?: number;
+  confidence?: number | null;
   processingError?: string | null;
 }
 
@@ -83,9 +83,9 @@ export default function StatusPill({
       );
     }
 
-    // `overall_confidence` is the 0..1 source of truth; anything non-finite or
-    // negative is unknown rather than a score.
-    const score = confidence !== undefined && Number.isFinite(confidence) && confidence >= 0
+    // `overall_confidence` is the 0..1 source of truth; anything absent (null /
+    // undefined), non-finite, or negative is unknown rather than a score.
+    const score = typeof confidence === 'number' && Number.isFinite(confidence) && confidence >= 0
       ? confidence
       : null;
     if (score !== null && score < LOW_CONFIDENCE) {

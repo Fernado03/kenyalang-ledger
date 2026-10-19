@@ -37,7 +37,7 @@ export interface ReceiptListItem {
   grand_total: string | null;
   status: ReceiptStatus;
   validation_flags: string[];
-  overall_confidence: number;
+  overall_confidence: number | null;
   math_discrepancy: string;
   image_url: string;
   line_item_count: number;
@@ -95,7 +95,7 @@ export interface ReceiptDetail {
   tax_amount: string | null;
   grand_total: string | null;
   math_discrepancy: string;
-  overall_confidence: number;
+  overall_confidence: number | null;
   validation_flags: string[];
   created_at: string;
   verified_at: string | null;

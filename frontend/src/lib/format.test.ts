@@ -86,6 +86,12 @@ describe('formatConfidence', () => {
     expect(formatConfidence(1)).toBe('100%');
   });
 
+  it('treats absent confidence (null or undefined) as unknown', () => {
+    expect(formatConfidence(null)).toBe('—');
+    expect(formatConfidence(undefined)).toBe('—');
+    expect(formatConfidence(0)).toBe('0%');
+  });
+
   it('clamps above 1 and treats non-finite or negative values as unknown', () => {
     expect(formatConfidence(1.2)).toBe('100%');
     expect(formatConfidence(Number.NaN)).toBe('—');

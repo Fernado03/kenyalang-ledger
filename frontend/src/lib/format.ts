@@ -46,8 +46,15 @@ export function formatDate(iso: string | null): string {
   return match === null ? '-' : `${match[3]}/${match[2]}/${match[1]}`;
 }
 
-/** Formats a 0..1 confidence score as a whole percentage; out of range → `—`. */
-export function formatConfidence(confidence: number): string {
+/**
+ * Formats a 0..1 confidence score as a whole percentage. Absent (`null` /
+ * `undefined`), non-finite, or negative scores are unknown → `—`; values above
+ * 1 clamp to `100%`.
+ */
+export function formatConfidence(confidence: number | null | undefined): string {
+  if (confidence === null || confidence === undefined) {
+    return '—';
+  }
   if (!Number.isFinite(confidence) || confidence < 0) {
     return '—';
   }
