@@ -3,27 +3,23 @@
  * in JS floats). All parsing/formatting goes through BigInt cents.
  */
 
-/** Parses a decimal money string into exact BigInt cents. Invalid → 0n. */
-export function parseMoneyToCents(value: string | number | null): bigint {
+/** Unsigned decimal with at most two fraction digits; no signs or exponents. */
+const MONEY_PATTERN = /^(\d+)(?:\.(\d{1,2}))?$/;
+
+/** Parses a decimal money string into exact BigInt cents. Invalid → null. */
+export function parseMoneyToCents(value: string | number | null): bigint | null {
   if (value === null || value === undefined) {
-    return 0n;
+    return null;
   }
   const cleaned = String(value)
     .trim()
     .replace(/^RM/i, '')
     .replace(/[\s,]/g, '');
-  const match = /^(-?)(\d*)(?:\.(\d{1,3}))?$/.exec(cleaned);
-  if (match === null || (match[2] === '' && match[3] === undefined)) {
-    return 0n;
+  const match = MONEY_PATTERN.exec(cleaned);
+  if (match === null) {
+    return null;
   }
-  const [, sign, whole, fraction] = match;
-  // Scale to thousandths first so a 3rd decimal rounds half-away-from-zero.
-  const thousandths = BigInt(`${whole || '0'}${(fraction ?? '').padEnd(3, '0')}`);
-  const rounded = thousandths / 10n;
-  const remainder = thousandths % 10n;
-  const halfUp = remainder !== 0n && remainder * 2n >= 10n;
-  const cents = halfUp ? rounded + 1n : rounded;
-  return sign === '-' ? -cents : cents;
+  return BigInt(match[1]) * 100n + BigInt((match[2] ?? '').padEnd(2, '0'));
 }
 
 /** Formats BigInt cents as a plain 2-decimal string with no currency symbol. */
@@ -35,11 +31,10 @@ export function formatCents(cents: bigint): string {
   return `${negative ? '-' : ''}${ringgit.toString()}.${sen}`;
 }
 
-/** Formats a money value for display as `RM 99.50`, or `-` when absent. */
+/** Formats a money value for display as `RM 99.50`, or an em dash when absent. */
 export function formatMoneyDisplay(value: string | number | null): string {
-  return value === null || value === undefined || value === ''
-    ? '-'
-    : `RM ${formatCents(parseMoneyToCents(value))}`;
+  const cents = parseMoneyToCents(value);
+  return cents === null ? '—' : `RM ${formatCents(cents)}`;
 }
 
 /** Formats an ISO `YYYY-MM-DD` (or datetime) string as `DD/MM/YYYY`. */
@@ -48,10 +43,13 @@ export function formatDate(iso: string | null): string {
     return '-';
   }
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
-  return match === null ? '-' : `${match[2]}/${match[3]}/${match[1]}`;
+  return match === null ? '-' : `${match[3]}/${match[2]}/${match[1]}`;
 }
 
-/** Formats a 0..1 confidence score as a whole percentage (`94%`). */
+/** Formats a 0..1 confidence score as a whole percentage; out of range → `—`. */
 export function formatConfidence(confidence: number): string {
-  return Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : '-';
+  if (!Number.isFinite(confidence) || confidence < 0) {
+    return '—';
+  }
+  return `${Math.round(Math.min(confidence, 1) * 100)}%`;
 }
