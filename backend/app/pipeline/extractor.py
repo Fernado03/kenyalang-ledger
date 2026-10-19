@@ -17,11 +17,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-try:
-    from dotenv import find_dotenv, load_dotenv
-    load_dotenv(find_dotenv(usecwd=True))
-except ImportError:
-    pass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher

@@ -18,7 +18,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, Field, field_validator
 
-from app.pipeline.preprocessor import preprocess_image
+from app.pipeline.preprocessor import preprocess_image, preprocess_receipt
 
 logger = logging.getLogger(__name__)
 
@@ -130,12 +130,20 @@ def extract_tokens(
     return tokens
 
 
-def process_receipt_image(file_bytes: bytes) -> list[OCRToken]:
+def process_receipt_image(
+    file_bytes: bytes, mime_type: str | None = None
+) -> list[OCRToken]:
     """Full ingest entrypoint: bytes -> normalized image -> spatial OCR tokens.
 
-    This is the internal runner wired to ``receipts.ocr_raw_tokens`` (JSONB).
+    ``mime_type`` selects the PDF/HEIC decoders; without it the historical
+    image-only path runs unchanged. This is the internal runner wired to
+    ``receipts.ocr_raw_tokens`` (JSONB).
     """
-    processed = preprocess_image(file_bytes)
+    processed = (
+        preprocess_receipt(file_bytes, mime_type)
+        if mime_type is not None
+        else preprocess_image(file_bytes)
+    )
     return extract_tokens(processed)
 
 
