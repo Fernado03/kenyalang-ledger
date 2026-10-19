@@ -6,7 +6,7 @@
  * ISO "YYYY-MM-DD". Never accumulate Ringgit in floats — use lib/format.ts.
  */
 
-/** Pipeline + verification lifecycle states (§6.1.2), exactly 13 values. */
+/** Pipeline + verification lifecycle states (§6.1.2), exactly 14 values. */
 export type ReceiptStatus =
   | 'PENDING_UPLOAD'
   | 'UPLOADED'
@@ -20,10 +20,11 @@ export type ReceiptStatus =
   | 'STATUS_REJECTED'
   | 'ERR_UNREADABLE'
   | 'ERR_TIMEOUT'
-  | 'ERR_FILE_CORRUPT';
+  | 'ERR_FILE_CORRUPT'
+  | 'ERR_EXTRACTION';
 
 /** Inbox filter values; passed verbatim as the `status` query parameter. */
-export type ReceiptListStatus = 'ALL' | 'NEEDS_REVIEW' | 'VERIFIED' | 'EXPORTED';
+export type ReceiptListStatus = 'ALL' | 'NEEDS_REVIEW' | 'VERIFIED' | 'EXPORTED' | 'REJECTED';
 
 /** One row of the SCR-02 batch inbox. */
 export interface ReceiptListItem {

@@ -83,9 +83,51 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+/** `ClientRead` plus the aggregates carried by `GET /api/clients`. */
+export interface ClientSummary extends Client {
+  unreviewed_count: number;
+  verified_count: number;
+}
+
+/** One dashboard supplier aggregate. */
+export interface TopSupplier {
+  supplier_name: string;
+  total_spend: string;
+  receipt_count: number;
+}
+
+/** One dashboard category aggregate (pre-tax line totals). */
+export interface CategoryBreakdown {
+  category: string;
+  total_spend: string;
+}
+
+/** `GET /api/v1/clients/{clientId}/dashboard/summary` response. */
+export interface DashboardSummary {
+  month: string;
+  total_spend: string;
+  top_suppliers: TopSupplier[];
+  category_breakdown: CategoryBreakdown[];
+}
+
+/** One receipt audit-log row. `id` is a UUID, not a numeric sequence. */
+export interface ReceiptAuditEntry {
+  id: string;
+  user_id: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+}
+
+/** `GET /api/v1/clients/{clientId}/receipts/{receiptId}/audit` response. */
+export interface ReceiptAuditResponse {
+  items: ReceiptAuditEntry[];
+}
+
 /** `GET /api/clients` — all workspaces owned by the session accountant. */
-export async function listClients(): Promise<Client[]> {
-  const body = await request<{ items: Client[] }>('/api/clients');
+export async function listClients(): Promise<ClientSummary[]> {
+  const body = await request<{ items: ClientSummary[] }>('/api/clients');
   return body.items;
 }
 
@@ -256,4 +298,37 @@ export async function downloadBothExports(
   setTimeout(resolve, 200);
   await promise;
   await downloadMyInvoisJson(clientId, month);
+}
+
+/** `GET /api/v1/clients/{clientId}/dashboard/summary` — month defaults server-side. */
+export async function getDashboardSummary(
+  clientId: string,
+  month?: string,
+): Promise<DashboardSummary> {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return request<DashboardSummary>(
+    `/api/v1/clients/${clientId}/dashboard/summary${query}`,
+  );
+}
+
+/** `POST /api/v1/clients/{clientId}/exports/mark` — verified → exported. */
+export async function markExported(
+  clientId: string,
+  month?: string,
+): Promise<{ updated: number }> {
+  const query = month ? `?month=${encodeURIComponent(month)}` : '';
+  return request<{ updated: number }>(
+    `/api/v1/clients/${clientId}/exports/mark${query}`,
+    { method: 'POST' },
+  );
+}
+
+/** `GET /api/v1/clients/{clientId}/receipts/{receiptId}/audit` — newest first. */
+export async function getReceiptAudit(
+  clientId: string,
+  receiptId: string,
+): Promise<ReceiptAuditResponse> {
+  return request<ReceiptAuditResponse>(
+    `/api/v1/clients/${clientId}/receipts/${receiptId}/audit`,
+  );
 }

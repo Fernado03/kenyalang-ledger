@@ -14,7 +14,7 @@ module.exports = {
         // Typography
         'text-primary': '#0F172A', // Slate 900
         'text-secondary': '#475569', // Slate 600
-        'text-muted': '#94A3B8', // Slate 400
+        'text-muted': '#475569', // Slate 600 (>= 4.5:1 on white and surface-subtle)
 
         // Brand Wedge: Sarawak Hornbill Teal (Single intentional accent)
         brand: {
@@ -24,7 +24,8 @@ module.exports = {
           900: '#134E4A', // Primary active brand color
         },
 
-        // Semantic Confidence & Financial Status Tokens (WCAG 2.2 AA compliant)
+        // Semantic confidence & financial status tokens. Text/background pairs are
+        // chosen for legibility; this project makes no formal WCAG conformance claim.
         verified: {
           bg: '#ECFDF5', // Emerald 50
           border: '#10B981', // Emerald 500
@@ -50,9 +51,8 @@ module.exports = {
           'monospace',
         ],
       },
-      rowHeight: {
+      height: {
         'dense-row': '40px',
-        'safe-target': '44px',
       },
     },
   },

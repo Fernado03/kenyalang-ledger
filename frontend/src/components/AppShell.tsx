@@ -50,6 +50,16 @@ export default function AppShell({
                 Inbox
               </NavLink>
               <NavLink
+                to={`/clients/${clientId}/dashboard`}
+                className={({ isActive }) =>
+                  `text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
+                    isActive ? 'font-semibold text-brand-900' : ''
+                  }`
+                }
+              >
+                Dashboard
+              </NavLink>
+              <NavLink
                 to={`/clients/${clientId}/exports`}
                 className={({ isActive }) =>
                   `text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
@@ -58,6 +68,16 @@ export default function AppShell({
                 }
               >
                 Exports
+              </NavLink>
+              <NavLink
+                to="/upload"
+                className={({ isActive }) =>
+                  `text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
+                    isActive ? 'font-semibold text-brand-900' : ''
+                  }`
+                }
+              >
+                Upload
               </NavLink>
             </>
           ) : null}

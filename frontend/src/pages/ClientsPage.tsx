@@ -1,15 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { listReceipts } from '../api/client'
+import type { ClientSummary } from '../api/client'
 import AppShell from '../components/AppShell'
 import ClientForm from '../components/ClientForm'
 import { useReceiptStore } from '../store/receiptStore'
-
-/** Per-client receipt counts; `null` while the parallel fetches are in flight. */
-interface ClientCounts {
-  unreviewed: number | null
-  verified: number | null
-}
 
 const COUNT_PLACEHOLDER = '-'
 
@@ -37,11 +31,11 @@ function SkeletonRow({ columns }: { columns: number }) {
   )
 }
 
-/** Renders `null` as the loading placeholder for a not-yet-fetched count. */
-function CountCell({ value }: { value: number | null }) {
+/** Renders a receipt count, falling back for freshly created clients. */
+function CountCell({ value }: { value: number | undefined }) {
   return (
     <td className={`${CELL_CLASS} font-mono-numbers`}>
-      {value === null ? COUNT_PLACEHOLDER : value}
+      {value ?? 0}
     </td>
   )
 }
@@ -58,7 +52,6 @@ export default function ClientsPage() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
-  const [counts, setCounts] = useState<Record<string, ClientCounts>>({})
 
   useEffect(() => {
     let active = true
@@ -70,41 +63,8 @@ export default function ClientsPage() {
     }
   }, [loadClients])
 
-  // The backend list does not aggregate per-client counts, so each client's
-  // unreviewed/verified totals come from its own list call (limit=1: the
-  // envelope's `total` carries the count).
-  useEffect(() => {
-    let active = true
-    if (clients.length === 0) {
-      return () => {
-        active = false
-      }
-    }
-    void Promise.all(
-      clients.map(async (client) => {
-        try {
-          const [unreviewedPage, verifiedPage] = await Promise.all([
-            listReceipts(client.id, { status: 'NEEDS_REVIEW', limit: 1 }),
-            listReceipts(client.id, { status: 'VERIFIED', limit: 1 }),
-          ])
-          return [
-            client.id,
-            { unreviewed: unreviewedPage.total, verified: verifiedPage.total },
-          ] as const
-        } catch {
-          return [client.id, { unreviewed: null, verified: null }] as const
-        }
-      }),
-    ).then((entries) => {
-      if (!active) return
-      // Replace the whole map at once: a stale client's counts cannot survive
-      // a client-list change because the next page fully replaces this one.
-      setCounts(Object.fromEntries(entries))
-    })
-    return () => {
-      active = false
-    }
-  }, [clients])
+  // The list response already carries both aggregates, so no per-client calls.
+  const summaries = clients as ClientSummary[]
 
   let body: ReactNode
 
@@ -173,7 +133,7 @@ export default function ClientsPage() {
             </tr>
           </thead>
           <tbody>
-            {clients.map((client) => (
+            {summaries.map((client) => (
               <tr
                 key={client.id}
                 className="h-dense-row border-b border-border last:border-b-0 hover:bg-surface-subtle"
@@ -190,8 +150,8 @@ export default function ClientsPage() {
                 <td className={CELL_CLASS}>
                   {client.industry_category ?? COUNT_PLACEHOLDER}
                 </td>
-                <CountCell value={counts[client.id]?.unreviewed ?? null} />
-                <CountCell value={counts[client.id]?.verified ?? null} />
+                <CountCell value={client.unreviewed_count} />
+                <CountCell value={client.verified_count} />
                 <td className="px-3 py-2">
                   <button
                     type="button"

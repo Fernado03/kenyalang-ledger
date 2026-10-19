@@ -4,6 +4,7 @@ import {
   downloadAccountingCsv,
   downloadBothExports,
   downloadMyInvoisJson,
+  markExported,
 } from '../api/client';
 import AppShell from '../components/AppShell';
 import { ErrorBanner } from '../components/DataStates';
@@ -23,10 +24,12 @@ export default function ExportsPage(): JSX.Element {
   const [isExportingCsv, setIsExportingCsv] = useState(false);
   const [isExportingJson, setIsExportingJson] = useState(false);
   const [isExportingBoth, setIsExportingBoth] = useState(false);
+  const [isMarking, setIsMarking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const clients = useReceiptStore((state) => state.clients);
   const loadClients = useReceiptStore((state) => state.loadClients);
+  const loadClientReceipts = useReceiptStore((state) => state.loadClientReceipts);
   const client: Client | null = clients.find((c) => c.id === clientId) ?? null;
 
   useEffect(() => {
@@ -85,6 +88,25 @@ export default function ExportsPage(): JSX.Element {
       setError(err instanceof Error ? err.message : 'Failed to download exports');
     } finally {
       setIsExportingBoth(false);
+    }
+  };
+
+  const handleMarkExported = async () => {
+    setError(null);
+    setSuccessMessage(null);
+    setIsMarking(true);
+    try {
+      const { updated } = await markExported(clientId, selectedMonth || undefined);
+      await loadClientReceipts(clientId);
+      setSuccessMessage(
+        updated === 0
+          ? 'No verified receipts to mark as exported.'
+          : `Marked ${updated} receipt${updated === 1 ? '' : 's'} as exported.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mark receipts as exported');
+    } finally {
+      setIsMarking(false);
     }
   };
 
@@ -182,22 +204,36 @@ export default function ExportsPage(): JSX.Element {
             </div>
 
             {/* One-Click Download Both Files CTA */}
-            <div>
-              <button
-                type="button"
-                onClick={() => void handleDownloadBoth()}
-                disabled={isExportingBoth || isExportingCsv || isExportingJson}
-                className="inline-flex h-11 items-center justify-center gap-2 border border-brand-900 bg-brand-900 px-5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-2"
-              >
-                {isExportingBoth ? (
-                  <span>Generating Bundle...</span>
-                ) : (
-                  <>
-                    <span aria-hidden="true">⬇</span>
-                    <span>Download Both Files (1-Click)</span>
-                  </>
-                )}
-              </button>
+            <div className="flex flex-col items-stretch gap-2 sm:items-end">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleDownloadBoth()}
+                  disabled={isExportingBoth || isExportingCsv || isExportingJson}
+                  className="inline-flex h-11 items-center justify-center gap-2 border border-brand-900 bg-brand-900 px-5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-2"
+                >
+                  {isExportingBoth ? (
+                    <span>Generating Bundle...</span>
+                  ) : (
+                    <>
+                      <span aria-hidden="true">⬇</span>
+                      <span>Download Both Files (1-Click)</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleMarkExported()}
+                  disabled={isMarking || isExportingBoth || isExportingCsv || isExportingJson}
+                  className="inline-flex h-11 items-center justify-center border border-border bg-surface px-4 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-2"
+                >
+                  {isMarking ? 'Marking...' : 'Mark exported'}
+                </button>
+              </div>
+              <p className="text-[11px] text-text-muted">
+                Downloads leave receipt statuses unchanged. Marking is a separate,
+                explicit action.
+              </p>
             </div>
           </div>
         </section>
@@ -245,21 +281,22 @@ export default function ExportsPage(): JSX.Element {
                 <span className="border border-verified-border bg-verified-bg px-2 py-0.5 text-[10px] font-semibold text-verified-text">
                   Option B · LHDN MyInvois v1.1
                 </span>
-                <span className="inline-flex items-center gap-1 border border-verified-border bg-verified-bg px-2 py-0.5 text-[10px] font-semibold text-verified-text">
-                  <span aria-hidden="true">✓</span> Schema Check: 100% Valid
+                <span className="inline-flex items-center gap-1 border border-border bg-surface-subtle px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
+                  Draft MyInvois envelope — validate before submission.
                 </span>
               </div>
               <h2 className="mt-3 text-sm font-semibold text-text-primary">
                 LHDN MyInvois Multi-Line JSON
               </h2>
               <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-                Direct transformation matching the official LHDN SDK multi-line invoice specification (
+                A UBL-shaped draft modelled on the official SDK sample (
                 <span className="font-mono text-[11px]">1.1-Invoice-MultiLineItem-Sample.json</span>).
+                It is not validated against the LHDN schema, not signed, and never submitted.
               </p>
               <ul className="mt-3 space-y-1 text-[11px] text-text-secondary list-disc list-inside">
                 <li>UBL 2.1 CommonBasic & CommonAggregate namespaces</li>
-                <li>PartyIdentification TIN/BRN validation</li>
-                <li>InvoiceLine and LegalMonetaryTotal balancing</li>
+                <li>PartyIdentification carries the merchant BRN and SST verbatim</li>
+                <li>InvoiceLine tax allocated from the document tax total</li>
               </ul>
             </div>
 

@@ -7,16 +7,24 @@ import UploadDropzone from '../components/UploadDropzone';
 import { formatDate, formatMoneyDisplay } from '../lib/format';
 import { useReceiptStore } from '../store/receiptStore';
 import { useSessionStore } from '../store/sessionStore';
-import type { ReceiptListItem, ReceiptListStatus } from '../types/receipt';
+import type { ReceiptListItem, ReceiptListStatus, ReceiptStatus } from '../types/receipt';
 
 const FILTER_TABS: readonly { label: string; value: ReceiptListStatus }[] = [
   { label: 'All', value: 'ALL' },
   { label: 'Needs Review', value: 'NEEDS_REVIEW' },
   { label: 'Verified', value: 'VERIFIED' },
   { label: 'Exported', value: 'EXPORTED' },
+  { label: 'Rejected', value: 'REJECTED' },
 ];
 
 const DELTA_PREFIX = 'MATH_MISMATCH_DELTA_';
+const PAGE_SIZE = 50;
+const POLL_INTERVAL_MS = 3_000;
+const PROCESSING_STATUSES: readonly ReceiptStatus[] = [
+  'PROCESSING_OCR',
+  'PROCESSING_LLM',
+  'VALIDATING_MATH',
+];
 
 /**
  * SCR-02 inbox thumbnail: the image route needs `X-Accountant-Id`, so fetch a
@@ -96,14 +104,17 @@ function flagDetails(flags: string[]): string[] {
 export default function InboxPage(): JSX.Element {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
-  const [checked, setChecked] = useState<readonly string[]>([]);
 
   const clients = useReceiptStore((state) => state.clients);
   const currentClientId = useReceiptStore((state) => state.currentClientId);
   const receipts = useReceiptStore((state) => state.receipts);
+  const receiptsTotal = useReceiptStore((state) => state.receiptsTotal);
+  const receiptsOffset = useReceiptStore((state) => state.receiptsOffset);
   const statusFilter = useReceiptStore((state) => state.statusFilter);
   const receiptsLoading = useReceiptStore((state) => state.receiptsLoading);
   const receiptsError = useReceiptStore((state) => state.receiptsError);
+  const uploadState = useReceiptStore((state) => state.uploadState);
+  const uploadResult = useReceiptStore((state) => state.uploadResult);
   const loadClients = useReceiptStore((state) => state.loadClients);
   const loadClientReceipts = useReceiptStore((state) => state.loadClientReceipts);
   const setCurrentClientId = useReceiptStore((state) => state.setCurrentClientId);
@@ -125,7 +136,17 @@ export default function InboxPage(): JSX.Element {
     }
   }, [clientId, currentClientId, loadClients, setCurrentClientId, loadClientReceipts]);
 
-  const uploading = useReceiptStore((state) => state.uploadState === 'uploading');
+  const hasProcessing = receipts.some((receipt) => PROCESSING_STATUSES.includes(receipt.status));
+
+  useEffect(() => {
+    if (clientId === undefined || !hasProcessing) return;
+    const interval = window.setInterval(() => {
+      void loadClientReceipts(clientId, receiptsOffset);
+    }, POLL_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [clientId, hasProcessing, receiptsOffset, loadClientReceipts]);
+
+  const uploading = uploadState === 'uploading';
 
   if (clientId === undefined) {
     return (
@@ -138,6 +159,11 @@ export default function InboxPage(): JSX.Element {
   const openReview = (receiptId: string): void => {
     navigate(`/clients/${clientId}/review/${receiptId}`);
   };
+
+  const pageStart = receipts.length === 0 ? 0 : receiptsOffset + 1;
+  const pageEnd = receiptsOffset + receipts.length;
+  const hasPrevious = receiptsOffset > 0;
+  const hasNext = receiptsOffset + PAGE_SIZE < receiptsTotal;
 
   return (
     <div className="space-y-3 p-4">
@@ -153,6 +179,18 @@ export default function InboxPage(): JSX.Element {
             ← Review Clients
           </Link>
           <Link
+            to={`/clients/${clientId}/dashboard`}
+            className="inline-flex min-h-11 items-center border border-border bg-surface-subtle px-3 text-xs font-medium text-text-primary hover:border-brand-900 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+          >
+            Dashboard
+          </Link>
+          <Link
+            to="/upload"
+            className="inline-flex min-h-11 items-center border border-border bg-surface-subtle px-3 text-xs font-medium text-text-primary hover:border-brand-900 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+          >
+            Upload
+          </Link>
+          <Link
             to={`/clients/${clientId}/exports`}
             className="inline-flex min-h-11 items-center border border-border bg-surface-subtle px-3 text-xs font-medium text-text-primary hover:border-brand-900 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
           >
@@ -161,12 +199,32 @@ export default function InboxPage(): JSX.Element {
         </div>
       </header>
 
-      <UploadDropzone
-        disabled={uploading}
-        onFiles={(files) => {
-          void uploadFiles(files).then(() => loadClientReceipts(clientId));
-        }}
-      />
+      <UploadDropzone disabled={uploading} onFiles={(files) => void uploadFiles(files)} />
+
+      <div aria-live="polite" className="min-h-0 text-xs">
+        {uploadState === 'uploading' && <p className="text-text-secondary">Uploading…</p>}
+        {uploadState === 'done' && uploadResult !== null && (
+          <div className="space-y-1">
+            <p className="font-medium text-text-primary">
+              {uploadResult.uploaded.length} files queued for processing.
+            </p>
+            {uploadResult.uploaded.some((item) => item.error !== undefined) && (
+              <ul className="space-y-0.5 text-mismatch-text">
+                {uploadResult.uploaded.map((item) =>
+                  item.error === undefined ? null : (
+                    <li key={item.id}>
+                      {item.filename}: {item.error}
+                    </li>
+                  ),
+                )}
+              </ul>
+            )}
+          </div>
+        )}
+        {uploadState === 'error' && uploadResult !== null && uploadResult.failed !== null && (
+          <p className="font-medium text-mismatch-text">{uploadResult.failed}</p>
+        )}
+      </div>
 
       <nav aria-label="Status filter" className="flex border border-border bg-surface">
         {FILTER_TABS.map((tab) => (
@@ -190,12 +248,12 @@ export default function InboxPage(): JSX.Element {
         <ErrorBanner
           message={receiptsError}
           onRetry={() => {
-            void loadClientReceipts(clientId);
+            void loadClientReceipts(clientId, receiptsOffset);
           }}
         />
       )}
 
-      {receiptsLoading ? (
+      {receiptsLoading && receipts.length === 0 ? (
         <LoadingSkeleton rows={5} />
       ) : receipts.length === 0 ? (
         <EmptyState
@@ -207,9 +265,6 @@ export default function InboxPage(): JSX.Element {
           <table className="w-full border-collapse text-xs" aria-label="Receipt inbox">
             <thead>
               <tr className="h-dense-row border-b border-border bg-surface-subtle text-left text-text-secondary">
-                <th className="w-8 px-2">
-                  <span className="sr-only">Select</span>
-                </th>
                 <th className="w-12 px-2">
                   <span className="sr-only">Preview</span>
                 </th>
@@ -226,16 +281,22 @@ export default function InboxPage(): JSX.Element {
             <tbody>
               {receipts.map((receipt) => {
                 const needsReview = receipt.status === 'STATUS_NEEDS_REVIEW';
+                const processing = PROCESSING_STATUSES.includes(receipt.status);
                 const failed =
                   receipt.status === 'ERR_UNREADABLE' ||
                   receipt.status === 'ERR_TIMEOUT' ||
-                  receipt.status === 'ERR_FILE_CORRUPT';
+                  receipt.status === 'ERR_FILE_CORRUPT' ||
+                  receipt.status === 'ERR_EXTRACTION';
                 const details = flagDetails(receipt.validation_flags);
                 return (
                   <tr
                     key={receipt.id}
-                    onClick={() => openReview(receipt.id)}
-                    className={`h-dense-row cursor-pointer border-b border-border hover:bg-surface-subtle ${
+                    onClick={() => {
+                      if (!processing) openReview(receipt.id);
+                    }}
+                    className={`h-dense-row border-b border-border hover:bg-surface-subtle ${
+                      processing ? '' : 'cursor-pointer'
+                    } ${
                       needsReview
                         ? 'border-l-2 border-warning-border'
                         : failed
@@ -243,21 +304,6 @@ export default function InboxPage(): JSX.Element {
                           : ''
                     }`}
                   >
-                    <td className="px-2" onClick={(event) => event.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 border border-border accent-brand-900"
-                        checked={checked.includes(receipt.id)}
-                        onChange={(event) =>
-                          setChecked((current) =>
-                            event.target.checked
-                              ? [...current, receipt.id]
-                              : current.filter((id) => id !== receipt.id),
-                          )
-                        }
-                        aria-label={`Select ${receipt.filename}`}
-                      />
-                    </td>
                     <td className="px-2" onClick={(event) => event.stopPropagation()}>
                       <ReceiptThumb clientId={clientId} receipt={receipt} />
                     </td>
@@ -290,10 +336,11 @@ export default function InboxPage(): JSX.Element {
                     <td className="px-2" onClick={(event) => event.stopPropagation()}>
                       <button
                         type="button"
+                        disabled={processing}
                         onClick={() => openReview(receipt.id)}
-                        className="inline-flex h-dense-row w-20 items-center justify-center border border-border bg-surface font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+                        className="inline-flex h-dense-row w-20 items-center justify-center border border-border bg-surface font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted"
                       >
-                        Review (↵)
+                        {processing ? 'Processing' : 'Review'}
                       </button>
                     </td>
                   </tr>
@@ -301,6 +348,32 @@ export default function InboxPage(): JSX.Element {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {receiptsTotal > 0 && (
+        <div className="flex min-h-11 items-center justify-between gap-3 border border-border bg-surface px-3 text-xs">
+          <span className="text-text-secondary">
+            Showing {pageStart}–{pageEnd} of {receiptsTotal}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!hasPrevious}
+              onClick={() => void loadClientReceipts(clientId, Math.max(0, receiptsOffset - PAGE_SIZE))}
+              className="inline-flex min-h-11 items-center border border-border bg-surface px-3 font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-muted"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={!hasNext}
+              onClick={() => void loadClientReceipts(clientId, receiptsOffset + PAGE_SIZE)}
+              className="inline-flex min-h-11 items-center border border-border bg-surface px-3 font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-muted"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>

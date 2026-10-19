@@ -181,9 +181,12 @@ export interface ReceiptStoreState {
   clients: Client[];
   receipts: ReceiptListItem[];
   receiptsTotal: number;
+  receiptsOffset: number;
   statusFilter: ReceiptListStatus;
   activeReceipt: ReceiptDetail | null;
   draft: ReceiptDraft | null;
+  /** Server truth the draft is compared against to decide if it is dirty. */
+  draftBaseline: ReceiptDraft | null;
   receiptsLoading: boolean;
   receiptsError: string | null;
   receiptLoading: boolean;
@@ -195,7 +198,7 @@ export interface ReceiptStoreState {
   setCurrentClientId: (id: string) => Promise<void>;
   loadClients: () => Promise<void>;
   createClient: (payload: ClientCreate) => Promise<Client>;
-  loadClientReceipts: (clientId: string) => Promise<void>;
+  loadClientReceipts: (clientId: string, offset?: number) => Promise<void>;
   setStatusFilter: (filter: ReceiptListStatus) => Promise<void>;
   loadReceipt: (receiptId: string) => Promise<void>;
   resetDraftFromReceipt: () => void;
@@ -212,11 +215,12 @@ export interface ReceiptStoreState {
 async function fetchReceipts(
   clientId: string,
   status: ReceiptListStatus,
+  offset: number,
 ): Promise<{ items: ReceiptListItem[]; total: number }> {
   const response = await listReceipts(clientId, {
     status,
     limit: DEFAULT_LIST_LIMIT,
-    offset: 0,
+    offset,
   });
   return { items: response.items, total: response.total };
 }
@@ -230,8 +234,14 @@ function receiptsFailure(error: unknown): string {
 function applyReceiptsPage(
   set: (partial: Partial<ReceiptStoreState>) => void,
   page: { items: ReceiptListItem[]; total: number },
+  offset: number,
 ): void {
-  set({ receipts: page.items, receiptsTotal: page.total, receiptsLoading: false });
+  set({
+    receipts: page.items,
+    receiptsTotal: page.total,
+    receiptsOffset: offset,
+    receiptsLoading: false,
+  });
 }
 
 /** Persists a draft alongside its receipt id. */
@@ -248,9 +258,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
   clients: [],
   receipts: [],
   receiptsTotal: 0,
+  receiptsOffset: 0,
   statusFilter: 'ALL',
   activeReceipt: null,
   draft: null,
+  draftBaseline: null,
   receiptsLoading: false,
   receiptsError: null,
   receiptLoading: false,
@@ -265,13 +277,15 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       currentClientId: id,
       receipts: [],
       receiptsTotal: 0,
+      receiptsOffset: 0,
       activeReceipt: null,
       draft: null,
+      draftBaseline: null,
       receiptsLoading: true,
       receiptsError: null,
     });
     try {
-      applyReceiptsPage(set, await fetchReceipts(id, get().statusFilter));
+      applyReceiptsPage(set, await fetchReceipts(id, get().statusFilter, 0), 0);
     } catch (error) {
       set({ receiptsError: receiptsFailure(error), receiptsLoading: false });
     }
@@ -292,7 +306,7 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       persistClientId(adopted);
       set({ clients: loaded, currentClientId: adopted, receiptsLoading: true });
       try {
-        applyReceiptsPage(set, await fetchReceipts(adopted, get().statusFilter));
+        applyReceiptsPage(set, await fetchReceipts(adopted, get().statusFilter, 0), 0);
       } catch (error) {
         set({
           receipts: [],
@@ -316,21 +330,26 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         currentClientId: created.id,
         receipts: [],
         receiptsTotal: 0,
+        receiptsOffset: 0,
         activeReceipt: null,
         draft: null,
+        draftBaseline: null,
       });
     }
     return created;
   },
 
-  loadClientReceipts: async (clientId: string) => {
+  loadClientReceipts: async (clientId: string, offset = 0) => {
     set({ receiptsLoading: true, receiptsError: null });
     try {
-      applyReceiptsPage(set, await fetchReceipts(clientId, get().statusFilter));
+      applyReceiptsPage(
+        set,
+        await fetchReceipts(clientId, get().statusFilter, offset),
+        offset,
+      );
     } catch (error) {
+      // Keep the current page visible; polling retries and the banner reports it.
       set({
-        receipts: [],
-        receiptsTotal: 0,
         receiptsLoading: false,
         receiptsError: receiptsFailure(error),
       });
@@ -338,10 +357,10 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
   },
 
   setStatusFilter: async (filter: ReceiptListStatus) => {
-    set({ statusFilter: filter });
+    set({ statusFilter: filter, receiptsOffset: 0 });
     const current = get().currentClientId;
     if (current !== null) {
-      await get().loadClientReceipts(current);
+      await get().loadClientReceipts(current, 0);
     }
   },
 
@@ -354,12 +373,20 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
     try {
       const detail = await getReceipt(clientId, receiptId);
       const base = draftFromReceipt(detail);
-      const stored = readDraft(receiptId);
+      const stored = detail.status === 'STATUS_NEEDS_REVIEW' ? readDraft(receiptId) : null;
+      if (stored === null) {
+        clearPersistedDraft(receiptId);
+      }
       const draft: ReceiptDraft = stored === null ? base : { ...base, ...stored };
       if (stored !== null) {
         persistDraftFor(receiptId, draft);
       }
-      set({ activeReceipt: detail, draft, receiptLoading: false });
+      set({
+        activeReceipt: detail,
+        draft,
+        draftBaseline: base,
+        receiptLoading: false,
+      });
     } catch (error) {
       set({ receiptLoading: false });
       throw error instanceof ApiError ? error : new Error(errorMessage(error));
@@ -372,7 +399,7 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       return;
     }
     const draft = draftFromReceipt(receipt);
-    set({ draft });
+    set({ draft, draftBaseline: draft });
     persistDraftFor(receipt.id, draft);
   },
 
@@ -444,9 +471,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       await updateReceipt(currentClientId, activeReceipt.id, updateRequestFromDraft(draft));
       clearPersistedDraft(activeReceipt.id);
       const detail = await getReceipt(currentClientId, activeReceipt.id);
+      const fresh = draftFromReceipt(detail);
       set({
         activeReceipt: detail,
-        draft: draftFromReceipt(detail),
+        draft: fresh,
+        draftBaseline: fresh,
         saveState: 'saved',
         saveError: null,
       });
@@ -472,9 +501,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       await rejectReceiptRequest(currentClientId, activeReceipt.id);
       clearPersistedDraft(activeReceipt.id);
       const detail = await getReceipt(currentClientId, activeReceipt.id);
+      const fresh = draftFromReceipt(detail);
       set({
         activeReceipt: detail,
-        draft: draftFromReceipt(detail),
+        draft: fresh,
+        draftBaseline: fresh,
         saveState: 'saved',
         saveError: null,
       });
