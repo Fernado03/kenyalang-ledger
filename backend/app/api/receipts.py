@@ -559,6 +559,22 @@ def _money_text(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
 
 
+def _reject_if_exported(receipt: Receipt) -> None:
+    """Exported receipts are frozen: a marked month has left the ledger.
+
+    ``STATUS_EXPORTED`` means the receipt was included in a batch the accountant
+    marked as filed. Re-verifying or rejecting it would rewrite history for a
+    period that has already been exported (and leave ``exported_at`` behind on a
+    :class:`ReceiptStatus.STATUS_VERIFIED` row). The accountant must undo the
+    export out-of-band rather than silently regress the row.
+    """
+    if receipt.status == ReceiptStatus.STATUS_EXPORTED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Receipt has already been exported and can no longer be edited",
+        )
+
+
 def _receipt_or_404(db: Session, client_id: UUID, receipt_id: UUID) -> Receipt:
     """Fetch a receipt that belongs to ``client_id``, or 404.
 
@@ -644,7 +660,11 @@ def _build_list_item(client_id: UUID, receipt: Receipt) -> ReceiptListItem:
         grand_total=_money_text(receipt.grand_total),
         status=receipt.status,
         validation_flags=list(receipt.validation_flags or []),
-        overall_confidence=float(receipt.overall_confidence or 0.0),
+        overall_confidence=(
+            None
+            if receipt.overall_confidence is None
+            else float(receipt.overall_confidence)
+        ),
         math_discrepancy=_money_text(receipt.math_discrepancy) or "0.00",
         line_item_count=len(receipt.line_items),
         image_url=f"/api/v1/clients/{client_id}/receipts/{receipt.id}/image",
@@ -669,7 +689,11 @@ def _build_detail(client_id: UUID, receipt: Receipt) -> ReceiptDetailResponse:
         tax_amount=_money_text(receipt.tax_amount),
         grand_total=_money_text(receipt.grand_total),
         math_discrepancy=_money_text(receipt.math_discrepancy) or "0.00",
-        overall_confidence=float(receipt.overall_confidence or 0.0),
+        overall_confidence=(
+            None
+            if receipt.overall_confidence is None
+            else float(receipt.overall_confidence)
+        ),
         validation_flags=list(receipt.validation_flags or []),
         fields=_build_provenance(receipt.field_provenance or []),
         line_items=_build_line_items(receipt),
@@ -813,6 +837,7 @@ def update_client_receipt(
     """
     get_active_owned_client(db, client_id, accountant_id)
     receipt = _receipt_or_404(db, client_id, receipt_id)
+    _reject_if_exported(receipt)
 
     changed: list[tuple[str, str | None, str | None]] = []
     old_status = (
@@ -890,6 +915,9 @@ def update_client_receipt(
     receipt.validation_flags = flags
 
     receipt.status = ReceiptStatus.STATUS_VERIFIED
+    # A manually verified receipt is no longer in an error state, so the detail
+    # payload must stop advertising the stale pipeline failure text.
+    receipt.processing_error = None
     receipt.verified_by = accountant_id
     receipt.verified_at = utcnow()
 
@@ -934,6 +962,7 @@ def reject_client_receipt(
     """Mark a receipt as rejected by the accountant."""
     get_active_owned_client(db, client_id, accountant_id)
     receipt = _receipt_or_404(db, client_id, receipt_id)
+    _reject_if_exported(receipt)
 
     old_status = (
         receipt.status.value

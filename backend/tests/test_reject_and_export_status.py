@@ -208,3 +208,54 @@ def test_export_download_is_pure_and_mark_transitions_status(
     )
     assert again.status_code == 200
     assert 'PVC Pipe 2"' in again.text
+
+
+def test_put_after_export_is_conflict_and_leaves_row_exported(
+    client: TestClient, stub_pipeline, _storage_root: Path
+) -> None:
+    stub_pipeline(_parsed(invoice_date=date(2026, 9, 12)))
+    client_id = _create_client(client)
+    receipt_id = _upload_one(client, client_id)
+
+    base = f"/api/v1/clients/{client_id}/receipts"
+    mark = client.post(f"/api/v1/clients/{client_id}/exports/mark?month=2026-09")
+    assert mark.status_code == 200
+    assert mark.json() == {"updated": 1}
+    assert client.get(base, params={"status": "EXPORTED"}).json()["total"] == 1
+
+    put = client.put(f"{base}/{receipt_id}", json={"grand_total": "99.00"})
+    assert put.status_code == 409
+
+    with SessionLocal() as db:
+        rec = db.get(Receipt, uuid.UUID(receipt_id))
+        assert rec is not None
+        assert rec.status == ReceiptStatus.STATUS_EXPORTED
+        assert rec.grand_total == Decimal("105.47")
+        assert rec.grand_total != Decimal("99.00")
+        assert rec.exported_at is not None
+
+
+def test_reject_after_export_is_conflict(
+    client: TestClient, stub_pipeline, _storage_root: Path
+) -> None:
+    stub_pipeline(_parsed(invoice_date=date(2026, 9, 12)))
+    client_id = _create_client(client)
+    receipt_id = _upload_one(client, client_id)
+
+    base = f"/api/v1/clients/{client_id}/receipts"
+    mark = client.post(f"/api/v1/clients/{client_id}/exports/mark?month=2026-09")
+    assert mark.status_code == 200
+    assert mark.json() == {"updated": 1}
+    assert client.get(base, params={"status": "EXPORTED"}).json()["total"] == 1
+
+    reject = client.post(f"{base}/{receipt_id}/reject")
+    assert reject.status_code == 409
+
+    with SessionLocal() as db:
+        rec = db.get(Receipt, uuid.UUID(receipt_id))
+        assert rec is not None
+        assert rec.status == ReceiptStatus.STATUS_EXPORTED
+        assert rec.exported_at is not None
+
+    assert client.get(base, params={"status": "REJECTED"}).json()["total"] == 0
+    assert client.get(base, params={"status": "EXPORTED"}).json()["total"] == 1
