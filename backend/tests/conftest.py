@@ -16,6 +16,7 @@ from pathlib import Path
 # Must precede the app imports below: app.core.database binds its engine at import time.
 _TMP_DIR = tempfile.mkdtemp(prefix="kenyalang-tests-")
 os.environ["DATABASE_URL"] = f"sqlite:///{Path(_TMP_DIR) / 'test.db'}"
+os.environ["KENYALANG_ENV"] = "test"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

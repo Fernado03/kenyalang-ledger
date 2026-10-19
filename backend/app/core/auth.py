@@ -1,28 +1,39 @@
 """Request authentication and the multi-tenant accountant guard.
 
 The session guard from docs/05_trd.md §5.1 is a hard requirement: every client
-query is scoped to ``clients.accountant_id == <current accountant>``. Auth
-provider selection is a later step (no IdP is specified in the docs), so the
-current dependency reads the accountant UUID from the ``X-Accountant-Id`` header
-and rejects malformed or missing credentials with 401.
+query is scoped to ``clients.accountant_id == <current accountant>``. This demo
+has no identity provider: ``X-Accountant-Id`` is a forgeable demo identity, not
+authentication. It is accepted only when ``KENYALANG_ENV`` is ``local`` or
+``test``; any other (or missing) environment disables it.
 """
 
 from __future__ import annotations
 
+import os
 import uuid
+from typing import Annotated
 
 from fastapi import Header, HTTPException, status
 
 ACCOUNTANT_HEADER = "X-Accountant-Id"
+DEMO_ENVS = {"local", "test"}
 
 
 def get_current_accountant_id(
-    x_accountant_id: str
-    | None = Header(
-        None, alias=ACCOUNTANT_HEADER, description="Authenticated accountant UUID."
-    ),
+    x_accountant_id: Annotated[
+        str | None,
+        Header(
+            alias=ACCOUNTANT_HEADER,
+            description="Demo accountant UUID (not authentication).",
+        ),
+    ] = None,
 ) -> uuid.UUID:
     """Resolve the acting accountant, or raise 401."""
+    if os.getenv("KENYALANG_ENV", "").strip().lower() not in DEMO_ENVS:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Demo authentication is disabled",
+        )
     if not x_accountant_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -36,4 +47,4 @@ def get_current_accountant_id(
         ) from exc
 
 
-__all__ = ["ACCOUNTANT_HEADER", "get_current_accountant_id"]
+__all__ = ["ACCOUNTANT_HEADER", "DEMO_ENVS", "get_current_accountant_id"]

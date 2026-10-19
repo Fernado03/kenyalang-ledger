@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
-try:
-    from dotenv import find_dotenv, load_dotenv
-    load_dotenv(find_dotenv(usecwd=True))
-except ImportError:
-    pass
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -27,11 +23,30 @@ DESCRIPTION = (
     "Schema and API contracts: docs/06_schema_api.md."
 )
 
+INIT_DB_ATTEMPTS = 5
+INIT_DB_DELAY_SECONDS = 1.0
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    # Dev/demo convenience: production runs Alembic migrations instead.
-    init_db()
+    """Create the schema, tolerating a database that is still starting up.
+
+    There are no migrations in this demo: ``init_db`` runs ``create_all`` plus
+    additive guards. A local Postgres can accept connections a moment after the
+    API container starts, so retry briefly rather than crash-looping.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, INIT_DB_ATTEMPTS + 1):
+        try:
+            init_db()
+            break
+        except Exception as exc:  # noqa: BLE001 - retried below, re-raised if final
+            last_error = exc
+            if attempt == INIT_DB_ATTEMPTS:
+                raise
+            await asyncio.sleep(INIT_DB_DELAY_SECONDS)
+    else:  # pragma: no cover - loop always breaks or raises
+        raise RuntimeError("database initialization failed") from last_error
     yield
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Enforce production security headers on every response (§5 Transport & headers)."""
@@ -47,6 +62,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 def create_app() -> FastAPI:
+    if os.getenv("KENYALANG_ENV", "").strip().lower() == "production":
+        raise RuntimeError("Kenyalang Ledger demo auth must not run in production")
+
     app = FastAPI(
         title="Kenyalang Ledger API",
         description=DESCRIPTION,
