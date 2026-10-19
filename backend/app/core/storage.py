@@ -77,10 +77,26 @@ def delete_receipt_file(relative_path: str) -> None:
     (storage_root() / relative_path).unlink(missing_ok=True)
 
 
+def load_receipt_file(relative_path: str) -> bytes:
+    """Read a stored blob by its relative path, refusing to escape the root.
+
+    The path originates from the database, but it is still validated: a corrupted
+    or tampered ``storage_path`` must never become an arbitrary file read.
+    """
+    root = storage_root().resolve()
+    candidate = (root / relative_path).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError("receipt path escapes the storage root")
+    if not candidate.is_file():
+        raise FileNotFoundError(relative_path)
+    return candidate.read_bytes()
+
+
 __all__ = [
     "DEFAULT_STORAGE_ROOT",
     "STORAGE_ROOT_ENV",
     "delete_receipt_file",
+    "load_receipt_file",
     "receipt_storage_path",
     "safe_extension",
     "safe_filename",

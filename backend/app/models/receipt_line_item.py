@@ -46,6 +46,10 @@ class ReceiptLineItem(Base):
     line_total: Mapped[Decimal] = mapped_column(
         Money, nullable=False, default=Decimal("0.00")
     )
+    # Fixed taxonomy: F&B, HARDWARE, WORKSHOP, RETAIL, OTHER (docs/06 §6.1.3).
+    expense_category: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="OTHER", server_default="OTHER"
+    )
 
     # Spatial bounding box & confidence for GUI highlighting
     confidence: Mapped[Decimal] = mapped_column(

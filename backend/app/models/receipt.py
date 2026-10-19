@@ -44,6 +44,9 @@ class ReceiptStatus(str, enum.Enum):
     ERR_UNREADABLE = "ERR_UNREADABLE"
     ERR_TIMEOUT = "ERR_TIMEOUT"
     ERR_FILE_CORRUPT = "ERR_FILE_CORRUPT"
+    # The extraction provider was unavailable or refused the request. The
+    # failure is terminal for this receipt but is not a defect in the file.
+    ERR_EXTRACTION = "ERR_EXTRACTION"
 
     @property
     def is_error(self) -> bool:
