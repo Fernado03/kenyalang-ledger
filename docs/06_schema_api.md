@@ -168,7 +168,9 @@ of the `ERR_*` states on failure. Status updates are conditional on the row stil
 `PROCESSING_*` state, so a late task cannot overwrite an accountant's decision.
 `STATUS_REJECTED` is never produced by the pipeline: it exists only when an accountant calls the
 reject endpoint. A later explicit review save through
-`PUT /api/v1/clients/{client_id}/receipts/{receipt_id}` does set the row back to `STATUS_VERIFIED`, but nothing in ingestion or the worker path will change it.
+`PUT /api/v1/clients/{client_id}/receipts/{receipt_id}` does set the row back to `STATUS_VERIFIED`, but nothing in ingestion or the worker path will change it. A receipt already in
+`STATUS_EXPORTED` is immutable: both the review save and the reject call return `409` once
+`exported_at` is set, so a month that has been exported cannot drift from its filed file.
 
 ---
 
@@ -306,7 +308,9 @@ receipt that belongs to another accountant.
 
 **`GET /api/clients`** - workspaces owned by the session accountant, newest first, with receipt
 counts. `unreviewed_count` counts `STATUS_NEEDS_REVIEW`; `verified_count` counts
-`STATUS_AUTO_VERIFIED` plus `STATUS_VERIFIED`. Rejected and failed receipts are counted by neither.
+`STATUS_AUTO_VERIFIED`, `STATUS_VERIFIED` plus `STATUS_EXPORTED` (an exported receipt is still a
+verified one, and dropping it made a fully processed workspace look unreviewed). Rejected and
+failed receipts are counted by neither.
 
 ```json
 {
@@ -579,7 +583,8 @@ Response `200 OK`:
 receipts are excluded from dashboard spend and from both export formats, and only an explicit
 accountant action changes it (a review save via `PUT /api/v1/clients/{client_id}/receipts/{receipt_id}`, which sets
 `STATUS_VERIFIED`, or another reject call). Nothing in the ingestion or background path will move
-a rejected receipt on its own.
+a rejected receipt on its own. Receipts already in `STATUS_EXPORTED` cannot be rejected or
+re-saved: both endpoints return `409` and the row keeps its `exported_at`.
 
 ### 6.4.8 Audit trail
 
@@ -686,7 +691,11 @@ with `Content-Disposition: attachment; filename="Kenyalang_MyInvois_202609.json"
 The envelope is **draft** and mirrors the official SDK sample layout. It is not validated against
 the MyInvois schema, is not submitted anywhere, and generating it never changes receipt status.
 Supplier name is `merchant_name` or `Unknown Supplier`; party IDs use `schemeID: "BRN"` when
-`merchant_brn` exists, `schemeID: "SST"` when `merchant_sst` exists, and `NA`/`BRN` otherwise.
+`merchant_brn` exists, `schemeID: "SST"` with the canonical registration number when
+`merchant_sst` carries one, and `NA`/`BRN` otherwise. The SST value is canonicalised with
+`extract_sst_number` (backend `services/reconciler.py`) because a stored field may hold the BRN
+alongside it (`"200401032489 / Y24-1808-31015655"`); a value with no well-formed token is omitted
+rather than exported under the wrong scheme.
 
 ```json
 {

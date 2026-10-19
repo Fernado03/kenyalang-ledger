@@ -271,7 +271,20 @@ MATH_TOLERANCE: Decimal = Decimal("0.02")  # rounding slack on the arithmetic id
 CONFIDENCE_THRESHOLD: float = 0.80        # below this, a human confirms the field
 MAX_RECEIPT_AGE_DAYS: int = 365
 CRITICAL_FIELDS: tuple[str, ...] = ("merchant_name", "invoice_date", "grand_total")
-SST_NUMBER_RE = re.compile(r"^[A-Z]\d+-\d+-\d+$")
+_SST_TOKEN_RE = re.compile(r"[A-Z]\d+-\d+-\d+")
+
+def extract_sst_number(value: str | None) -> str | None:
+    """First well-formed SST number in the field, upper-cased; None otherwise.
+
+    A receipt prints the SST ID beside the BRN ("No. Pendaftaran (BRN) /
+    SST ID"), so extraction stores the concatenation. Both the audit and the
+    MyInvois export canonicalise through this helper instead of demanding the
+    whole field match the registration shape.
+    """
+    if not value:
+        return None
+    match = _SST_TOKEN_RE.search(value.strip().upper())
+    return match.group(0) if match else None
 
 class ReconcilerService:
     @staticmethod
@@ -354,12 +367,14 @@ checks see the same absence. A non-positive total with a printed subtotal is fla
 once, by `INVALID_GRAND_TOTAL`.
 
 **SST review heuristic (not a legal rule).** When `tax_amount` is absent/zero and
-`merchant_sst` matches `^[A-Z]\d+-\d+-\d+$` (upper-cased before matching, e.g.
-`W10-1808-32000018`), the audit raises `MISSING_SST_ON_REGISTERED_MERCHANT` for a
-human to check. This is triage for the review console; it does not assert that every
-SST registrant must charge tax on every receipt (exempt supplies, zero-rated items
-and non-taxable turnover exist). `merchant_sst` is the dedicated SST field; there is
-no combined `brn_tin` column or alias.
+`merchant_sst` contains an SST number — the field is upper-cased and searched for
+`[A-Z]\d+-\d+-\d+`, e.g. `W10-1808-32000018`, including when the BRN is stored alongside it
+(`"200401032489 / Y24-1808-31015655"`) — the audit raises
+`MISSING_SST_ON_REGISTERED_MERCHANT` for a human to check. The same helper canonicalises the
+number the MyInvois export ships under `schemeID: "SST"`. This is triage for the review console;
+it does not assert that every SST registrant must charge tax on every receipt (exempt supplies,
+zero-rated items and non-taxable turnover exist). `merchant_sst` is the dedicated SST field;
+there is no combined `brn_tin` column or alias.
 
 **Confidence gate and critical fields.** `_overall_confidence` returns `0.0` when any
 critical field is absent from provenance or holds `None`/`""`; otherwise it is the
