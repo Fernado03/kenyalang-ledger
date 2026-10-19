@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router-dom';
 import LineItemsEditor from '../components/LineItemsEditor';
 import MathBanner from '../components/MathBanner';
 import ReceiptCanvas from '../components/ReceiptCanvas';
 import StatusPill from '../components/StatusPill';
+import { getReceiptAudit } from '../api/client';
+import type { ReceiptAuditEntry } from '../api/client';
 import { auditMath } from '../lib/audit';
-import { formatCents, formatConfidence } from '../lib/format';
+import { formatCents, formatConfidence, formatDate } from '../lib/format';
+import { resolveReviewShortcut } from '../lib/reviewShortcuts';
 import { useReceiptStore } from '../store/receiptStore';
 import type { DraftHeaderField, ReceiptDraft } from '../types/receipt';
 
@@ -37,6 +40,9 @@ const ACTION_BUTTON_CLASS =
 const PRIMARY_BUTTON_CLASS =
   'inline-flex h-11 items-center border border-brand-900 bg-brand-900 px-3 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
 
+const DANGER_BUTTON_CLASS =
+  'inline-flex h-11 items-center border border-mismatch-border bg-mismatch-text px-3 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:opacity-90 focus-visible:ring-2 focus-visible:ring-mismatch-text focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
+
 const SECTION_CLASS = 'border-b border-border px-4 py-3';
 
 const LABEL_CLASS = 'block text-xs uppercase tracking-wide text-text-muted';
@@ -44,6 +50,19 @@ const LABEL_CLASS = 'block text-xs uppercase tracking-wide text-text-muted';
 /** `line_items[2]` matches the canvas's active-row convention. */
 function lineFieldNameFor(index: number): string {
   return `line_items[${index}]`;
+}
+
+/** Draft identity without the generated line keys, for the dirty comparison. */
+function draftSignature(draft: ReceiptDraft): string {
+  return JSON.stringify({
+    ...draft,
+    line_items: draft.line_items.map((item) => [
+      item.description,
+      item.quantity,
+      item.unit_price,
+      item.line_total,
+    ]),
+  });
 }
 
 interface LabelledInputProps {
@@ -108,12 +127,24 @@ export default function ReviewPage(): JSX.Element {
   const removeDraftLine = useReceiptStore((state) => state.removeDraftLine);
   const saveReceipt = useReceiptStore((state) => state.saveReceipt);
   const rejectReceipt = useReceiptStore((state) => state.rejectReceipt);
+  const draftBaseline = useReceiptStore((state) => state.draftBaseline);
 
   const [scale, setScale] = useState(1);
   const [activeField, setActiveField] = useState<string | null>(null);
+  const clearActiveField = useCallback(() => setActiveField(null), []);
   const [focusedLineKey, setFocusedLineKey] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
-  const [baseline, setBaseline] = useState<string | null>(null);
+  const [confirmingReject, setConfirmingReject] = useState(false);
+  const [auditState, setAuditState] = useState<{
+    receiptId: string | null;
+    entries: ReceiptAuditEntry[];
+    error: string | null;
+  }>({ receiptId: null, entries: [], error: null });
+  // Entries belong to the receipt that produced them; never show a previous
+  // receipt's history while the next one loads.
+  const auditEntries = auditState.receiptId === receiptId ? auditState.entries : [];
+  const auditError = auditState.receiptId === receiptId ? auditState.error : null;
+  const rejectStripRef = useRef<HTMLDivElement | null>(null);
 
   const audit = useMemo(() => auditMath(draft ?? EMPTY_DRAFT), [draft]);
 
@@ -122,9 +153,31 @@ export default function ReviewPage(): JSX.Element {
     [audit.matches, draft],
   );
 
-  // Dirty = the current draft differs from the one the receipt shipped with.
+  // Dirty = the draft differs from server truth. A restored localStorage draft
+  // is therefore correctly dirty, and a fresh load is not.
   const isDirty =
-    draft !== null && baseline !== null && JSON.stringify(draft) !== baseline;
+    draft !== null &&
+    draftBaseline !== null &&
+    draftSignature(draft) !== draftSignature(draftBaseline);
+
+  // The navigation guards read a ref so a save can clear dirtiness right before
+  // navigating, without waiting for a re-render to re-register the blocker.
+  const dirtyRef = useRef(false);
+  useEffect(() => {
+    dirtyRef.current = isDirty;
+  }, [isDirty]);
+
+  const blocker = useBlocker(useCallback(() => dirtyRef.current, []));
+
+  useBeforeUnload(
+    useCallback((event: BeforeUnloadEvent): void => {
+      if (!dirtyRef.current) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = '';
+    }, []),
+  );
 
   const clampScale = useCallback((value: number): number => {
     return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
@@ -142,8 +195,23 @@ export default function ReviewPage(): JSX.Element {
     setScale(1);
   }, []);
 
-  // Load the receipt and capture the clean baseline once per receipt; the
-  // async continuation is the right place for the reset (not the effect body).
+  const refreshAudit = useCallback(async (): Promise<void> => {
+    if (clientId === undefined || receiptId === undefined) {
+      return;
+    }
+    try {
+      const response = await getReceiptAudit(clientId, receiptId);
+      setAuditState({ receiptId, entries: response.items, error: null });
+    } catch (error) {
+      setAuditState({
+        receiptId,
+        entries: [],
+        error: error instanceof Error ? error.message : 'Audit history unavailable',
+      });
+    }
+  }, [clientId, receiptId]);
+
+  // Load the receipt; the store resets the draft and its baseline from server truth.
   useEffect(() => {
     let active = true;
     if (clientId === undefined || clientId === '' || receiptId === undefined || receiptId === '') {
@@ -151,11 +219,9 @@ export default function ReviewPage(): JSX.Element {
     }
     loadReceipt(receiptId)
       .then(() => {
-        if (!active) {
-          return;
+        if (active) {
+          void refreshAudit();
         }
-        const loaded = useReceiptStore.getState().draft;
-        setBaseline(loaded === null ? null : JSON.stringify(loaded));
       })
       .catch(() => {
         // Load failures surface through the store's error state.
@@ -163,7 +229,14 @@ export default function ReviewPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [clientId, receiptId, loadReceipt]);
+  }, [clientId, receiptId, loadReceipt, refreshAudit]);
+
+  // The confirmation strip takes focus when it opens, so Escape lands on it.
+  useEffect(() => {
+    if (confirmingReject) {
+      rejectStripRef.current?.focus();
+    }
+  }, [confirmingReject]);
 
   // Saved confirmation: one-shot flash, cleared on unmount as well.
   useEffect(() => {
@@ -175,18 +248,19 @@ export default function ReviewPage(): JSX.Element {
   }, [flash]);
 
   const saveAndNext = useCallback(async (): Promise<void> => {
-    if (clientId === undefined || receiptId === undefined) {
+    if (clientId === undefined || receiptId === undefined || !audit.valid) {
       return;
     }
     try {
       await saveReceipt();
+      dirtyRef.current = false;
       setFlash(true);
       const next = receipts.find((item) => item.status === 'STATUS_NEEDS_REVIEW' && item.id !== receiptId);
       navigate(next !== undefined ? `/clients/${clientId}/review/${next.id}` : `/clients/${clientId}/inbox`);
     } catch {
       // saveState already holds the error message.
     }
-  }, [clientId, receiptId, receipts, saveReceipt, navigate]);
+  }, [audit.valid, clientId, receiptId, receipts, saveReceipt, navigate]);
 
   const rejectAndNext = useCallback(async (): Promise<void> => {
     if (clientId === undefined || receiptId === undefined) {
@@ -194,6 +268,8 @@ export default function ReviewPage(): JSX.Element {
     }
     try {
       await rejectReceipt();
+      setConfirmingReject(false);
+      dirtyRef.current = false;
       const next = receipts.find(
         (item) => item.status === 'STATUS_NEEDS_REVIEW' && item.id !== receiptId,
       );
@@ -203,7 +279,7 @@ export default function ReviewPage(): JSX.Element {
     }
   }, [clientId, receiptId, receipts, rejectReceipt, navigate]);
 
-  // One window listener for the whole workflow.
+  // One window listener for the whole workflow; the resolver owns the bindings.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const target = event.target;
@@ -213,37 +289,53 @@ export default function ReviewPage(): JSX.Element {
         target instanceof HTMLSelectElement ||
         (target instanceof HTMLElement && target.isContentEditable);
 
-      if (event.metaKey || event.ctrlKey) {
-        if (event.key === 'Enter') {
+      // The leave dialog is modal: Escape stays on the page, everything else waits.
+      if (blocker.state === 'blocked') {
+        if (event.key === 'Escape') {
           event.preventDefault();
-          void saveAndNext();
+          blocker.reset();
         }
         return;
       }
 
-      if (event.altKey) {
-        if (event.key === 'a' || event.key === 'A') {
-          event.preventDefault();
-          addDraftLine();
-          return;
-        }
-        if (event.key === 'Backspace') {
-          if (focusedLineKey !== null) {
-            event.preventDefault();
-            removeDraftLine(focusedLineKey);
-            setFocusedLineKey(null);
-          }
-          return;
-        }
-      }
-
-      if (event.key === 'Escape') {
+      // An open reject confirmation owns Escape: the first press cancels it.
+      if (event.key === 'Escape' && confirmingReject) {
         event.preventDefault();
-        void rejectAndNext();
+        setConfirmingReject(false);
         return;
       }
 
-      if (typing) {
+      const action = resolveReviewShortcut(event, { typing, focusedLine: focusedLineKey });
+
+      if (action === 'blur') {
+        (target as HTMLElement).blur();
+        return;
+      }
+      if (action === 'save') {
+        event.preventDefault();
+        void saveAndNext();
+        return;
+      }
+      if (action === 'reject') {
+        event.preventDefault();
+        setConfirmingReject(true);
+        return;
+      }
+      if (action === 'add-line') {
+        event.preventDefault();
+        addDraftLine();
+        return;
+      }
+      if (action === 'delete-line') {
+        event.preventDefault();
+        if (focusedLineKey !== null) {
+          removeDraftLine(focusedLineKey);
+          setFocusedLineKey(null);
+        }
+        return;
+      }
+
+      if (typing || event.metaKey || event.ctrlKey || event.altKey) {
         return;
       }
 
@@ -263,14 +355,13 @@ export default function ReviewPage(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     addDraftLine,
-    clientId,
+    blocker,
+    confirmingReject,
     focusedLineKey,
-    navigate,
     onReset,
     onZoomIn,
     onZoomOut,
     removeDraftLine,
-    rejectAndNext,
     saveAndNext,
   ]);
 
@@ -347,7 +438,7 @@ export default function ReviewPage(): JSX.Element {
               type="button"
               className={ACTION_BUTTON_CLASS}
               disabled={saveState === 'saving'}
-              onClick={() => void rejectAndNext()}
+              onClick={() => setConfirmingReject(true)}
             >
               {saveState === 'saving' ? 'Rejecting…' : 'Reject (Esc)'}
             </button>
@@ -361,16 +452,52 @@ export default function ReviewPage(): JSX.Element {
                 <span aria-hidden="true">✓</span> Verified
               </span>
             ) : null}
+            {!audit.valid ? (
+              <span className="text-xs font-medium text-mismatch-text" role="status">
+                Fix {audit.invalidFields[0]} before verifying.
+              </span>
+            ) : null}
             <button
               type="button"
               className={PRIMARY_BUTTON_CLASS}
-              disabled={saveState === 'saving'}
+              disabled={saveState === 'saving' || !audit.valid}
               onClick={() => void saveAndNext()}
             >
               {saveState === 'saving' ? 'Saving…' : 'Verify & Next (⌘↵)'}
             </button>
           </div>
         </div>
+
+        {confirmingReject ? (
+          <div
+            ref={rejectStripRef}
+            tabIndex={-1}
+            role="alertdialog"
+            aria-label="Confirm rejection"
+            className="flex items-center justify-between gap-3 border-b border-mismatch-border bg-mismatch-bg px-4 py-2 focus-visible:ring-2 focus-visible:ring-mismatch-text focus-visible:ring-inset focus-visible:outline-none"
+          >
+            <p className="text-sm font-semibold text-mismatch-text">
+              Reject this receipt? This cannot be undone.
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                className={ACTION_BUTTON_CLASS}
+                onClick={() => setConfirmingReject(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={DANGER_BUTTON_CLASS}
+                disabled={saveState === 'saving'}
+                onClick={() => void rejectAndNext()}
+              >
+                {saveState === 'saving' ? 'Rejecting…' : 'Reject'}
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <section className={SECTION_CLASS}>
           <h2 className="mb-2 text-sm font-semibold text-text-primary">Merchant &amp; Date</h2>
@@ -381,7 +508,7 @@ export default function ReviewPage(): JSX.Element {
               value={draft?.merchant_name ?? ''}
               onChange={setDraftField}
               onFocus={setActiveField}
-              onBlur={() => setActiveField(null)}
+              onBlur={clearActiveField}
             />
             <LabelledInput
               label="BRN / SST Number"
@@ -389,7 +516,7 @@ export default function ReviewPage(): JSX.Element {
               value={draft?.merchant_sst ?? ''}
               onChange={setDraftField}
               onFocus={setActiveField}
-              onBlur={() => setActiveField(null)}
+              onBlur={clearActiveField}
             />
             <LabelledInput
               label="Invoice Date"
@@ -398,7 +525,7 @@ export default function ReviewPage(): JSX.Element {
               value={draft?.invoice_date ?? ''}
               onChange={setDraftField}
               onFocus={setActiveField}
-              onBlur={() => setActiveField(null)}
+              onBlur={clearActiveField}
             />
             <LabelledInput
               label="Invoice Number"
@@ -406,7 +533,7 @@ export default function ReviewPage(): JSX.Element {
               value={draft?.invoice_number ?? ''}
               onChange={setDraftField}
               onFocus={setActiveField}
-              onBlur={() => setActiveField(null)}
+              onBlur={clearActiveField}
             />
             <LabelledInput
               label="Merchant BRN"
@@ -414,7 +541,7 @@ export default function ReviewPage(): JSX.Element {
               value={draft?.merchant_brn ?? ''}
               onChange={setDraftField}
               onFocus={setActiveField}
-              onBlur={() => setActiveField(null)}
+              onBlur={clearActiveField}
             />
           </div>
         </section>
@@ -449,7 +576,7 @@ export default function ReviewPage(): JSX.Element {
                 value={draft?.subtotal ?? ''}
                 onChange={(event) => setDraftField('subtotal', event.target.value)}
                 onFocus={() => setActiveField('subtotal')}
-                onBlur={() => setActiveField(null)}
+                onBlur={clearActiveField}
                 className={NUMERIC_FIELD_CLASS}
               />
             </label>
@@ -461,7 +588,7 @@ export default function ReviewPage(): JSX.Element {
                 value={draft?.tax_amount ?? ''}
                 onChange={(event) => setDraftField('tax_amount', event.target.value)}
                 onFocus={() => setActiveField('tax_amount')}
-                onBlur={() => setActiveField(null)}
+                onBlur={clearActiveField}
                 className={NUMERIC_FIELD_CLASS}
               />
             </label>
@@ -473,7 +600,7 @@ export default function ReviewPage(): JSX.Element {
                 value={draft?.grand_total ?? ''}
                 onChange={(event) => setDraftField('grand_total', event.target.value)}
                 onFocus={() => setActiveField('grand_total')}
-                onBlur={() => setActiveField(null)}
+                onBlur={clearActiveField}
                 className={NUMERIC_FIELD_CLASS}
               />
             </label>
@@ -495,8 +622,73 @@ export default function ReviewPage(): JSX.Element {
           <div className="mt-2">
             <MathBanner audit={audit} missingSst={audit.missingSstOnRegisteredMerchant} dirty={isDirty} />
           </div>
+
+          <details className="mt-3 border border-border bg-surface">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-secondary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-inset focus-visible:outline-none">
+              Audit history
+            </summary>
+            {auditError !== null ? (
+              <p className="border-t border-border px-3 py-2 text-xs text-mismatch-text">{auditError}</p>
+            ) : auditEntries.length === 0 ? (
+              <p className="border-t border-border px-3 py-2 text-xs text-text-muted">
+                No changes recorded yet.
+              </p>
+            ) : (
+              <ul className="max-h-64 divide-y divide-border overflow-y-auto">
+                {auditEntries.map((entry) => (
+                  <li key={entry.id} className="px-3 py-2 text-xs text-text-secondary">
+                    <span className="font-medium text-text-primary">{entry.field_name}</span>{' '}
+                    <span className="font-mono-numbers">
+                      {entry.old_value ?? '—'} → {entry.new_value ?? '—'}
+                    </span>
+                    <span className="mt-0.5 block text-text-muted">
+                      {entry.user_id.slice(0, 8)} · {formatDate(entry.created_at)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </details>
         </section>
       </div>
+
+      {blocker.state === 'blocked' ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-6">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="leave-dialog-title"
+            className="w-full max-w-sm border border-border bg-surface p-4"
+          >
+            <h2 id="leave-dialog-title" className="text-sm font-semibold text-text-primary">
+              Leave without saving?
+            </h2>
+            <p className="mt-1 text-xs text-text-secondary">
+              Your corrections on this receipt will be lost.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className={ACTION_BUTTON_CLASS}
+                autoFocus
+                onClick={() => blocker.reset()}
+              >
+                Stay
+              </button>
+              <button
+                type="button"
+                className={PRIMARY_BUTTON_CLASS}
+                onClick={() => {
+                  dirtyRef.current = false;
+                  blocker.proceed();
+                }}
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -33,9 +33,14 @@ export default function MathBanner({ audit, missingSst, dirty }: MathBannerProps
     <div
       role="status"
       aria-live="polite"
-      className={audit.matches ? MATCH_STRIP : MISMATCH_STRIP}
+      className={audit.valid && audit.matches ? MATCH_STRIP : MISMATCH_STRIP}
     >
-      {audit.matches ? (
+      {!audit.valid ? (
+        <p className="text-sm font-semibold">
+          <span aria-hidden="true">✕</span> Invalid amount:{' '}
+          <span className="font-mono-numbers">{audit.invalidFields.join(', ')}</span>
+        </p>
+      ) : audit.matches ? (
         <p className="text-sm font-semibold">
           <span aria-hidden="true">✓</span>{' '}
           <span className="font-mono-numbers">{matchBreakdown(audit.message)}</span>

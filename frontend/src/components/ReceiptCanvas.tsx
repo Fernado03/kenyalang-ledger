@@ -402,7 +402,7 @@ export default function ReceiptCanvas({
             {imageUrl === null ? (
               <div className="h-64 w-full animate-pulse bg-surface-subtle" />
             ) : (
-              <ReceiptImage src={imageUrl} alt={`Receipt ${receiptId}`} />
+              <ReceiptImage src={imageUrl} alt="Scanned receipt for review" />
             )}
             <svg
               className="pointer-events-none absolute inset-0 h-full w-full"

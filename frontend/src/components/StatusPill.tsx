@@ -1,3 +1,4 @@
+import { formatConfidence } from '../lib/format';
 import type { ReceiptStatus } from '../types/receipt';
 
 interface StatusPillProps {
@@ -8,7 +9,7 @@ interface StatusPillProps {
 }
 
 const DELTA_PREFIX = 'MATH_MISMATCH_DELTA_';
-const CONFIDENCE_PREFIX = 'LOW_CONFIDENCE_';
+const LOW_CONFIDENCE = 0.8;
 
 const VERIFIED_STATUSES: readonly ReceiptStatus[] = ['STATUS_AUTO_VERIFIED', 'STATUS_VERIFIED'];
 
@@ -82,29 +83,19 @@ export default function StatusPill({
       );
     }
 
-    const confidenceFlag = flags.find((flag) => flag.startsWith(CONFIDENCE_PREFIX));
-    const flaggedConfidence =
-      confidenceFlag === undefined
-        ? null
-        : Number(confidenceFlag.slice(CONFIDENCE_PREFIX.length));
-    const lowScore = flaggedConfidence !== null && Number.isFinite(flaggedConfidence)
-      ? flaggedConfidence
+    // `overall_confidence` is the 0..1 source of truth; anything non-finite or
+    // negative is unknown rather than a score.
+    const score = confidence !== undefined && Number.isFinite(confidence) && confidence >= 0
+      ? confidence
       : null;
-    // `overall_confidence` is the 0..1 source of truth; the flag may carry a
-    // percentage instead, so accept whichever scale the backend wrote.
-    const score =
-      lowScore === null
-        ? (confidence ?? 1)
-        : lowScore > 1
-          ? lowScore
-          : Math.round(lowScore * 100);
-    if (lowScore !== null || (confidence !== undefined && confidence < 0.8)) {
+    if (score !== null && score < LOW_CONFIDENCE) {
       return (
         <span
           className={`${PILL_BASE} bg-warning-bg border-warning-border text-warning-text`}
           data-status={status}
+          title="Low OCR confidence"
         >
-          <span aria-hidden="true">⚡</span> Semak OCR ({score}%)
+          <span aria-hidden="true">⚡</span> Semak OCR ({formatConfidence(score)})
         </span>
       );
     }
@@ -135,7 +126,9 @@ export default function StatusPill({
       ? 'Tidak Boleh Dibaca'
       : status === 'ERR_TIMEOUT'
         ? 'Masa Tamat'
-        : 'Fail';
+        : status === 'ERR_EXTRACTION'
+          ? 'Ekstraksi Gagal'
+          : 'Fail';
 
   return (
     <span
