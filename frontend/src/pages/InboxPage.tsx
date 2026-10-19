@@ -206,7 +206,8 @@ export default function InboxPage(): JSX.Element {
         {uploadState === 'done' && uploadResult !== null && (
           <div className="space-y-1">
             <p className="font-medium text-text-primary">
-              {uploadResult.uploaded.length} files queued for processing.
+              {uploadResult.uploaded.length} file
+              {uploadResult.uploaded.length === 1 ? '' : 's'} queued for processing.
             </p>
             {uploadResult.uploaded.some((item) => item.error !== undefined) && (
               <ul className="space-y-0.5 text-mismatch-text">

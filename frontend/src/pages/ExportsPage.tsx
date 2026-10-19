@@ -295,7 +295,7 @@ export default function ExportsPage(): JSX.Element {
               </p>
               <ul className="mt-3 space-y-1 text-[11px] text-text-secondary list-disc list-inside">
                 <li>UBL 2.1 CommonBasic & CommonAggregate namespaces</li>
-                <li>PartyIdentification carries the merchant BRN and SST verbatim</li>
+                <li>PartyIdentification carries the merchant BRN and SST registration number</li>
                 <li>InvoiceLine tax allocated from the document tax total</li>
               </ul>
             </div>
