@@ -59,6 +59,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
         response.headers["Content-Security-Policy"] = "frame-ancestors 'none';"
+        if request.url.path.startswith("/api"):
+            response.headers["Cache-Control"] = "private, no-store"
         return response
 
 
