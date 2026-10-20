@@ -176,7 +176,7 @@ accountant types. It also shows `Unsaved changes` whenever the draft differs fro
 ### 2. `SCR-02`: Batch Inbox & Upload Dropzone (`/clients/:clientId/inbox`)
 
 * **Header:** client business name (falling back to `Inbox`) and links to `← Review Clients`,
-  `Dashboard`, `Upload`, and `Exports (SCR-05) →`.
+  `Dashboard`, `Upload`, and `Exports →`.
 * **Density:** 40px rows (`h-dense-row`).
 * **Columns:** Thumbnail, Supplier, Date, Items, Grand Total (right-aligned), Status, and the
   per-row action that opens the receipt in the review console.
@@ -210,19 +210,21 @@ accountant types. It also shows `Unsaved changes` whenever the draft differs fro
   `VALIDATING_MATH`, a 3-second `setInterval` refetches the current offset. The interval is
   cleared when no processing row remains or the page unmounts; it does not reset pagination.
 * **Upload dropzone:** `UploadDropzone`, which is separate from the `/upload` page's own file
-  inputs. Dropping or browsing uploads immediately (there is no separate submit), shows a
-  staged list with sizes and per-file remove buttons, and states
-  `Drop receipts here, or click to browse. Max 50 files per batch.` Its hidden input accepts
-  `image/jpeg,image/png,image/heic,.pdf`. An `aria-live="polite"` region reports `Uploading…`,
-  `{n} files queued for processing.`, per-file errors, or a batch-level failure.
+  inputs. Dropping or browsing uploads immediately (there is no separate submit or cancel
+  list), and states `Drop receipts here, or click to browse. Max 50 files per batch.` Its
+  hidden input accepts `image/jpeg,image/png,image/heic,.pdf`. `UploadDropzone` owns no live
+  region; the host page supplies one. The inbox host's `aria-live="polite"` region reports
+  `Uploading…`, `{n} files queued for processing.`, per-file errors, or a batch-level failure;
+  `/upload` reports `{n} files accepted.` in its own live region.
 * **States:** empty (`No receipts yet — drop a batch above.`, with the format/size hint),
   loading skeleton (five rows), populated, flagged, and an error banner with retry.
 
 #### Status Pill Design Matrix (`frontend/src/components/StatusPill.tsx`)
 
 Every pill is a `<span>` with
-`inline-flex h-dense-row items-center gap-1 border px-2 text-xs font-medium whitespace-nowrap`
-and always carries `data-status={status}`. Icons are `aria-hidden`; the text carries meaning.
+`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium whitespace-nowrap`
+and always carries `data-status={status}`. The 28px pill sits inside the 40px dense row. Icons
+are `aria-hidden`; the text carries meaning.
 
 | Status | Visual | Text | `title` |
 |---|---|---|---|
@@ -255,9 +257,11 @@ fallback label as their tooltip even though the backend writes that message into
 
 ### 3. `SCR-03`: Split-Screen Review Console (`/clients/:clientId/review/:receiptId`)
 
-A 50/50 desktop split: `grid h-dvh grid-cols-2`, canvas left, scrolling form right. Loading
-renders two pulsing panes with `role="status" aria-busy="true"`; a missing receipt renders a
-red card with a link back to the inbox.
+A 50/50 desktop split: `grid h-dvh lg:grid-cols-2`, canvas left, scrolling form right. Below
+`lg` the panes stack: canvas at `40dvh` above a scrolling form, the field and total grids
+collapse to one column, and the line-item grid scrolls horizontally. Loading renders two
+pulsing panes with `role="status" aria-busy="true"`; a missing receipt renders a red card with
+a link back to the inbox.
 
 ```
 ┌───────────────────────────────────────────────┬───────────────────────────────────────────────┐
@@ -402,7 +406,8 @@ the root `AccountantGate`, and uploads into the currently selected client worksp
   **Choose a client**; the page does not silently create a workspace.
 * **Controls:** two styled `<label>` wrappers around visually hidden file inputs, each 44px
   tall (`h-11`):
-  * **Take photo** — `accept="image/*"`, `capture="environment"`.
+  * **Take photo** — `accept="image/jpeg,image/png,image/heic,application/pdf"`,
+    `capture="environment"`.
   * **Choose files** — `multiple`, `accept="image/jpeg,image/png,image/heic,application/pdf"`.
 * **Stated limits:** `JPEG, PNG, HEIC or PDF. Up to 50 files per batch, 15 MiB each, 50 MiB
   per batch. Processing continues in the background.`
@@ -410,7 +415,7 @@ the root `AccountantGate`, and uploads into the currently selected client worksp
   OS/browser through the `capture` attribute; the page itself only shows the two targets.
 * **Feedback:** a single multipart `POST …/receipts/upload` returns `202 Accepted` with a
   `batch_id` and per-file results. The `role="status" aria-live="polite"` region reports
-  `Uploading…`, then `{n} file(s) queued for processing.`; a batch-level rejection
+  `Uploading…`, then `{n} file(s) accepted.`; a batch-level rejection
   (too many files, oversized file/batch, unsupported type, or malformed request) arrives as one
   `ApiError` and renders as `Batch rejected: {detail}`, with nothing persisted. Below it, a list
   shows each result's filename and **raw status enum** (`PENDING_UPLOAD`, `UPLOADED`, …) plus
@@ -477,9 +482,10 @@ Implemented practices, all traceable to the source:
   totals labels wrap their inputs; line-item inputs use `aria-label` such as
   `Line 2 quantity`; icon-only buttons (zoom, delete, dropzone remove) carry `aria-label`.
 * **Touch targets:** primary actions use `h-11` (44px). Inbox rows are 40px
-  (`h-dense-row`), including the row-level `Review` button. The line-item delete/add and zoom
-  buttons are `h-11`; the line-item *text inputs* are denser at `h-9` (36px), and the review
-  header inputs are `h-9` as well. The pagination and filter controls use `min-h-11`.
+  (`h-dense-row`); the row-level `Review` button is 32px (`h-8`). The line-item delete/add and
+  zoom buttons are `h-11`; the line-item *text inputs* are denser at `h-9` (36px), and the
+  review header inputs are `h-9` as well. Pagination controls use `min-h-11`; filter buttons
+  use `min-h-10` (40px).
 * **Status never by colour alone:** pills pair colour with a glyph and visible text and expose
   `data-status`; mismatch, low-confidence, and error pills also carry a `title` (see the
   matrix). Thumbnails fall back to a labelled placeholder.
@@ -490,8 +496,8 @@ Implemented practices, all traceable to the source:
 * **Dialogs:** the reject strip is `role="alertdialog"` and takes focus; the leave dialog is
   `role="alertdialog" aria-modal="true"` with `aria-labelledby` and an autofocused `Stay`.
 * **Structure:** the inbox table has `aria-label="Receipt inbox"` and `sr-only` header text for
-  the thumbnail and action columns; the filter bar is a `<nav aria-label="Status filter">`;
-  decorative glyphs are `aria-hidden`.
+  the thumbnail and action columns; the filter bar is a `<div role="group"
+  aria-label="Status filter">` with `aria-pressed` buttons; decorative glyphs are `aria-hidden`.
 * **Images:** receipt thumbnails use the filename as `alt`; the review image uses
   `alt="Scanned receipt for review"`; failed thumbnails render a labelled placeholder.
 * **Reduced motion:** honoured globally (see §4.2).

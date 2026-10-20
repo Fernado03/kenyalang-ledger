@@ -6,7 +6,7 @@ import { useReceiptStore } from '../store/receiptStore';
 const FILE_INPUT_ACCEPT = 'image/jpeg,image/png,image/heic,application/pdf';
 
 const UPLOAD_BUTTON_CLASS =
-  'inline-flex h-11 cursor-pointer items-center justify-center border border-brand-900 bg-brand-900 px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus-within:ring-2 focus-within:ring-brand-900 focus-within:ring-offset-2';
+  'inline-flex h-11 cursor-pointer items-center justify-center rounded-lg border border-brand-900 bg-brand-900 px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700 focus-within:ring-2 focus-within:ring-brand-900 focus-within:ring-offset-2';
 
 /** SCR-02b mobile capture: upload receipts straight from a phone camera. */
 export default function UploadPage() {
@@ -38,9 +38,9 @@ export default function UploadPage() {
 
   return (
     <AppShell clientId={currentClientId ?? undefined}>
-      <div className="mx-auto max-w-2xl space-y-6 p-6">
-        <div className="border border-border bg-surface p-4">
-          <h1 className="text-lg font-semibold tracking-tight text-text-primary">
+      <div className="mx-auto max-w-2xl space-y-6 px-6 py-8">
+        <div className="rounded-xl border border-border bg-surface p-5 shadow-card">
+          <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
             Upload receipts
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
@@ -52,7 +52,7 @@ export default function UploadPage() {
         </div>
 
         {currentClientId === null ? (
-          <div className="border border-border bg-surface p-6 text-center">
+          <div className="rounded-xl border border-border bg-surface p-6 text-center shadow-card">
             <p className="text-sm font-semibold text-text-primary">
               Select a client workspace first
             </p>
@@ -61,13 +61,13 @@ export default function UploadPage() {
             </p>
             <Link
               to="/clients"
-              className="mt-4 inline-flex h-11 items-center border border-border bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
+              className="mt-4 inline-flex h-11 items-center rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
             >
               Choose a client
             </Link>
           </div>
         ) : (
-          <div className="space-y-4 border border-border bg-surface p-6">
+          <div className="space-y-4 rounded-xl border border-border bg-surface p-6 shadow-card">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={UPLOAD_BUTTON_CLASS}>
                 Take photo
@@ -75,7 +75,7 @@ export default function UploadPage() {
                   key={`camera-${inputKey}`}
                   id={cameraId}
                   type="file"
-                  accept="image/*"
+                  accept={FILE_INPUT_ACCEPT}
                   capture="environment"
                   className="sr-only"
                   disabled={uploadState === 'uploading'}
@@ -109,8 +109,7 @@ export default function UploadPage() {
               {uploadState === 'done' && uploadResult !== null ? (
                 <span className="text-verified-text">
                   {uploadResult.uploaded.length} file
-                  {uploadResult.uploaded.length === 1 ? '' : 's'} queued for
-                  processing.
+                  {uploadResult.uploaded.length === 1 ? '' : 's'} accepted.
                 </span>
               ) : null}
               {uploadState === 'error' && uploadResult?.failed ? (
@@ -119,7 +118,7 @@ export default function UploadPage() {
             </div>
 
             {uploadResult !== null && uploadResult.uploaded.length > 0 ? (
-              <ul className="divide-y divide-border border border-border">
+              <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
                 {uploadResult.uploaded.map((item) => (
                   <li
                     key={item.id}
@@ -144,7 +143,7 @@ export default function UploadPage() {
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <Link
                 to={`/clients/${currentClientId}/inbox`}
-                className="inline-flex h-11 items-center border border-border bg-surface px-4 text-sm text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
+                className="inline-flex h-11 items-center rounded-lg border border-border bg-surface px-4 text-sm text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
               >
                 Go to Inbox
               </Link>

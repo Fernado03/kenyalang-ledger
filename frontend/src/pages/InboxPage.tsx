@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { receiptImageUrl } from '../api/client';
 import { EmptyState, ErrorBanner, LoadingSkeleton } from '../components/DataStates';
@@ -18,6 +18,12 @@ const FILTER_TABS: readonly { label: string; value: ReceiptListStatus }[] = [
 ];
 
 const DELTA_PREFIX = 'MATH_MISMATCH_DELTA_';
+const LINK_CLASS =
+  'inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-xs font-medium focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
+const LINK_CLASS_SECONDARY =
+  `${LINK_CLASS} bg-surface text-text-secondary hover:bg-surface-subtle hover:text-text-primary`;
+const LINK_CLASS_EMPHASIS =
+  `${LINK_CLASS} bg-surface-subtle text-text-primary hover:border-brand-900`;
 const PAGE_SIZE = 50;
 const POLL_INTERVAL_MS = 3_000;
 const PROCESSING_STATUSES: readonly ReceiptStatus[] = [
@@ -34,10 +40,27 @@ function ReceiptThumb({ clientId, receipt }: { clientId: string; receipt: Receip
   const accountantId = useSessionStore((state) => state.accountantId);
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined');
+  const holderRef = useRef<HTMLDivElement | null>(null);
+  const urlRef = useRef<string | null>(null);
+
+  // Fetch full-size blobs only once the row is actually on screen.
+  useEffect(() => {
+    const node = holderRef.current;
+    if (node === null || visible) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [visible]);
 
   useEffect(() => {
-    if (accountantId === null || accountantId === '') {
-      return;
+    if (!visible || accountantId === null || accountantId === '') {
+      return undefined;
     }
     let revoked = false;
     const controller = new AbortController();
@@ -52,7 +75,9 @@ function ReceiptThumb({ clientId, receipt }: { clientId: string; receipt: Receip
       })
       .then((blob) => {
         if (revoked) return;
-        setUrl(URL.createObjectURL(blob));
+        const next = URL.createObjectURL(blob);
+        urlRef.current = next;
+        setUrl(next);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
@@ -62,30 +87,32 @@ function ReceiptThumb({ clientId, receipt }: { clientId: string; receipt: Receip
     return () => {
       revoked = true;
       controller.abort();
-      setUrl((current) => {
-        if (current !== null) URL.revokeObjectURL(current);
-        return null;
-      });
+      if (urlRef.current !== null) {
+        URL.revokeObjectURL(urlRef.current);
+        urlRef.current = null;
+      }
     };
-  }, [clientId, receipt.id, accountantId]);
+  }, [clientId, receipt.id, accountantId, visible]);
 
-  if (accountantId === null || accountantId === '' || failed || url === null) {
-    return (
-      <div
-        className="h-10 w-10 border border-border bg-surface-subtle"
-        aria-label={`No preview for ${receipt.filename}`}
-        role="img"
-      />
-    );
-  }
+  const showPlaceholder = accountantId === null || accountantId === '' || failed || url === null;
 
   return (
-    <img
-      src={url}
-      alt={receipt.filename}
-      loading="lazy"
-      className="h-10 w-10 border border-border object-cover"
-    />
+    <div ref={holderRef} className="h-10 w-10">
+      {showPlaceholder ? (
+        <div
+          className="h-full w-full border border-border bg-surface-subtle"
+          aria-label={`No preview for ${receipt.filename}`}
+          role="img"
+        />
+      ) : (
+        <img
+          src={url}
+          alt={receipt.filename}
+          loading="lazy"
+          className="h-full w-full border border-border object-cover"
+        />
+      )}
+    </div>
   );
 }
 
@@ -150,7 +177,7 @@ export default function InboxPage(): JSX.Element {
 
   if (clientId === undefined) {
     return (
-      <div className="space-y-3 p-4">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <ErrorBanner message="No client selected." />
       </div>
     );
@@ -166,35 +193,35 @@ export default function InboxPage(): JSX.Element {
   const hasNext = receiptsOffset + PAGE_SIZE < receiptsTotal;
 
   return (
-    <div className="space-y-3 p-4">
-      <header className="flex h-dense-row items-center justify-between gap-3 border border-border bg-surface px-3">
-        <h1 className="truncate text-sm font-semibold text-text-primary">
+    <div className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4 shadow-card sm:p-5">
+        <h1 className="truncate text-xl font-semibold tracking-tight text-text-primary">
           {client?.business_name ?? 'Inbox'}
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/clients"
-            className="inline-flex min-h-11 items-center border border-border bg-surface px-3 text-xs font-medium text-text-secondary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+            className={LINK_CLASS_SECONDARY}
           >
             ← Review Clients
           </Link>
           <Link
             to={`/clients/${clientId}/dashboard`}
-            className="inline-flex min-h-11 items-center border border-border bg-surface-subtle px-3 text-xs font-medium text-text-primary hover:border-brand-900 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+            className={LINK_CLASS_EMPHASIS}
           >
             Dashboard
           </Link>
           <Link
             to="/upload"
-            className="inline-flex min-h-11 items-center border border-border bg-surface-subtle px-3 text-xs font-medium text-text-primary hover:border-brand-900 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+            className={LINK_CLASS_EMPHASIS}
           >
             Upload
           </Link>
           <Link
             to={`/clients/${clientId}/exports`}
-            className="inline-flex min-h-11 items-center border border-border bg-surface-subtle px-3 text-xs font-medium text-text-primary hover:border-brand-900 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+            className={LINK_CLASS_EMPHASIS}
           >
-            Exports (SCR-05) →
+            Exports →
           </Link>
         </div>
       </header>
@@ -227,23 +254,27 @@ export default function InboxPage(): JSX.Element {
         )}
       </div>
 
-      <nav aria-label="Status filter" className="flex border border-border bg-surface">
+      <div
+        role="group"
+        aria-label="Status filter"
+        className="flex w-full flex-wrap gap-1 rounded-lg border border-border bg-surface-subtle p-1"
+      >
         {FILTER_TABS.map((tab) => (
           <button
             key={tab.value}
             type="button"
             aria-pressed={statusFilter === tab.value}
             onClick={() => void setStatusFilter(tab.value)}
-            className={
+            className={`min-h-10 flex-1 rounded-md px-3 text-xs font-medium whitespace-nowrap focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
               statusFilter === tab.value
-                ? 'inline-flex min-h-11 items-center border-r border-border bg-brand-900 px-3 text-xs font-medium text-white focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
-                : 'inline-flex min-h-11 items-center border-r border-border bg-surface px-3 text-xs text-text-secondary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
-            }
+                ? 'bg-surface text-text-primary shadow-sm'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
           >
             {tab.label}
           </button>
         ))}
-      </nav>
+      </div>
 
       {receiptsError !== null && (
         <ErrorBanner
@@ -262,25 +293,26 @@ export default function InboxPage(): JSX.Element {
           hint="JPG, PNG, HEIC or PDF, up to 50 files per batch."
         />
       ) : (
-        <div className="overflow-x-auto border border-border bg-surface">
-          <table className="w-full border-collapse text-xs" aria-label="Receipt inbox">
-            <thead>
-              <tr className="h-dense-row border-b border-border bg-surface-subtle text-left text-text-secondary">
-                <th className="w-12 px-2">
-                  <span className="sr-only">Preview</span>
-                </th>
-                <th className="px-2">Supplier</th>
-                <th className="w-[100px] px-2">Date</th>
-                <th className="w-20 px-2">Items</th>
-                <th className="w-[110px] px-2 text-right">Grand Total</th>
-                <th className="w-[130px] px-2">Status</th>
-                <th className="w-20 px-2">
-                  <span className="sr-only">Action</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {receipts.map((receipt) => {
+        <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+          <div className="relative overflow-x-auto">
+            <table className="w-full border-collapse text-xs" aria-label="Receipt inbox">
+              <thead>
+                <tr className="h-dense-row border-b border-border bg-surface-subtle/70 text-left text-[11px] uppercase tracking-wider text-text-muted">
+                  <th className="w-12 px-2">
+                    <span className="sr-only">Preview</span>
+                  </th>
+                  <th className="px-2">Supplier</th>
+                  <th className="w-[100px] px-2">Date</th>
+                  <th className="w-20 px-2">Items</th>
+                  <th className="w-[110px] px-2 text-right">Grand Total</th>
+                  <th className="w-[130px] px-2">Status</th>
+                  <th className="w-20 px-2">
+                    <span className="sr-only">Action</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {receipts.map((receipt) => {
                 const needsReview = receipt.status === 'STATUS_NEEDS_REVIEW';
                 const processing = PROCESSING_STATUSES.includes(receipt.status);
                 const failed =
@@ -339,7 +371,7 @@ export default function InboxPage(): JSX.Element {
                         type="button"
                         disabled={processing}
                         onClick={() => openReview(receipt.id)}
-                        className="inline-flex h-dense-row w-20 items-center justify-center border border-border bg-surface font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted"
+                        className="inline-flex h-8 w-20 items-center justify-center rounded-md border border-border bg-surface font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted"
                       >
                         {processing ? 'Processing' : 'Review'}
                       </button>
@@ -349,12 +381,13 @@ export default function InboxPage(): JSX.Element {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
       {receiptsTotal > 0 && (
-        <div className="flex min-h-11 items-center justify-between gap-3 border border-border bg-surface px-3 text-xs">
-          <span className="text-text-secondary">
+        <div className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-2 text-xs shadow-card">
+          <span role="status" className="text-text-secondary">
             Showing {pageStart}–{pageEnd} of {receiptsTotal}
           </span>
           <div className="flex items-center gap-2">

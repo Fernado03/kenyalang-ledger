@@ -36,11 +36,11 @@ function RootLayout() {
         >
           Skip to content
         </a>
-        <div id="main-content" tabIndex={-1}>
+        <main id="main-content" tabIndex={-1}>
           <Suspense fallback={<RouteFallback />}>
             <Outlet />
           </Suspense>
-        </div>
+        </main>
       </AccountantGate>
     </div>
   )

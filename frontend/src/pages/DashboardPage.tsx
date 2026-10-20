@@ -12,7 +12,7 @@ function currentMonth(): string {
 }
 
 const HEADER_CLASS =
-  'px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-text-secondary';
+  'px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-text-muted';
 const CELL_CLASS = 'px-3 py-2 text-sm text-text-secondary';
 
 /** SCR-06 spend dashboard: month total, top suppliers, category split. */
@@ -79,10 +79,10 @@ export default function DashboardPage() {
 
   return (
     <AppShell clientId={clientId}>
-      <div className="mx-auto max-w-5xl space-y-6 p-6">
-        <div className="flex flex-col gap-3 border border-border bg-surface p-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-text-primary">
+            <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
               Dashboard
             </h1>
             <p className="mt-1 text-xs text-text-secondary">
@@ -108,7 +108,7 @@ export default function DashboardPage() {
             </div>
             <Link
               to={`/clients/${clientId}/inbox`}
-              className="inline-flex h-11 items-center border border-border bg-surface px-3 text-xs font-medium text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
+              className="inline-flex h-11 items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
             >
               ← Inbox
             </Link>
@@ -128,26 +128,27 @@ export default function DashboardPage() {
           />
         ) : (
           <>
-            <section className="border border-border bg-surface p-5">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
+            <section className="rounded-xl border border-brand-900 bg-brand-900 px-6 py-5 text-white shadow-card">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-brand-50/80">
                 Total spend · {summary.month}
               </h2>
-              <p className="mt-2 font-mono-numbers text-3xl font-semibold text-text-primary">
+              <p className="mt-2 font-mono-numbers text-4xl font-semibold tracking-tight text-white">
                 {summary.total_spend}
               </p>
             </section>
 
-            <section className="border border-border bg-surface">
-              <h2 className="border-b border-border px-4 py-3 text-sm font-semibold text-text-primary">
+            <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+              <h2 className="p-5 pb-3 text-sm font-semibold text-text-primary">
                 Top suppliers
               </h2>
               {summary.top_suppliers.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-text-secondary">
+                <p className="px-5 pb-5 text-sm text-text-secondary">
                   No supplier totals for this month.
                 </p>
               ) : (
-                <table className="w-full" aria-label="Top suppliers by spend">
-                  <thead className="border-b border-border bg-surface-subtle">
+                <div className="relative overflow-x-auto">
+                <table className="w-full min-w-[20rem]" aria-label="Top suppliers by spend">
+                  <thead className="border-y border-border bg-surface-subtle/70">
                     <tr>
                       <th className={HEADER_CLASS}>Supplier</th>
                       <th className={`${HEADER_CLASS} text-right`}>Receipts</th>
@@ -158,7 +159,7 @@ export default function DashboardPage() {
                     {summary.top_suppliers.map((supplier) => (
                       <tr
                         key={supplier.supplier_name}
-                        className="h-dense-row border-b border-border last:border-b-0"
+                        className="h-dense-row border-b border-border last:border-b-0 hover:bg-surface-subtle/60"
                       >
                         <td className="px-3 py-2 text-sm font-semibold text-text-primary">
                           {supplier.supplier_name}
@@ -173,17 +174,18 @@ export default function DashboardPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </section>
 
-            <section className="border border-border bg-surface">
-              <h2 className="border-b border-border px-4 py-3 text-sm font-semibold text-text-primary">
+            <section className="rounded-xl border border-border bg-surface shadow-card">
+              <h2 className="px-5 pt-5 text-sm font-semibold text-text-primary">
                 Spend by category
               </h2>
-              <p className="px-4 pt-2 text-[11px] text-text-muted">
+              <p className="px-5 pt-1 text-[11px] text-text-muted">
                 Pre-tax line totals; document tax is excluded.
               </p>
-              <ul className="space-y-3 p-4">
+              <ul className="space-y-3 p-5">
                 {summary.category_breakdown.map((row) => {
                   const width =
                     maxCategorySpend > 0
@@ -203,11 +205,11 @@ export default function DashboardPage() {
                         </span>
                       </div>
                       <div
-                        className="mt-1 h-2 w-full bg-surface-subtle"
+                        className="mt-1 h-2 w-full rounded-full bg-surface-subtle"
                         role="img"
                         aria-label={`${row.category}: ${row.total_spend}`}
                       >
-                        <div className="h-2 bg-brand-700" style={{ width }} />
+                        <div className="h-2 rounded-full bg-brand-700" style={{ width }} />
                       </div>
                     </li>
                   );

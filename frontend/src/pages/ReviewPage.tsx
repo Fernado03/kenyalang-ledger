@@ -35,15 +35,18 @@ const FIELD_CLASS =
 const NUMERIC_FIELD_CLASS = `${FIELD_CLASS} text-right font-mono-numbers`;
 
 const ACTION_BUTTON_CLASS =
-  'inline-flex h-11 items-center border border-border bg-surface px-3 text-sm font-medium text-text-primary transition-colors duration-100 ease-out hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
+  'inline-flex h-11 items-center rounded-lg border border-border bg-surface px-3 text-sm font-medium text-text-primary transition-colors duration-100 ease-out hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
 
 const PRIMARY_BUTTON_CLASS =
-  'inline-flex h-11 items-center border border-brand-900 bg-brand-900 px-3 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
+  'inline-flex h-11 items-center rounded-lg border border-brand-900 bg-brand-900 px-3 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
 
 const DANGER_BUTTON_CLASS =
-  'inline-flex h-11 items-center border border-mismatch-border bg-mismatch-text px-3 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:opacity-90 focus-visible:ring-2 focus-visible:ring-mismatch-text focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
+  'inline-flex h-11 items-center rounded-lg border border-mismatch-border bg-mismatch-text px-3 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:opacity-90 focus-visible:ring-2 focus-visible:ring-mismatch-text focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
 
-const SECTION_CLASS = 'border-b border-border px-4 py-3';
+const SECTION_CLASS = 'border-b border-border px-5 py-4';
+
+const SECTION_HEADING_CLASS =
+  'mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary';
 
 const LABEL_CLASS = 'block text-xs uppercase tracking-wide text-text-muted';
 
@@ -145,6 +148,10 @@ export default function ReviewPage(): JSX.Element {
   const auditEntries = auditState.receiptId === receiptId ? auditState.entries : [];
   const auditError = auditState.receiptId === receiptId ? auditState.error : null;
   const rejectStripRef = useRef<HTMLDivElement | null>(null);
+  const rejectTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const rejectWasOpen = useRef(false);
+  const leaveDialogRef = useRef<HTMLDialogElement | null>(null);
+  const leaveTriggerRef = useRef<HTMLElement | null>(null);
 
   const audit = useMemo(() => auditMath(draft ?? EMPTY_DRAFT), [draft]);
 
@@ -234,9 +241,32 @@ export default function ReviewPage(): JSX.Element {
   // The confirmation strip takes focus when it opens, so Escape lands on it.
   useEffect(() => {
     if (confirmingReject) {
+      rejectWasOpen.current = true;
       rejectStripRef.current?.focus();
+    } else if (rejectWasOpen.current) {
+      rejectWasOpen.current = false;
+      rejectTriggerRef.current?.focus();
     }
   }, [confirmingReject]);
+
+  // Native modal: focus containment, inert background and Escape for free.
+  useEffect(() => {
+    const dialog = leaveDialogRef.current;
+    if (dialog === null || blocker.state !== 'blocked') {
+      return undefined;
+    }
+    leaveTriggerRef.current = document.activeElement as HTMLElement | null;
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+    return () => {
+      if (dialog.open) {
+        dialog.close();
+      }
+      leaveTriggerRef.current?.focus();
+      leaveTriggerRef.current = null;
+    };
+  }, [blocker.state]);
 
   // Saved confirmation: one-shot flash, cleared on unmount as well.
   useEffect(() => {
@@ -289,12 +319,8 @@ export default function ReviewPage(): JSX.Element {
         target instanceof HTMLSelectElement ||
         (target instanceof HTMLElement && target.isContentEditable);
 
-      // The leave dialog is modal: Escape stays on the page, everything else waits.
+      // The native modal owns Escape and focus while it is open.
       if (blocker.state === 'blocked') {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          blocker.reset();
-        }
         return;
       }
 
@@ -367,7 +393,7 @@ export default function ReviewPage(): JSX.Element {
 
   if (receiptLoading) {
     return (
-      <div className="grid h-dvh grid-cols-2" role="status" aria-busy="true">
+      <div className="grid h-dvh grid-rows-2 lg:grid-cols-2 lg:grid-rows-1" role="status" aria-busy="true">
         <div className="animate-pulse bg-surface-subtle" />
         <div className="animate-pulse bg-surface-subtle" />
       </div>
@@ -378,7 +404,7 @@ export default function ReviewPage(): JSX.Element {
     const message = receiptsError ?? 'Receipt not found or it may belong to another client.';
     return (
       <div className="grid h-dvh place-items-center bg-canvas p-6">
-        <div className="w-full max-w-md border border-mismatch-border bg-mismatch-bg px-4 py-6 text-center">
+        <div className="w-full max-w-md rounded-xl border border-mismatch-border bg-mismatch-bg px-4 py-6 text-center">
           <p className="text-sm font-medium text-mismatch-text">{message}</p>
           <Link
             to={clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`}
@@ -392,8 +418,8 @@ export default function ReviewPage(): JSX.Element {
   }
 
   return (
-    <div className="grid h-dvh grid-cols-2">
-      <div className="min-w-0 border-r border-border">
+    <div className="grid h-dvh grid-rows-[40dvh_1fr] lg:grid-cols-2 lg:grid-rows-1">
+      <div className="min-h-0 min-w-0 border-b border-border lg:border-b-0 lg:border-r">
         {clientId !== undefined && receiptId !== undefined ? (
           <ReceiptCanvas
             clientId={clientId}
@@ -415,8 +441,8 @@ export default function ReviewPage(): JSX.Element {
       </div>
 
       <div className="min-h-0 min-w-0 overflow-y-auto">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 py-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             <Link
               to={clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`}
               className="inline-flex items-center text-xs text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:underline"
@@ -424,17 +450,18 @@ export default function ReviewPage(): JSX.Element {
             >
               ← Inbox
             </Link>
-            <span className="font-mono-numbers text-xs text-text-muted">
+            <h1 className="font-mono-numbers text-xs font-normal text-text-muted">
               ID: {activeReceipt.id.slice(0, 8)}
-            </span>
+            </h1>
             <StatusPill
               status={activeReceipt.status}
               flags={activeReceipt.validation_flags}
               confidence={activeReceipt.overall_confidence}
             />
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
+              ref={rejectTriggerRef}
               type="button"
               className={ACTION_BUTTON_CLASS}
               disabled={saveState === 'saving'}
@@ -443,12 +470,12 @@ export default function ReviewPage(): JSX.Element {
               {saveState === 'saving' ? 'Rejecting…' : 'Reject (Esc)'}
             </button>
             {saveState === 'error' ? (
-              <div className="border border-mismatch-border bg-mismatch-bg px-2 py-1 text-xs text-mismatch-text">
+              <div className="rounded-md border border-mismatch-border bg-mismatch-bg px-2 py-1 text-xs text-mismatch-text">
                 {saveError}
               </div>
             ) : null}
             {saveState === 'saved' && flash ? (
-              <span className="inline-flex h-11 items-center border border-verified-border bg-verified-bg px-2 text-xs font-medium text-verified-text">
+              <span className="inline-flex h-11 items-center rounded-md border border-verified-border bg-verified-bg px-2 text-xs font-medium text-verified-text">
                 <span aria-hidden="true">✓</span> Verified
               </span>
             ) : null}
@@ -474,7 +501,7 @@ export default function ReviewPage(): JSX.Element {
             tabIndex={-1}
             role="alertdialog"
             aria-label="Confirm rejection"
-            className="flex items-center justify-between gap-3 border-b border-mismatch-border bg-mismatch-bg px-4 py-2 focus-visible:ring-2 focus-visible:ring-mismatch-text focus-visible:ring-inset focus-visible:outline-none"
+            className="flex flex-wrap items-center justify-between gap-3 border-b border-mismatch-border bg-mismatch-bg px-5 py-3 focus-visible:ring-2 focus-visible:ring-mismatch-text focus-visible:ring-inset focus-visible:outline-none"
           >
             <p className="text-sm font-semibold text-mismatch-text">
               Reject this receipt? This cannot be undone.
@@ -500,8 +527,8 @@ export default function ReviewPage(): JSX.Element {
         ) : null}
 
         <section className={SECTION_CLASS}>
-          <h2 className="mb-2 text-sm font-semibold text-text-primary">Merchant &amp; Date</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <h2 className={SECTION_HEADING_CLASS}>Merchant &amp; Date</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <LabelledInput
               label="Supplier Name"
               field="merchant_name"
@@ -547,7 +574,7 @@ export default function ReviewPage(): JSX.Element {
         </section>
 
         <section className={SECTION_CLASS}>
-          <h2 className="mb-2 text-sm font-semibold text-text-primary">Line Items</h2>
+          <h2 className={SECTION_HEADING_CLASS}>Line Items</h2>
           <LineItemsEditor
             items={draft?.line_items ?? []}
             serverLineItems={activeReceipt.line_items}
@@ -566,8 +593,8 @@ export default function ReviewPage(): JSX.Element {
         </section>
 
         <section className={SECTION_CLASS}>
-          <h2 className="mb-2 text-sm font-semibold text-text-primary">Totals &amp; Tax Audit</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <h2 className={SECTION_HEADING_CLASS}>Totals &amp; Tax Audit</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="block">
               <span className={LABEL_CLASS}>Subtotal</span>
               <input
@@ -606,7 +633,7 @@ export default function ReviewPage(): JSX.Element {
             </label>
           </div>
 
-          <dl className="mt-3 flex items-center justify-between border border-border bg-surface-subtle px-3 py-2">
+          <dl className="mt-3 flex items-center justify-between rounded-lg border border-border bg-surface-subtle px-3 py-2">
             <dt className="text-xs uppercase tracking-wide text-text-muted">Line Items Total</dt>
             <dd className="font-mono-numbers text-sm text-text-primary">
               RM {formatCents(audit.lineCents)}
@@ -623,7 +650,7 @@ export default function ReviewPage(): JSX.Element {
             <MathBanner audit={audit} missingSst={audit.missingSstOnRegisteredMerchant} dirty={isDirty} />
           </div>
 
-          <details className="mt-3 border border-border bg-surface">
+          <details className="mt-3 rounded-lg border border-border bg-surface">
             <summary className="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-secondary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-inset focus-visible:outline-none">
               Audit history
             </summary>
@@ -652,43 +679,44 @@ export default function ReviewPage(): JSX.Element {
         </section>
       </div>
 
-      {blocker.state === 'blocked' ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-6">
-          <div
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="leave-dialog-title"
-            className="w-full max-w-sm border border-border bg-surface p-4"
+      <dialog
+        ref={leaveDialogRef}
+        role="alertdialog"
+        aria-labelledby="leave-dialog-title"
+        className="m-auto w-[calc(100%_-_3rem)] max-w-sm rounded-xl border border-border bg-surface p-4 backdrop:bg-black/40"
+        onCancel={(event) => {
+          event.preventDefault();
+          if (blocker.state === 'blocked') blocker.reset();
+        }}
+      >
+        <h2 id="leave-dialog-title" className="text-sm font-semibold text-text-primary">
+          Leave without saving?
+        </h2>
+        <p className="mt-1 text-xs text-text-secondary">
+          Your corrections on this receipt will be lost.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            className={ACTION_BUTTON_CLASS}
+            onClick={() => {
+              if (blocker.state === 'blocked') blocker.reset();
+            }}
           >
-            <h2 id="leave-dialog-title" className="text-sm font-semibold text-text-primary">
-              Leave without saving?
-            </h2>
-            <p className="mt-1 text-xs text-text-secondary">
-              Your corrections on this receipt will be lost.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                className={ACTION_BUTTON_CLASS}
-                autoFocus
-                onClick={() => blocker.reset()}
-              >
-                Stay
-              </button>
-              <button
-                type="button"
-                className={PRIMARY_BUTTON_CLASS}
-                onClick={() => {
-                  dirtyRef.current = false;
-                  blocker.proceed();
-                }}
-              >
-                Leave
-              </button>
-            </div>
-          </div>
+            Stay
+          </button>
+          <button
+            type="button"
+            className={PRIMARY_BUTTON_CLASS}
+            onClick={() => {
+              dirtyRef.current = false;
+              if (blocker.state === 'blocked') blocker.proceed();
+            }}
+          >
+            Leave
+          </button>
         </div>
-      ) : null}
+      </dialog>
     </div>
   );
 }

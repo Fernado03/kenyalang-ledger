@@ -112,14 +112,14 @@ export default function ExportsPage(): JSX.Element {
 
   return (
     <AppShell clientId={clientId}>
-      <div className="mx-auto max-w-5xl space-y-6 p-6">
+      <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
         {/* Header Bar */}
-        <div className="flex flex-col gap-3 border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="h-2 w-2 bg-brand-700" aria-hidden="true" />
-              <h1 className="text-base font-semibold text-text-primary">
-                Export Hub (SCR-05)
+              <span className="h-2 w-2 rounded-full bg-brand-700" aria-hidden="true" />
+              <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
+                Export Hub
               </h1>
             </div>
             <p className="mt-1 text-xs text-text-secondary">
@@ -138,7 +138,7 @@ export default function ExportsPage(): JSX.Element {
           <div className="flex items-center gap-3">
             <Link
               to={`/clients/${clientId}/inbox`}
-              className="inline-flex h-9 items-center border border-border bg-surface px-3 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
+              className="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
             >
               ← Return to Inbox
             </Link>
@@ -147,12 +147,12 @@ export default function ExportsPage(): JSX.Element {
 
         {/* Feedback Alerts */}
         {error !== null && (
-          <ErrorBanner message={error} onRetry={() => setError(null)} />
+          <ErrorBanner message={error} />
         )}
         {successMessage !== null && (
           <div
             role="status"
-            className="flex items-center justify-between border border-verified-border bg-verified-bg px-4 py-3 text-xs font-medium text-verified-text"
+            className="flex items-center justify-between rounded-xl border border-verified-border bg-verified-bg px-4 py-3 text-xs font-medium text-verified-text shadow-card"
           >
             <span>✓ {successMessage}</span>
             <button
@@ -168,7 +168,7 @@ export default function ExportsPage(): JSX.Element {
         {/* Filter Controls & 1-Click Action */}
         <section
           aria-labelledby="period-selection"
-          className="border border-border bg-surface p-5 shadow-sm"
+          className="rounded-xl border border-border bg-surface p-5 shadow-card"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -241,10 +241,10 @@ export default function ExportsPage(): JSX.Element {
         {/* Dual Export Cards Grid */}
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* Card A: Accounting CSV */}
-          <article className="flex flex-col justify-between border border-border bg-surface p-5 shadow-sm">
+          <article className="flex flex-col justify-between rounded-xl border border-border bg-surface p-5 shadow-card">
             <div>
               <div className="flex items-center justify-between">
-                <span className="border border-border bg-surface-subtle px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-secondary">
+                <span className="rounded-full border border-border bg-surface-subtle px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-secondary">
                   Option A · Purchase Journal
                 </span>
                 <span className="text-xs font-mono-numbers text-text-muted">
@@ -257,7 +257,7 @@ export default function ExportsPage(): JSX.Element {
               <p className="mt-2 text-xs leading-relaxed text-text-secondary">
                 Purchase journal batch import compatible with AutoCount and SQL Account desktop systems. Includes column mapping:
               </p>
-              <div className="mt-3 border border-border bg-surface-subtle p-2 font-mono text-[10px] text-text-secondary">
+              <div className="mt-3 rounded-lg bg-surface-subtle p-4 font-mono text-[10px] text-text-secondary">
                 DocDate, DocNo, SupplierCode, SupplierName, Description, ItemCode, Qty, UnitPrice, TaxCode, TaxAmount, TotalAmount
               </div>
             </div>
@@ -275,13 +275,13 @@ export default function ExportsPage(): JSX.Element {
           </article>
 
           {/* Card B: LHDN MyInvois v1.1 JSON */}
-          <article className="flex flex-col justify-between border border-border bg-surface p-5 shadow-sm">
+          <article className="flex flex-col justify-between rounded-xl border border-border bg-surface p-5 shadow-card">
             <div>
               <div className="flex items-center justify-between">
-                <span className="border border-verified-border bg-verified-bg px-2 py-0.5 text-[10px] font-semibold text-verified-text">
+                <span className="rounded-full border border-verified-border bg-verified-bg px-2 py-0.5 text-[10px] font-semibold text-verified-text">
                   Option B · LHDN MyInvois v1.1
                 </span>
-                <span className="inline-flex items-center gap-1 border border-border bg-surface-subtle px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
+                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-subtle px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
                   Draft MyInvois envelope — validate before submission.
                 </span>
               </div>

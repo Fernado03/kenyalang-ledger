@@ -8,7 +8,7 @@ import { useReceiptStore } from '../store/receiptStore'
 const COUNT_PLACEHOLDER = '-'
 
 const HEADER_CLASS =
-  'px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-text-secondary'
+  'px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-text-muted'
 
 const CELL_CLASS = 'px-3 py-2 text-sm text-text-secondary'
 
@@ -16,12 +16,12 @@ const ACTION_BUTTON_CLASS =
   'flex h-11 items-center border border-border bg-surface px-3 text-sm text-text-primary transition-colors duration-100 ease-out hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
 
 const PRIMARY_BUTTON_CLASS =
-  'flex h-11 items-center border border-brand-900 bg-brand-900 px-4 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
+  'flex h-11 items-center rounded-lg border border-brand-900 bg-brand-900 px-4 text-sm font-semibold text-white shadow-sm transition-colors duration-100 ease-out hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
 
 /** One shimmering placeholder row for the loading state. */
 function SkeletonRow({ columns }: { columns: number }) {
   return (
-    <tr className="border-b border-border">
+    <tr className="h-12 border-b border-border last:border-b-0">
       {Array.from({ length: columns }, (_unused, index) => (
         <td className="px-3 py-2" key={index}>
           <span className="block h-4 animate-pulse rounded-sm bg-surface-subtle" />
@@ -70,110 +70,112 @@ export default function ClientsPage() {
 
   if (loading) {
     body = (
-      <div className="border border-border bg-surface">
-        <table className="w-full">
-          <thead className="border-b border-border bg-surface-subtle">
-            <tr>
-              <th className={HEADER_CLASS}>Client Name</th>
-              <th className={HEADER_CLASS}>Registration</th>
-              <th className={HEADER_CLASS}>SST</th>
-              <th className={HEADER_CLASS}>Industry</th>
-              <th className={`${HEADER_CLASS} text-right`}>Unreviewed</th>
-              <th className={`${HEADER_CLASS} text-right`}>Verified</th>
-              <th className={HEADER_CLASS}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <SkeletonRow columns={7} />
-          </tbody>
-        </table>
+      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+        <div className="relative overflow-x-auto">
+          <table className="w-full" aria-label="Client workspaces" aria-busy="true">
+            <thead className="border-b border-border bg-surface-subtle/70">
+              <tr>
+                <th className={HEADER_CLASS}>Client Name</th>
+                <th className={HEADER_CLASS}>Registration</th>
+                <th className={HEADER_CLASS}>SST</th>
+                <th className={HEADER_CLASS}>Industry</th>
+                <th className={`${HEADER_CLASS} text-right`}>Unreviewed</th>
+                <th className={`${HEADER_CLASS} text-right`}>Verified</th>
+                <th className={HEADER_CLASS}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <SkeletonRow columns={7} />
+            </tbody>
+          </table>
+        </div>
       </div>
     )
   } else if (clients.length === 0) {
-    body = (
-      <div className="border border-border bg-surface p-6">
-        {formOpen ? (
-          <ClientForm
-            onCancel={() => setFormOpen(false)}
-            onCreated={() => setFormOpen(false)}
-            submitLabel="Create client"
-          />
-        ) : (
-          <div className="mx-auto max-w-sm py-10 text-center">
-            <p className="text-sm font-semibold text-text-primary">
-              Add your first client
-            </p>
-            <p className="mt-1 text-sm text-text-secondary">
-              Create a client workspace to start uploading receipts.
-            </p>
-            <button
-              type="button"
-              onClick={() => setFormOpen(true)}
-              className={`${PRIMARY_BUTTON_CLASS} mx-auto mt-4`}
-            >
-              Add your first client
-            </button>
-          </div>
-        )}
+    body = formOpen ? (
+      <ClientForm
+        onCancel={() => setFormOpen(false)}
+        onCreated={() => setFormOpen(false)}
+        submitLabel="Create client"
+      />
+    ) : (
+      <div className="rounded-xl border border-border bg-surface p-6 shadow-card">
+        <div className="mx-auto max-w-sm py-10 text-center">
+          <p className="text-sm font-semibold text-text-primary">
+            Add your first client
+          </p>
+          <p className="mt-1 text-sm text-text-secondary">
+            Create a client workspace to start uploading receipts.
+          </p>
+          <button
+            type="button"
+            onClick={() => setFormOpen(true)}
+            className={`${PRIMARY_BUTTON_CLASS} mx-auto mt-4`}
+          >
+            Add your first client
+          </button>
+        </div>
       </div>
     )
   } else {
     body = (
-      <div className="border border-border bg-surface">
-        <table className="w-full" aria-label="Client workspaces">
-          <thead className="border-b border-border bg-surface-subtle">
-            <tr>
-              <th className={HEADER_CLASS}>Client Name</th>
-              <th className={HEADER_CLASS}>Registration</th>
-              <th className={HEADER_CLASS}>SST</th>
-              <th className={HEADER_CLASS}>Industry</th>
-              <th className={`${HEADER_CLASS} text-right`}>Unreviewed</th>
-              <th className={`${HEADER_CLASS} text-right`}>Verified</th>
-              <th className={HEADER_CLASS}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summaries.map((client) => (
-              <tr
-                key={client.id}
-                className="h-dense-row border-b border-border last:border-b-0 hover:bg-surface-subtle"
-              >
-                <td className="px-3 py-2 text-sm font-semibold text-text-primary">
-                  {client.business_name}
-                </td>
-                <td className={`${CELL_CLASS} font-mono-numbers`}>
-                  {client.registration_number ?? COUNT_PLACEHOLDER}
-                </td>
-                <td className={`${CELL_CLASS} font-mono-numbers`}>
-                  {client.sst_number ?? COUNT_PLACEHOLDER}
-                </td>
-                <td className={CELL_CLASS}>
-                  {client.industry_category ?? COUNT_PLACEHOLDER}
-                </td>
-                <CountCell value={client.unreviewed_count} />
-                <CountCell value={client.verified_count} />
-                <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/clients/${client.id}/inbox`)}
-                    className={ACTION_BUTTON_CLASS}
-                  >
-                    Open
-                  </button>
-                </td>
+      <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+        <div className="relative overflow-x-auto">
+          <table className="w-full" aria-label="Client workspaces">
+            <thead className="border-b border-border bg-surface-subtle/70">
+              <tr>
+                <th className={HEADER_CLASS}>Client Name</th>
+                <th className={HEADER_CLASS}>Registration</th>
+                <th className={HEADER_CLASS}>SST</th>
+                <th className={HEADER_CLASS}>Industry</th>
+                <th className={`${HEADER_CLASS} text-right`}>Unreviewed</th>
+                <th className={`${HEADER_CLASS} text-right`}>Verified</th>
+                <th className={HEADER_CLASS}>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {summaries.map((client) => (
+                <tr
+                  key={client.id}
+                  className="h-12 border-b border-border last:border-b-0 hover:bg-surface-subtle/60"
+                >
+                  <td className="px-3 py-2 text-sm font-semibold text-text-primary">
+                    {client.business_name}
+                  </td>
+                  <td className={`${CELL_CLASS} font-mono-numbers`}>
+                    {client.registration_number ?? COUNT_PLACEHOLDER}
+                  </td>
+                  <td className={`${CELL_CLASS} font-mono-numbers`}>
+                    {client.sst_number ?? COUNT_PLACEHOLDER}
+                  </td>
+                  <td className={CELL_CLASS}>
+                    {client.industry_category ?? COUNT_PLACEHOLDER}
+                  </td>
+                  <CountCell value={client.unreviewed_count} />
+                  <CountCell value={client.verified_count} />
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/clients/${client.id}/inbox`)}
+                      className={ACTION_BUTTON_CLASS}
+                    >
+                      Open
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     )
   }
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-6xl p-6">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h1 className="text-lg font-semibold tracking-tight text-text-primary">
+      <div className="mx-auto max-w-6xl px-6 py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
             Clients
           </h1>
           <button
@@ -188,7 +190,7 @@ export default function ClientsPage() {
         {receiptsError !== null ? (
           <div
             role="alert"
-            className="mb-4 flex items-center justify-between gap-4 border border-mismatch-border bg-mismatch-bg px-3 py-2 text-sm text-mismatch-text"
+            className="mb-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-mismatch-border bg-mismatch-bg px-4 py-3 text-sm text-mismatch-text shadow-card"
           >
             <span>{receiptsError}</span>
             <button
