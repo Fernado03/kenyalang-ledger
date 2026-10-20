@@ -121,7 +121,7 @@ export function Icon({ name, size = 20, title, className, ...props }: IconProps)
 }
 
 /** Kenyalang's square brand mark. */
-// Traced from the generated hornbill artwork; keep geometry in sync with public/favicon.svg.
+// Traced from the generated hornbill artwork; keep geometry in sync with public/favicon-hornbill.svg.
 const BRAND_MARK_PATH = `
   M 23.62 35.69 L 23.62 39.91 L 23.78 40.28 L 24.24 40.53 L 51.24 40.53 L 51.53 40.4 L 51.82 39.99 L 51.82 35.61 L 51.57 35.24 L 51.16 35.08 L 24.24 35.08 L 23.83 35.28 Z
   M 9.95 26.36 L 8.63 27.64 L 7.77 28.88 L 6.94 30.86 L 6.65 32.31 L 6.61 55.68 L 6.73 55.92 L 7.11 56.17 L 28.12 56.09 L 28.45 55.55 L 28.41 43.25 L 28.28 43.0 L 27.91 42.75 L 21.43 42.71 L 21.35 27.69 L 20.89 27.36 L 13.17 27.27 L 11.61 26.94 Z
