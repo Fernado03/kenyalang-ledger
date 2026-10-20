@@ -13,156 +13,195 @@ accessibility certification.
 
 ---
 
-## 4.1 Visual Anti-Slop Foundations & Design Tokens
+## 4.1 Visual System & Design Tokens
 
-Kenyalang Ledger is an enterprise data-entry workhorse, not a lifestyle landing page. The
-interface targets the density and restraint of Linear or a Bloomberg terminal: hard borders,
-no gradients, no glassmorphism, and immediate feedback.
+The interface is a **ruled ledger**. Warm paper surfaces, 1px rules, serif page titles,
+monospaced figures, and square ink stamps carry the hierarchy. There are no cards, no content
+shadows, no gradients, no glass effects, and no pill-shaped chrome. A surface is either the
+page (`canvas`), a form or reading pane (`surface`), or a recessed band (`surface-subtle`);
+separation comes from rules, not elevation. Status is never encoded by tinting a whole row — it
+is a stamp (§4.3).
 
-### Color Tokens (`frontend/tailwind.config.js`)
+### Color tokens (`frontend/tailwind.config.js`)
 
-A high-contrast **Slate & Deep Hornbill Teal** theme. The teal accent grounds the brand in
-Sarawak without relying on generic tech-blue.
+| Token | Value | Used for |
+|---|---|---|
+| `canvas` | `#F6F1E7` | App background, table-header band |
+| `surface` | `#FBF8F1` | Form panes, sticky headers, dialogs, buttons |
+| `surface-subtle` | `#EFE8DA` | Desktop rail, neutral stamps, hover fills, disabled fields |
+| `border` | `#D9D2C3` | Hairline rules, table cell rules, page-header rule |
+| `border-strong` | `#8A8274` | Input borders, secondary buttons, double total rule |
+| `border-focus` | `#0B3F3A` | Declared token only; the live focus outline is `brand-700` (§4.4) |
+| `text-primary` | `#171A18` | Titles and values |
+| `text-secondary` | `#3F4742` | Body copy, table cells |
+| `text-muted` | `#5F665F` | Eyebrows, labels, captions, placeholders |
+| `text-inverse` | `#F6F1E7` | Text on the charcoal receipt canvas |
+| `brand-50` | `#E7F0EB` | Active-row tint, light text on dark |
+| `brand-100` | `#DCEBE5` | Secondary text on `brand-950`, text selection |
+| `brand-500` | `#147A6C` | Active OCR box stroke |
+| `brand-700` | `#0E5A50` | Global focus outline, primary-button hover |
+| `brand-900` | `#0B3F3A` | Primary buttons, active rail mark |
+| `brand-950` | `#072A26` | Session-gate panel |
+| `verified.bg` / `.border` / `.text` | `#E7EFE5` / `#9DB79F` / `#2D5334` | Verified stamp |
+| `warning.bg` / `.border` / `.text` | `#F6E9D2` / `#C9A05A` / `#7A4E0A` | Needs review, low-confidence fields |
+| `mismatch.bg` / `.border` / `.text` | `#F6E2DC` / `#C58375` / `#8C2F22` | Rejected/error stamps, reject band, error text |
+| `charcoal` / `charcoal-raised` / `charcoal-rule` | `#20241F` / `#2A2F29` / `#3A4038` | Receipt canvas / toolbar / toolbar rules |
 
-```javascript
-// tailwind.config.js (abridged, values copied verbatim)
-module.exports = {
-  theme: {
-    extend: {
-      colors: {
-        canvas: '#F8FAFC',            // Slate 50
-        surface: '#FFFFFF',
-        'surface-subtle': '#F1F5F9',  // Slate 100
-        border: '#CBD5E1',            // Slate 300
-        'border-focus': '#0F172A',    // Slate 900
-        'text-primary': '#0F172A',
-        'text-secondary': '#475569',
-        'text-muted': '#475569',      // deliberately >= 4.5:1 on white and surface-subtle
-        brand: { 50: '#F0FDFA', 500: '#14B8A6', 700: '#0F766E', 900: '#134E4A' },
-        verified: { bg: '#ECFDF5', border: '#10B981', text: '#065F46' },
-        warning:  { bg: '#FFFBEB', border: '#F59E0B', text: '#92400E' },
-        mismatch: { bg: '#FEF2F2', border: '#EF4444', text: '#991B1B' },
-      },
-      fontFamily: {
-        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-      },
-      height: { 'dense-row': '40px' },
-    },
-  },
-};
+Notes:
+
+* `text-muted` is a distinct mid-grey, not a darkened `text-secondary`. It is used on `canvas`
+  and `surface`; no contrast conformance is claimed (§4.4).
+* Charcoal is scoped to the receipt viewer. It is not a dark theme.
+* No token is computed at runtime; every value above is a literal hex string.
+
+### Typography
+
+```text
+sans   "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+       "Helvetica Neue", Arial, sans-serif
+serif  "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino,
+       Georgia, "Times New Roman", serif
+mono   "Cascadia Mono", "SFMono-Regular", ui-monospace, Consolas,
+       "Liberation Mono", monospace
 ```
 
-`text-muted` is deliberately the same value as `text-secondary` (`#475569`): Slate 400 failed
-contrast on `surface-subtle`, so the token was darkened rather than left unusable. The
-conformance claim in the `tailwind.config.js` comment is a stale comment, not an audit result;
-see §4.4.
+`font-mono-numbers` is the mono stack plus `font-variant-numeric: tabular-nums lining-nums`.
+Every money amount, date, ID, count, percentage, and column label uses it.
 
-`border-focus` (`#0F172A`) is also used as the hover-tooltip background in `ReceiptCanvas`.
+| Token | Size / line | Use |
+|---|---|---|
+| `micro` | 10 / 12 | Stamps, eyebrows, field labels, table headers, rail tab labels |
+| `label` | 11 / 14 | Metadata, small buttons, counts, errors |
+| `ui` | 13 / 18 | Controls, table body, UI copy |
+| `body` | 14 / 21 | Prose, page meta, dialog copy |
+| `title` | 20 / 24 | Section titles |
+| `display` | 34 / 38 | Page titles |
+| `display-lg` | 56 / 52 | Declared in the scale; unused by the six screens |
 
-### Console Chrome (`frontend/src/components/AppShell.tsx`)
+Serif headings are weight 400, never bold: page titles use `display` with `-0.015em` tracking,
+section titles use `title` with `-0.01em`. Eyebrows are 10px uppercase at `0.14em`; section and
+field labels at `0.12em`; stamps at `0.08em`. Body copy is sans at 14px.
 
-Every authenticated console page renders inside `AppShell`: a 56px top bar with the 20px brand
-mark, the client-scoped nav (`Clients`, `Inbox`, `Dashboard`, `Exports`, `Upload`), the
-accountant id, and Sign out. `Clients` is active only on `/clients`; `Inbox` stays active on
-both the inbox and review routes. The bar is static below `sm` (it scrolls away) and sticky
-from `sm` up. The brand mark and favicon use the deep teal token; no purple placeholder
-remains.
+### Shape and surfaces
 
-### Typography & Tabular Numerals
+* Radii: 2px on controls and panels (`rounded-sm`); stamps and thumbnails use 1px. No circular
+  chrome is used anywhere.
+* `shadow-card` is `none`; the only shadow in the system is `shadow-modal`
+  (`0 24px 80px rgba(23,26,24,.22), 0 2px 8px rgba(23,26,24,.12)`) on native dialogs.
+* `.rule-total` is a 3px double `#8A8274` rule, used above grand totals and export/pagination
+  footers.
+* `.data-table` is a full-width collapsed table: 1px cell rules, 10px uppercase mono headers,
+  13px secondary body text, 12px horizontal and 8–10px vertical cell padding, and a `surface`
+  hover fill.
+* The content measure is `max-w-shell` = 1240px. `.page-shell` supplies
+  `mx-auto w-full max-w-shell px-5 py-7 sm:px-8 lg:px-10 lg:py-10`; every page starts with it.
 
-* **Interface font:** default Tailwind sans stack (no custom `fontFamily.sans` override).
-* **Financial font:** `JetBrains Mono`, then `ui-monospace`, `SFMono-Regular`, `Menlo`,
-  `monospace` (`fontFamily.mono`).
-* **Mandatory rule for Ringgit values and quantities** (`frontend/src/index.css`):
+### Shared components
 
-```css
-.font-mono-numbers {
-  font-family: 'JetBrains Mono', monospace;
-  font-variant-numeric: tabular-nums lining-nums;
-  letter-spacing: -0.02em;
-}
-```
+* **`Icon`** — one inline SVG set, 24px viewBox, `stroke="currentColor"`, 1.6 stroke width,
+  round caps and joins. Names: `clients`, `inbox`, `dashboard`, `exports`, `camera`, `upload`,
+  `file`, `download`, `plus`, `minus`, `reset`, `close`, `check`, `alert`, `clock`,
+  `chevron-right`, `arrow-left`, `sign-out`. Icons are `aria-hidden` unless a `title` is passed.
+* **`BrandMark`** — a 32px square monogram (2px radius, `brand-900` fill, 1px paper-tinted
+  border, a 2.4px `brand-50` K drawn as a stroke path). No image asset or gradient is used.
+* **`PageHeader`** — `eyebrow`, `title`, `meta`, optional `actions`. It renders a bottom rule,
+  a mono uppercase eyebrow, a serif `display` title, a secondary-colour meta block, and a
+  right-aligned action group that wraps under the title on narrow screens. At `lg` the header is
+  a 12-column grid with the title spanning 7 and actions spanning 5.
 
-Tabular numerals keep decimal points aligned vertically in accounting tables. Money is parsed
-to integer cents (`BigInt`) in `frontend/src/lib/format.ts`; it is never accumulated in
-floats. `parseMoneyToCents` accepts an optional `RM` prefix, spaces, and thousands commas,
-plus at most two fraction digits; `formatCents` prints a plain two-decimal string, and
-`formatMoneyDisplay` prints `RM 99.50` or an em dash for a missing/invalid value.
-`formatDate` turns an ISO `YYYY-MM-DD` string into `DD/MM/YYYY` and prints `-` otherwise.
+### Application shell (`AppShell.tsx`)
+
+* **Desktop (`lg`+):** a fixed 72px left icon rail on `surface-subtle` with a right rule.
+  The brand link is 64px tall with a bottom rule; each destination is a 56px item with a 20px
+  icon above a 10px uppercase label. Active items get a 2px `brand-900` left border, `surface`
+  fill, and primary text; inactive items are muted. The rail's bottom block holds the
+  accountant's initials in a 32px square (first two characters, full UUID in `title`) and a
+  40px sign-out icon button labelled `Sign out`.
+* **Mobile (`<lg`):** a sticky 56px top bar with the 26px brand mark, the serif wordmark
+  `Kenyalang Ledger`, and a 40px sign-out button. A persistent bottom tab bar repeats the same
+  five destinations at `min-h-14` with 10px labels; the active tab is `brand-900` with a 2px
+  top indicator, and the bar pads for the safe-area inset.
+* **Destinations:** Clients, Inbox, Dashboard, Exports, Upload. Without a selected workspace,
+  Inbox, Dashboard, and Exports render as non-interactive `<span aria-disabled="true">` items at
+  35% opacity with the tooltip `Select a workspace first`. Clients and Upload are always live.
+  Inbox also stays active on the review route.
+* **Content offset:** `lg:pl-[72px]` on the main region; mobile pages reserve
+  `calc(3.5rem + env(safe-area-inset-bottom))` at the bottom so the tab bar never covers content.
+* Navigation exists only in the shell. Page headers add contextual links (`Clients`, `Inbox`)
+  and never repeat the primary navigation.
 
 ---
 
 ## 4.2 Motion Architecture & Micro-Interactions
 
-No animation library is installed (`frontend/package.json` has no Framer Motion or similar).
-Native CSS is the whole motion system, because an accountant reviewing a hundred receipts an
-hour is slowed down by entrance effects.
+There is no animation library. Motion is limited to feedback:
 
-* **Interaction speed:** `transition-colors duration-100 ease-out` on hover and focus in the
-  component class strings.
-* **Review transitions:** none. Save-and-next swaps the receipt without a fade.
-* **Reduced motion:** `frontend/src/index.css` collapses animation, transition, and smooth
-  scroll under `prefers-reduced-motion: reduce`.
-* **Receipt canvas:** pan and zoom apply
-  `transform: translate3d(x, y, 0) scale(z)` with `transform-origin: 0 0` and
-  `will-change: transform` on the image layer, so dragging does not trigger layout
-  recalculation (`frontend/src/components/ReceiptCanvas.tsx`).
-* **Route changes:** React Router swaps pages with no page-transition animation; lazy routes
-  render a plain `RouteFallback` while loading.
+* **Controls:** 100ms `ease-out` transitions on colour, background, border, and transform.
+  `.btn` also presses down 1px (`active:translate-y-px`). This is a press acknowledgement, not
+  a lift or elevation change.
+* **Hover:** background and border colour only. Rows, tabs, and buttons never move, scale, or
+  gain shadow.
+* **Dialogs:** the native `<dialog>` fades in over 140ms (`dialog-in`, opacity only); its
+  backdrop is `rgb(23 26 24 / 0.58)`. There is no scale or slide.
+* **Page changes:** none. React Router swaps routes with no entrance, stagger, or parallax;
+  lazy routes show the static skeleton fallback (`role="status" aria-busy="true"`).
+* **Review save:** no transition. After a successful save-and-next, the next receipt replaces
+  the current one and a `VERIFIED` stamp with a 12px check flashes in the action bar for 1200ms
+  (or until navigation). The flash is a confirmation, not an entrance animation.
+* **Reduced motion:** a global `prefers-reduced-motion: reduce` rule collapses all animation
+  and transition durations to `0.01ms` and sets `scroll-behavior: auto`. The dialog then opens
+  without a fade, and the verified flash is effectively instantaneous.
 
-### Keyboard Workflow (`frontend/src/lib/reviewShortcuts.ts`)
+### Receipt canvas transform
 
-The review console installs **one** `window` keydown listener. Bindings are resolved by the
-pure function `resolveReviewShortcut(event, { typing, focusedLine })`, which is unit-tested in
-`frontend/src/lib/reviewShortcuts.test.ts` without a DOM.
+Pan and zoom apply
+`transform: translate3d(x, y, 0) scale(z)` with `transform-origin: 0 0`, and the image layer is
+memoized so dragging does not re-render it. The stage has `touch-action: none` and an inline
+`transition: none`, so pointer movement is 1:1 with the image at all times. Wheel zoom is
+anchored at the cursor; the toolbar's zoom buttons change scale only, with the stage transformed
+from its top-left origin. Scale is clamped to `0.2–8` and steps by `1.25`.
 
-| Keys | While typing in a field | Outside a field |
-|---|---|---|
-| `Escape` | blur the field | open the inline reject confirmation |
-| `Cmd/Ctrl+Enter` | ignored | save and verify, then open the next receipt |
-| `Alt+A` | ignored | append a blank line item |
-| `Alt+Backspace` | ignored | delete the most recently focused line, if one is remembered |
-| `[` | ignored | zoom the canvas out |
-| `]` | ignored | zoom the canvas in |
-| `R` | ignored | reset zoom to 100% and recenter |
+### Keyboard workflow (`frontend/src/lib/reviewShortcuts.ts` + `ReviewPage.tsx`)
 
-Additional state handling lives in `ReviewPage.tsx`, above the resolver:
+The pure resolver owns the first four bindings; the page's window listener adds zoom keys after
+it. `ReviewPage.tsx` also lets the native modal block every shortcut while the leave dialog is
+open.
 
-* When the inline reject strip is open, `Escape` cancels it and consumes the key.
-* When the leave-without-saving dialog is open, `Escape` resets the router blocker and no
-  other binding runs.
-* Zoom keys are ignored while `Meta`, `Ctrl`, or `Alt` is held. Zoom bounds are `0.2`–`8`
-  with a `1.25` step; the same functions back the on-screen `−`, `+`, and `Reset` buttons.
-* No shortcut fires while an input, textarea, select, or `contenteditable` has focus, so typing
-  a description cannot trigger a save, reject, or structural edit. `Escape` is deliberately
-  the exception: it blurs the field instead.
-* `focusedLineKey` is set when a line input receives focus and cleared after a deletion, not on
-  blur; `Alt+Backspace` therefore acts on the last-focused row once focus has left the inputs.
+| Key | Behaviour |
+|---|---|
+| `Esc` | Closes the reject band if it is open; otherwise blurs the focused field; otherwise opens the reject band |
+| `Ctrl/⌘ + Enter` | Save and move to the next receipt (ignored while a field has focus) |
+| `Alt + A` | Append a line item |
+| `Alt + Backspace` | Delete the focused line item, including the last one |
+| `[` / `]` | Zoom out / in (×1.25 per press, clamped `0.2–8`), ignored inside fields |
+| `R` | Reset zoom to 100% (ignored inside fields) |
 
-### Two-Cent Math Tolerance (`frontend/src/lib/audit.ts`)
+Single-key shortcuts (`[`, `]`, `R`) are ignored when focus is in an `input`, `textarea`,
+`select`, or `contenteditable`, and when any modifier is held, so typing in a field never
+triggers them. `[` and `]` are resolved only after the shortcut lookup. `R` resets scale to 100%
+only; the toolbar's **Reset** (`Reset zoom and center`) resets scale and returns the pan offset to
+0. While the reject band is open, `Escape` cancels it; while the leave dialog is open, the native
+`<dialog>` owns `Escape`.
 
-`auditMath(draft)` reconciles **the printed line totals plus tax against the grand total**, in
-integer cents, never quantity × unit price for the main equation. `TOLERANCE_CENTS = 2n` and a
-delta reconciles when `|Δ| <= 2` cents. This matches the backend reconciler's `0.02`.
+### Reconciliation and status copy
 
-* `Δ = RM 0.01`: `matches = true`; `MathBanner` renders the emerald "Math Matches" strip with
-  the full breakdown and **still retains** `deltaCents = 1n` (the one-cent rounding is not
-  hidden from the data model, though the green strip prints the breakdown rather than a
-  separate delta figure).
-* `Δ = RM 0.02`: reconciles, same as above (the boundary is inclusive).
-* `Δ = RM 0.03`: `matches = false`; the banner reads
-  `Math Mismatch: Line items total RM … + Tax RM … ≠ Grand Total RM … (Difference: RM 0.03)`.
-* Invalid input is distinct from a mismatch: unparseable money, a non-positive quantity, or a
-  line whose `line_total` differs from `qty × unit_price` by more than
-  `TOLERANCE_CENTS * 100n` marks the draft `valid = false`, names the offending fields, and
-  disables **Verify & Next** (`Fix {field} before verifying.`).
-* An SST number anywhere in the field (`[A-Z]\d+-\d+-\d+`, upper-cased before matching, e.g.
-  `W10-1808-32000018` or `200401032489 / Y24-1808-31015655`) with zero tax adds the amber chip
-  `Missing SST on Registered Merchant`. The chip mirrors `extract_sst_number` in the backend so
-  the console and the audit never disagree.
+The audit is unchanged and lives in `frontend/src/lib/audit.ts`:
 
-`MathBanner` is `role="status" aria-live="polite"`, so every recalculation is announced as the
-accountant types. It also shows `Unsaved changes` whenever the draft differs from server truth.
+* It compares the printed line totals plus tax against the grand total — never
+  `qty × unit_price` as the total.
+* `|line_total sum + tax − grand_total| ≤ RM 0.02` counts as reconciled (`TOLERANCE_CENTS = 2`).
+  RM 0.01 matches; RM 0.03 does not.
+* A negative delta is retained for display (`−RM x.xx`); magnitude is used for the tolerance.
+* A draft is invalid when a money field cannot be parsed, a quantity is not a positive number,
+  or `qty × unit_price` differs from the line total by more than RM 2.00 (rounding headroom;
+  `TOLERANCE_CENTS * 100n` = 200 cents).
+* `missingSstOnRegisteredMerchant` is true when tax is exactly zero while `merchant_sst` matches
+  the LHDN shape (for example `W10-1808-32000018`). It is a warning stamp, not a blocker.
+
+All status text is English: `Verified`, `Exported`, `Rejected`, `Needs review`, `Δ RM x.xx`,
+`OCR check n%`, `Processing`, `Unreadable`, `Timed out`, `Extraction failed`, `File error`.
+Money is `RM 1234.50` (no thousands separator); dates are `DD/MM/YYYY`; an unrecognised status
+falls back to the `File error` stamp rather than exposing a raw enum.
 
 ---
 
@@ -170,354 +209,363 @@ accountant types. It also shows `Unsaved changes` whenever the draft differs fro
 
 ### 1. `SCR-01`: Client Workspace Switcher (`/clients`)
 
-* **Purpose:** choose or create the client workspace that scopes every receipt, export, and
-  dashboard request.
-* **Populated table columns:** Client Name, Registration, SST, Industry, **Unreviewed**,
-  **Verified**, Action.
-* **Counts:** both aggregates arrive in the same `GET /api/clients` response
-  (`unreviewed_count`, `verified_count`), so the page costs one request regardless of client
-  count.
-* **Create:** inline form (`ClientForm`), validated business name; invalid fields carry
-  `aria-invalid` and `aria-describedby` pointing at the error element.
-* **States:** loading skeleton, error banner with retry, empty state prompting the first
-  client, populated table.
+**Header.** Eyebrow `WORKSPACE INDEX`; title `Clients`; meta `Loading client workspaces.`,
+`No client workspaces yet.`, or `{n} client workspace(s) · Select a client to open its receipt
+inbox.` Actions: `Add client` (primary, `plus` icon) when the form is closed, `Close` (ghost)
+when it is open.
+
+**Layout.** At `sm`+, a ruled table: Client name, Registration, SST, Unreviewed, Verified,
+Action. The industry category is folded into the name cell as a muted subline — there is no
+separate column. Registration and SST are mono and print an em dash when absent. Counts are
+right-aligned mono. Each row is 52px and ends in an `Open` link-button (chevron icon, 44px hit
+area). Below `sm`, the same data renders as a stacked list: name plus industry, a two-column
+definition list (Registration, SST, Unreviewed, Verified), and a full-width `Open` button. The
+whole row is not clickable; the explicit control is the target.
+
+**States.** Loading shows three skeleton table rows (and three stacked skeletons below `sm`). An
+error shows a `role="alert"` strip with `Retry`. Empty, with the form closed, shows
+`Add your first client`, `Create a client workspace to start uploading receipts.`, and an
+`Add your first client` primary button; with the form open, the form itself. When clients exist
+and the form is open, it sits above the table. The form is a `surface` block with a 2px
+`brand-900` top rule.
+
+**Client form (`ClientForm.tsx`).** Heading `New client`. Fields: Business name (required),
+Registration number, SST number, Industry category. Labels are mono uppercase; inputs are 44px.
+Validation is native-free (`noValidate`): an empty name produces `Business name is required.`,
+sets `aria-invalid`, and is linked by `aria-describedby`. The submit label is `Add client`
+(`Create client` in the empty state) and swaps to `Saving…` while posting; `Cancel` closes
+without saving. There is no edit variant — clients are create-only in this UI.
 
 ### 2. `SCR-02`: Batch Inbox & Upload Dropzone (`/clients/:clientId/inbox`)
 
-* **Header:** `← Clients` link, page title `Inbox`, and the client business name as a subtitle.
-  Global navigation is owned by `AppShell`; the page header does not repeat nav links.
-* **Back links:** `← Clients` on Inbox; `← Inbox` on Dashboard, Exports, Review, and Upload.
-* **Density:** 40px rows (`h-dense-row`).
-* **Columns:** Thumbnail, Supplier, Date, Items, Grand Total (right-aligned), Status, and the
-  per-row action that opens the receipt in the review console.
-  * Thumbnail: 36×36 (`h-9 w-9`) in a 56px preview column (`w-14`), fetched as an authenticated
-    blob with
-    `X-Accountant-Id` and rendered from an object URL that is revoked on cleanup. `alt` is the
-    filename. A missing image or failed fetch renders a bordered placeholder with
-    `role="img"` and `aria-label="No preview for {filename}"`.
-  * Supplier: `merchant_name`, falling back to `filename`; flagged rows print their flag
-    details beneath it (`Math Mismatch: Δ RM x.xx`, `Missing Date`, otherwise the raw flag).
-  * Date: `DD/MM/YYYY` via `formatDate`, or `-` when absent.
-  * Items: `line_item_count`.
-  * Grand Total: `formatMoneyDisplay`, or `—` when absent.
-  * Status: `StatusPill` (matrix below).
-  * Action: a focusable `Review` `<button>` in the last cell. The whole row is also clickable
-    for mouse users, so the button is the keyboard-accessible affordance; there is no row-level
-    Enter binding. Rows in a processing state keep the label `Review` but disable the button;
-    clicking anywhere on such a row does nothing. The status pill already communicates the
-    processing state, so the action never repeats a second `Processing` label.
-* **Row accents:** a 2px left border in `warning-border` for `STATUS_NEEDS_REVIEW`, and in
-  `mismatch-border` for `ERR_UNREADABLE`, `ERR_TIMEOUT`, `ERR_FILE_CORRUPT`, or
-  `ERR_EXTRACTION`.
-* **No bulk selection and no bulk actions.** Verification and rejection are per-receipt
-  decisions, each with its own audit trail.
-* **Filters:** five rendered tabs — `All`, `Needs Review`, `Verified`, `Exported`, `Rejected`.
-  Each is `aria-pressed`; the value (`ALL`, `NEEDS_REVIEW`, `VERIFIED`, `EXPORTED`, `REJECTED`)
-  is passed verbatim as the backend `status` query parameter.
-* **Pagination:** offset-based, `PAGE_SIZE = 50`. The footer reads
-  `Showing {first}–{last} of {total}` (en dash) with Previous and Next buttons, disabled at the
-  ends. The footer renders only when `total > 0`, and there is no page-number control. The
-  backend defaults `limit` to 50 and caps it at 200.
-* **Polling:** while any row on the current page is `PROCESSING_OCR`, `PROCESSING_LLM`, or
-  `VALIDATING_MATH`, a 3-second `setInterval` refetches the current offset. The interval is
-  cleared when no processing row remains or the page unmounts; it does not reset pagination.
-* **Upload dropzone:** `UploadDropzone`, which is separate from the `/upload` page's own file
-  inputs. Dropping or browsing uploads immediately (there is no separate submit or cancel
-  list), and states `Drop receipts here, or click to browse. Max 50 files per batch.` Its
-  hidden input accepts `image/jpeg,image/png,image/heic,.pdf`. `UploadDropzone` owns no live
-  region; the host page supplies one. The inbox host's `aria-live="polite"` region reports
-  `Uploading…`, `{n} files queued for processing.`, per-file errors, or a batch-level failure;
-  `/upload` reports `{n} files accepted.` in its own live region.
-* **States:** empty (`No receipts yet — drop a batch above.`, with the format/size hint),
-  loading skeleton (five rows), populated, flagged, and an error banner with retry.
+**Header.** Eyebrow `WORKSPACE · {registration_number ?? business_name ?? CLIENT}`; title
+`Inbox`; meta shows the business name and, when the workspace has receipts, the mono range
+`receipts {first}–{last} of {total}`. Actions: `Clients` (ghost, `arrow-left`) and `Capture`
+(secondary, `camera`).
 
-#### Status Pill Design Matrix (`frontend/src/components/StatusPill.tsx`)
+**Upload band.** A full-width band with top and bottom rules (minimum 52px,
+`aria-label="Upload receipts"`) above the filters: `Drop receipts here, or click to browse. Max
+50 files per batch.` and a `Browse` secondary button. Dragging switches the band to a dashed
+`brand-700` border on `brand-100`. The hidden input accepts `image/jpeg`, `image/png`,
+`image/heic`, and `.pdf`, and is disabled while a batch uploads. Uploads start immediately on
+selection or drop. A polite live region reports `Uploading…`, then
+`{n} file(s) queued for processing.` (singular `1 file`), lists per-file failures as
+`{filename}: {error}`, or shows `Batch rejected: {message}`. Results here are a sentence, not a
+stamp list — the stamped per-file result list belongs to `/upload`.
 
-Every pill is a `<span>` with
-`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium whitespace-nowrap`
-and always carries `data-status={status}`. The 28px pill sits inside the 40px dense row. Icons
-are `aria-hidden`; the text carries meaning.
+**Filters.** Five underlined tabs: `All`, `Needs review`, `Verified`, `Exported`, `Rejected`.
+Each is a 40px button with `aria-pressed`; the active tab gets a 2px `brand-900` underline and
+semibold text. The group is labelled `Status filter` and scrolls horizontally at 320px.
 
-| Status | Visual | Text | `title` |
+**Table.** One DOM for both breakpoints. The `<table>` keeps explicit `table`/`rowgroup`/`row`/
+`cell` ARIA roles and switches from `block` to `table` at `sm`:
+
+* **`sm`+ columns:** Preview (44px column holding the 32px thumbnail), Supplier, Date (96px),
+  Items (64px), Grand total (right, 128px), Status (128px), Action (96px). Headers are sticky at
+  `top-14 lg:top-0` on `canvas`.
+* **Below `sm`:** each row becomes a three-column grid — `32px | minmax(0,1fr) | auto` — with
+  the thumbnail spanning two rows; supplier and flags, date, total, stamp, and a full-width
+  `Open` button follow. The item-count cell is hidden below `sm`.
+* **Rows:** `surface` hover; a 2px left border in `warning-border` for needs-review rows and in
+  `mismatch-border` for error rows. Cells use 10px vertical padding around a 22px stamp, so
+  `sm` rows are ≈44px. Mobile stacked rows use 12px vertical padding.
+* **Thumbnail:** 32×32 (`h-8 w-8`), 1px radius and border, `object-cover`. It is fetched lazily
+  through an `IntersectionObserver` as an authenticated blob and revoked on unmount. Alt text is
+  the filename; while absent, a `role="img"` placeholder is labelled `No preview for {filename}`.
+* **Supplier cell:** `merchant_name ?? filename`, with humanized validation flags beneath in
+  `warning` text joined by ` · `. Flags are humanized, never raw: `MATH_MISMATCH_DELTA_0.05` →
+  `Math mismatch: Δ RM 0.05`; `LOW_CONFIDENCE_GRAND_TOTAL` → `Low OCR confidence: grand total`;
+  `MISSING_CRITICAL_EVIDENCE_MERCHANT_NAME` → `No OCR evidence: merchant name`. Known flags
+  (missing merchant name/date, invalid grand total, future date, date older than a year, missing
+  subtotal, missing SST on a registered merchant) have explicit sentences; anything else becomes
+  underscores-to-spaces.
+* **Money/date:** date via `formatDate` (`-` when absent); total split into a small currency
+  prefix (`RM`) in muted label type and a mono amount.
+* **Action:** `Open` (44px tall, full-width below `sm`) navigates to the review route and is
+  disabled for processing rows. The whole row is also clickable with a pointer (and shows a
+  pointer cursor) unless the receipt is processing; thumbnail and action cells stop propagation.
+  There is no bulk selection.
+
+**Pagination.** 50 per page. A `.rule-total` footer shows `Showing {a}–{b} of {total}` in a
+`role="status"` region with `Previous` / `Next` 36px buttons, disabled at the ends. No page
+numbers.
+
+**Polling and states.** The list refetches every 3s while any row is processing. Loading is five
+skeleton rows. Error is a `role="alert"` strip with `Retry`. Empty is `No receipts yet — drop a
+batch above.` with the hint `JPG, PNG, HEIC or PDF, up to 50 files per batch.` A failed upload
+never removes existing rows.
+
+**Status stamps (`StatusPill.tsx`).** `.stamp` is a 22px inline-flex box, 1px radius, 1px
+border, 6px horizontal padding, mono 10px uppercase at `0.08em`. Icons are `aria-hidden`; the
+text carries meaning. Variants are chosen in this exact precedence:
+
+| Condition (in order) | Tokens | Text | Tooltip (`title`) |
 |---|---|---|---|
-| `STATUS_AUTO_VERIFIED`, `STATUS_VERIFIED` | verified bg/border/text | `● Selesai` | — |
-| `STATUS_EXPORTED` | `surface-subtle` + `border` + `brand-900` | `→ Dieksport` | — |
-| `STATUS_REJECTED` | mismatch bg/border/text | `✕ Ditolak` | — |
-| `STATUS_NEEDS_REVIEW` + a flag starting `MATH_MISMATCH_DELTA_` | mismatch bg/border/text | `! Δ RM {suffix}` | `Math mismatch: Δ RM {suffix}` |
-| `STATUS_NEEDS_REVIEW` + confidence known and `< 0.8` | warning bg/border/text | `? Semak OCR ({formatConfidence(score)})` | `Low OCR confidence` |
-| `STATUS_NEEDS_REVIEW`, otherwise | warning bg/border/text | `! Perlu Semak` | — |
-| `PENDING_UPLOAD`, `UPLOADED`, `PROCESSING_OCR`, `PROCESSING_LLM`, `VALIDATING_MATH` | `surface-subtle` + `border` + `text-secondary` | `Memproses...` | — |
-| `ERR_UNREADABLE` | mismatch bg/border/text | `✕ Tidak Boleh Dibaca` | `processingError ?? label` |
-| `ERR_TIMEOUT` | mismatch bg/border/text | `✕ Masa Tamat` | `processingError ?? label` |
-| `ERR_EXTRACTION` | mismatch bg/border/text | `✕ Ekstraksi Gagal` | `processingError ?? label` |
-| Any other status (`ERR_FILE_CORRUPT` and future values) | mismatch bg/border/text | `✕ Fail` | `processingError ?? label` |
+| `STATUS_VERIFIED`, `STATUS_AUTO_VERIFIED` | `verified.*` | `Verified` | — |
+| `STATUS_EXPORTED` | `surface-subtle` / `border-strong` / `brand-900` | `Exported` | — |
+| `STATUS_REJECTED` | `mismatch.*` | `Rejected` | — |
+| `STATUS_NEEDS_REVIEW` with a `MATH_MISMATCH_DELTA_` flag | `mismatch.*` | `Δ RM {suffix}` | `Math mismatch: Δ RM {suffix}` |
+| `STATUS_NEEDS_REVIEW` with known confidence `< 0.8` | `warning.*` | `OCR check {n}%` | `Low OCR confidence` |
+| `STATUS_NEEDS_REVIEW`, otherwise | `warning.*` | `Needs review` | — |
+| `PENDING_UPLOAD`, `UPLOADED`, `PROCESSING_OCR`, `PROCESSING_LLM`, `VALIDATING_MATH` | `surface-subtle` / `border` / `text-secondary` | `Processing` | — |
+| `ERR_UNREADABLE` | `mismatch.*` | `Unreadable` | `processingError ?? 'Unreadable'` |
+| `ERR_TIMEOUT` | `mismatch.*` | `Timed out` | `processingError ?? 'Timed out'` |
+| `ERR_EXTRACTION` | `mismatch.*` | `Extraction failed` | `processingError ?? 'Extraction failed'` |
+| Any other status (`ERR_FILE_CORRUPT`, future enums) | `mismatch.*` | `File error` | `processingError ?? 'File error'` |
 
-Confidence handling is exact:
+The score is the receipt's confidence only when it is defined, finite, and `>= 0`; otherwise it
+is `null` and the pill falls through to `Needs review`. `0 <= score < 0.8` selects the
+low-confidence variant. `formatConfidence` clamps at `1` and rounds, so `0.799` prints `80%`,
+`0.64` prints `64%`, and a value above `1` prints `100%`. The suffix is the flag with
+`MATH_MISMATCH_DELTA_` stripped.
 
-* The score is `confidence` only when it is defined, finite, and `>= 0`; otherwise it is
-  `null` and the pill falls through to `Perlu Semak`.
-* `0 <= score < 0.8` selects the low-confidence variant. `formatConfidence` clamps with
-  `Math.min(confidence, 1)` and rounds, so `0.799` prints `80%`, `0.64` prints `64%`, and a
-  value above `1` prints `100%`.
-* The mismatch flag wins over confidence: if both are present, the delta variant renders.
-
-`processingError` is an optional prop. `StatusPill.test.tsx` passes
-`"extraction provider unavailable"` to prove the tooltip path; the current `InboxPage` and
-`ReviewPage` call sites do **not** pass it, so error pills in the running app show the
-fallback label as their tooltip even though the backend writes that message into
-`processing_error`.
+Call sites differ: `/upload` passes the per-file `processingError`, so error stamps carry the
+backend message in their tooltip; Inbox and Review pass only status, flags, and confidence, so
+error stamps use their label as the tooltip. An unrecognised status falls through to the
+`File error` stamp, so an unexpected enum never leaks as raw text.
 
 ### 3. `SCR-03`: Split-Screen Review Console (`/clients/:clientId/review/:receiptId`)
 
-A 50/50 desktop split inside `AppShell`: the 57px app header sits above a
-`lg:h-[calc(100dvh-57px)] lg:grid-cols-2` grid, canvas left and scrolling form right. Below
-`lg` the panes stack: canvas at `40dvh` above the form, the field and total grids
-collapse to one column, and the line-item grid scrolls horizontally. Loading and error states
-also render inside `AppShell`, keeping the nav visible. The diagram below shows the review
-region only.
+**Frame.** At `lg` the console is `lg:h-dvh lg:grid-cols-[46fr_54fr]` inside the shell: receipt
+canvas left, scrolling form right, separated by a rule. Below `lg` the panes stack — the canvas
+is `40dvh` above a flowing form. The form pane is `surface` and scrolls independently at `lg`.
+There is no `PageHeader`; the action bar is the header.
 
-```
-┌───────────────────────────────────────────────┬───────────────────────────────────────────────┐
-│ LEFT: ReceiptCanvas                           │ RIGHT: verification form                      │
-├───────────────────────────────────────────────┼───────────────────────────────────────────────┤
-│ [−] 100% [+] [Reset]                          │ ← Inbox   ID: 1a2b3c4d   [StatusPill]          │
-│                                               │         [Reject (Esc)] [Verify & Next (Ctrl+↵)]│
-│ receipt image, wheel-zoom and drag-pan        ├───────────────────────────────────────────────┤
-│ SVG provenance/OCR overlay                    │ Merchant & Date                               │
-│ tooltip on hover                              │ [Supplier Name]        [Merchant SST]         │
-│                                               │ [Invoice Date]         [Invoice Number]       │
-│                                               │ [Merchant BRN]                                │
-│                                               ├───────────────────────────────────────────────┤
-│                                               │ Line Items                                    │
-│                                               │ Description | Qty | Unit (RM) | Total (RM) | ✕│
-│                                               │ [+ Add Line (Alt+A)]                 3 lines  │
-│                                               ├───────────────────────────────────────────────┤
-│                                               │ Totals & Tax Audit                            │
-│                                               │ [Subtotal] [SST (6%)] [Grand Total]           │
-│                                               │ Line Items Total RM …                         │
-│                                               │ Confidence —% · Lines … + Tax … = Total …     │
-│                                               │ MathBanner                                    │
-│                                               │ Audit history (collapsible)                   │
-└───────────────────────────────────────────────┴───────────────────────────────────────────────┘
-```
+**Loading/error.** Loading reuses the same 46/54 grid with a canvas skeleton and a form skeleton
+(`role="status" aria-busy="true"`). A missing receipt renders a centred `Receipt unavailable`
+block with a `mismatch` left rule, the error message, and `Back to inbox`.
 
-**Header (sticky, right pane):**
+**Action bar.** Sticky at `top-14 lg:top-0`, `surface`, bottom rule. Left: `Inbox`
+(`arrow-left`, title `Back to inbox without saving`), a vertical rule, `ID: {first 8}` in mono
+(`h1`), and the status stamp. Right: save error text, the `VERIFIED` stamp flash, the invalid
+message `Fix {first invalid field} before verifying.` (`role="status"`), `Reject` (secondary,
+`Esc` keycap), and `Verify & Next` (primary, `Ctrl/⌘ ↵` keycap). Save is disabled while saving
+or while the audit is invalid; labels swap to `Rejecting…` / `Saving…` while a request is in
+flight. The reject control opens an inline band, not a dialog.
 
-* `← Inbox` link (leaves without saving), `ID: {receipt.id.slice(0, 8)}` in mono, and the
-  `StatusPill`.
-* `Reject (Esc)` opens a confirmation; `Verify & Next (Ctrl+↵)` is disabled while saving or while
-  the draft is invalid. While saving the labels become `Rejecting…` and `Saving…`.
-* A successful save sets a `✓ Verified` flash (auto-cleared after 1200 ms) and immediately
-  navigates to the next `STATUS_NEEDS_REVIEW` receipt in the loaded inbox list, or back to the
-  inbox when none remains. The flash is therefore rarely visible: the page unmounts on
-  navigation.
-* Save errors render inline in a mismatch-coloured box. Invalid drafts render
-  `Fix {field} before verifying.` with `role="status"`.
-* Reject is guarded by an inline strip with `role="alertdialog" aria-label="Confirm rejection"`:
-  `Reject this receipt? This cannot be undone.` with `Cancel` and `Reject`. The strip takes
-  focus when opened so `Escape` lands on it. Confirming calls the reject route
-  (`POST …/reject`), which sets `STATUS_REJECTED` and writes an audit row, then advances to the
-  next receipt.
+**Reject band.** A `mismatch` alert band below the action bar with `role="alertdialog"`,
+`aria-label="Confirm rejection"`, and `tabIndex={-1}`. Focus moves to the band on open. Copy:
+`Reject this receipt? This cannot be undone.` Actions: `Cancel` and `Reject` (danger). `Escape`
+cancels and returns focus to the trigger. Confirming calls the reject route and advances to the
+next receipt.
 
-**Merchant & Date** (all `LabelledInput`, `htmlFor`/`id` bound, two-column grid):
+**Form sections.** Three numbered sections, each with a mono `section-label` (`01`, `02`, `03`)
+and a serif `section-title`:
 
-| Label | Draft field | Input |
+1. **`01` Supplier & date.** At `sm`+, a two-column grid; Supplier Name spans both columns.
+   Fields in order: Supplier Name, Merchant SST, Invoice Date, Invoice Number, Merchant BRN.
+   Labels are mono uppercase; inputs are 44px.
+2. **`02` Line items.** A horizontally scrollable grid (minimum 32rem) with Description, Qty,
+   Unit (RM), Total (RM), and a delete column. Inputs are 34px dense, numeric fields are
+   right-aligned mono, and every input has an explicit `aria-label` (`Line 2 description`).
+   A server confidence below 0.8 tints the row `warning.bg`, adds a dashed `warning.border`
+   underline, and shows an `alert` icon plus the percentage. The focused row is `brand-50`.
+   Delete is a 44px icon button (`Remove line 2`); the footer's ghost button reads
+   `Add Line (Alt+A)`. A mono `{n} lines` count sits opposite it.
+3. **`03` Totals & audit.** A right-aligned column (`max-w-md`) of labelled totals: Subtotal,
+   SST (6%), Grand Total. Inputs are `w-36` (144px), right-aligned mono, with an `aria-hidden`
+   `RM` prefix; Grand Total prints at 22px above a `.rule-total` double rule. A summary
+   definition list shows Line Items Total, Confidence (or `—`), and `Lines + Tax = Total`.
+
+**Math banner (`MathBanner.tsx`).** A cardless strip with a 3px left border and a `Math check`
+label, in one `role="status"` / `aria-live="polite"` region. Invalid input: `mismatch` border,
+`Invalid amount: Line 2 total, SST` (the invalid field labels joined by `, `). Reconciles with
+no SST warning: `verified` border, the breakdown without the audit's internal `Math Matches —`
+prefix (`Line items total RM 100.00 + Tax RM 6.00 = Grand Total RM 106.00`). Mismatch: `mismatch`
+border, `Math Mismatch: Line items total RM … ≠ Grand Total RM … (Difference: RM 0.03)`. A
+zero-tax receipt whose merchant has an SST number switches the strip to `warning` and adds the
+stamp `Missing SST on registered merchant`. Unsaved changes add `Unsaved changes`.
+
+**Audit history.** A native `<details>` (`Audit history`) loads on first open, listing
+`{field}: {old} → {new}` with the acting accountant's short ID (first 8) and the change date.
+It scrolls within `max-h-64`; empty (`No changes recorded yet.`) and error states are one line
+each.
+
+**Draft safety.** Edits are mirrored to `localStorage` under
+`kenyalang.draft.{receiptId}` and restored on reopen. Leaving with unsaved changes blocks
+navigation (`useBlocker`), warns on `beforeunload`, and opens a native `<dialog>`:
+`Leave without saving?` / `Your corrections on this receipt will be lost.`, with `Stay` (default)
+and `Leave`. It is a modal `alertdialog` labelled by its heading; `Stay` receives initial focus,
+`Escape` cancels the navigation, and focus returns to the element that triggered the blocked
+navigation. Clicking the backdrop does nothing. The draft is cleared after a successful verify or
+reject.
+
+**Receipt canvas.** `charcoal` stage with a 44px `charcoal-raised` toolbar: zoom out, the mono
+percentage, zoom in, and `Reset`. Controls are 44px with `charcoal-rule` borders and
+`text-inverse` labels; the icon buttons are labelled `Zoom out` / `Zoom in`, and `Reset` is
+`Reset zoom and center`. Wheel zoom is cursor-anchored; drag pans with pointer capture.
+
+**Overlay colours** (viewBox `0 0 1000 1000`, `preserveAspectRatio="none"`):
+
+| State | Stroke | Fill |
 |---|---|---|
-| Supplier Name | `merchant_name` | text |
-| Merchant SST | `merchant_sst` | text |
-| Invoice Date | `invoice_date` | `type="date"` |
-| Invoice Number | `invoice_number` | text |
-| Merchant BRN | `merchant_brn` | text |
+| Active field/token | `#147A6C`, 2px | `rgba(20,122,108,0.14)` |
+| Mismatch field | `#B4452F`, 2px | `rgba(180,69,47,0.10)` |
+| Low confidence (< 0.8) | `#B07A1E`, 1px dashed `4` | `rgba(176,122,30,0.10)` |
+| Idle token | `rgba(23,26,24,0.45)`, 1px | none |
 
-There is no combined BRN/TIN field: BRN and SST are separate strings. Focusing any input sets
-it as the canvas's active field; blurring clears it.
+The overlay `<svg>` is `aria-hidden` and `pointer-events-none`; only its rects opt back into
+pointer events, so hovering one shows `{token text} (Conf: 87%)` in a small `surface` tooltip
+offset 12px from the cursor. Boxes without an overlapping token (IoU > 0.25) fall back to the
+field name. Pressing on a box still bubbles to the stage, so panning works anywhere.
 
-**Line Items** (`frontend/src/components/LineItemsEditor.tsx`):
-
-* Columns: Description, Qty, Unit (RM), Total (RM), and a per-row delete button
-  (`aria-label="Remove line {n}"`, 44×44). Numeric inputs are right-aligned with tabular
-  numerals and `inputMode="decimal"`; they stay text while editing.
-* Each input has an `aria-label` of the form `Line 2 description`, `Line 2 quantity`,
-  `Line 2 unit price`, `Line 2 total`.
-* `+ Add Line (Alt+A)` appends a row; the footer prints `{n} lines`.
-* A row whose **server** line item has `confidence < 0.8` renders on `warning-bg` with a dashed
-  underline on the description and a `? {formatConfidence(...)}` badge. Editing the draft does
-  not change that badge; it is provenance, not validation.
-* The focused row gets `bg-brand-50`, and the canvas highlights the matching
-  `line_items[i]` box.
-* **No expense-category column is rendered, and `expense_category` is not part of the
-  frontend `ReceiptLineItem` type.** The backend persists and returns the field; see §4.5 and
-  §4.6.
-
-**Totals & Tax Audit:**
-
-* Three inputs: Subtotal, SST (6%), Grand Total — labels wrap the inputs.
-* `Line Items Total` is derived from the draft's `line_total` column.
-* A mono caption prints
-  `Confidence {n}% · Lines {x} + Tax {y} = Total {z}`.
-* `MathBanner` (rules in §4.2) plus the `Missing SST on Registered Merchant` chip and the
-  `Unsaved changes` hint.
-* `Audit history` is a `<details>` panel whose rows are loaded from
-  `GET …/receipts/{receiptId}/audit` when the receipt loads. Each row shows `field_name`,
-  `old_value → new_value`, the first 8 characters of `user_id`, and the date. It shows
-  `No changes recorded yet.` or the fetch error. Entries are keyed to the receipt that produced
-  them, so a previous receipt's history never flashes while the next one loads.
-
-**Draft persistence and navigation guards:** the draft is kept per receipt in the receipt
-store and mirrored to `localStorage`, so an accidental refresh restores edits. A dirty draft
-(`draftSignature(draft) !== draftSignature(draftBaseline)`) arms React Router's `useBlocker` and
-`beforeunload`. The blocker renders a modal `role="alertdialog" aria-modal="true"` —
-`Leave without saving?` / `Your corrections on this receipt will be lost.` — with `Stay`
-(autofocused) and `Leave`. `Escape` while it is open resets the blocker.
-
-**ReceiptCanvas payload and bounding boxes** (`frontend/src/components/ReceiptCanvas.tsx`):
-
-* Props: `clientId`, `receiptId`, `fields: FieldProvenance[]`, `lineItems: ReceiptLineItem[]`,
-  `tokens: OcrToken[]`, `activeField`, `mismatchFields: string[]`, `processingError`, and the
-  lifted zoom state (`scale`, `setScale`, `onZoomIn`, `onZoomOut`, `onReset`).
-* The image is fetched from `receiptImageUrl(clientId, receiptId)` with `X-Accountant-Id`,
-  converted to an object URL, and revoked on cleanup. Failure renders `Image unavailable` plus
-  the HTTP error and, when present, `processingError`.
-* Encoding: each bbox is `[x_min, y_min, x_max, y_max]` normalized to `0..1`. It is scaled by
-  1000 into an SVG `viewBox="0 0 1000 1000"` with `preserveAspectRatio="none"` stretched over
-  the image, so coordinates remain valid at any rendered size. Bboxes with fewer than four
-  finite values or zero area are skipped. The overlay is `aria-hidden`.
-* The hover tooltip matches the box to the OCR token with the highest intersection-over-union
-  **strictly greater than `0.25`**, and prints `{token.text ?? field name} (Conf: {x}%)` using
-  the token's confidence when a token matched, otherwise the provenance confidence. The tooltip
-  is non-interactive.
-* Box styles, in precedence order:
-  * active (focused input, or `line_items[i]` for the focused row): teal `#14B8A6`, fill
-    `rgba(20,184,166,0.15)`, 2px.
-  * math mismatch (`grand_total`, `subtotal`, `tax_amount` while the audit fails): red
-    `#EF4444`, fill `rgba(239,68,68,0.10)`, 2px.
-  * provenance confidence `< 0.8`: amber `#F59E0B`, fill `rgba(245,158,11,0.10)`, 1px, dashed
-    `4`.
-  * idle: stroke `rgba(100,116,139,0.55)`, transparent fill, 1px.
-* Zoom: buttons `−` / percentage / `+` / `Reset`, plus `[` / `]` / `R`. Wheel zoom is a
-  non-passive listener that zooms around the cursor; it needs no modifier. Drag pans with
-  pointer capture. Bounds `0.2`–`8`, step `1.25`.
-
-**Save payload:** `PUT /api/v1/clients/{clientId}/receipts/{receiptId}` carries the eight
-header strings plus the full line-item array. The server replaces the line set (re-sequencing
-`line_index` 0..n-1), recomputes `math_discrepancy`, strips and re-adds `MATH_MISMATCH_DELTA_*`,
-sets `STATUS_VERIFIED` with `verified_by`/`verified_at`, classifies expense categories, and
-writes one audit row per changed field. The UI does not optimistically mark a receipt verified;
-it navigates only after the response.
+**Save payload.** `PUT` sends the eight header strings plus the line items (description,
+quantity, unit price, line total) and then re-reads the receipt. The response's
+`math_discrepancy` is stored on the row for the inbox tooltip/stamp.
 
 ### 4. `SCR-04`: Authenticated Capture (`/upload`)
 
-An accountant capture page, not a public SME-owner link: it renders inside `AppShell` behind
-the root `AccountantGate`, and uploads into the currently selected client workspace.
+**Header.** Eyebrow `CAPTURE`; title `Upload receipts`; meta is the selected client's name,
+`Selected client`, or `Choose a workspace to begin`; an `Inbox` ghost action appears once a
+workspace is selected.
 
-* **Layout:** single column, `mx-auto max-w-2xl space-y-6 p-6`; the two capture targets sit in
-  `grid gap-3 sm:grid-cols-2`.
-* **Header:** `Upload receipts` and `Workspace: {business_name}`, or `Selected client` when
-  the client list has not loaded, or `No client selected`.
-* **No client selected:** a centred card states `Select a client workspace first`, explains
-  that receipts are uploaded into the selected client, and links to `/clients` via
-  **Choose a client**; the page does not silently create a workspace.
-* **Controls:** two styled `<label>` wrappers around visually hidden file inputs, each 44px
-  tall (`h-11`):
-  * **Take photo** — `accept="image/jpeg,image/png,image/heic,application/pdf"`,
-    `capture="environment"`.
-  * **Choose files** — `multiple`, `accept="image/jpeg,image/png,image/heic,application/pdf"`.
-* **Stated limits:** `JPEG, PNG, HEIC or PDF. Up to 50 files per batch, 15 MiB each, 50 MiB
-  per batch. Processing continues in the background.`
-* **No viewfinder, shutter button, or bottom sheet.** The mobile camera is delegated to the
-  OS/browser through the `capture` attribute; the page itself only shows the two targets.
-* **Feedback:** a single multipart `POST …/receipts/upload` returns `202 Accepted` with a
-  `batch_id` and per-file results. The `role="status" aria-live="polite"` region reports
-  `Uploading…`, then `{n} file(s) accepted.`; a batch-level rejection
-  (too many files, oversized file/batch, unsupported type, or malformed request) arrives as one
-  `ApiError` and renders as `Batch rejected: {detail}`, with nothing persisted. Below it, a list
-  shows each result's filename and **raw status enum** (`PENDING_UPLOAD`, `UPLOADED`, …) plus
-  any per-file `error`; these are not translated into friendly labels.
-* **Duplicates:** the backend keys a duplicate on the same sanitized filename and byte size in
-  the same workspace and returns the existing receipt (same `id`, no second file, no
-  reprocessing). Duplicates inside one request are deduplicated with a `seen` set. Because the
-  file inputs are remounted via `inputKey` after every attempt, re-selecting the *same* file
-  does fire `onChange` again and reaches that duplicate path.
-* **After upload:** a `← Inbox` link. The upload happens immediately on selection; there is
-  no staged-review or submit step on this page.
+**No workspace.** A ruled block (max 560px) with `Select a client workspace first`, one line of
+copy, and a `Choose a client` primary button. Nothing is uploaded without a client ID.
+
+**Capture controls.**
+
+* `Take photo` — a 96px (`h-24`) filled `brand-900` target with a 24px `camera` icon, a hidden
+  `capture="environment"` input, and a `focus-within` outline because the input itself is
+  `sr-only`. On mobile this opens the OS camera.
+* `Choose files` — a 56px (`h-14`) outlined target with an `upload` icon and a hidden multiple
+  file input.
+* Both accept `.jpg`, `.jpeg`, `.png`, `.heic`, `.pdf`, are disabled at 40% opacity while a batch
+  uploads, and are remounted with a new `key` after each attempt so re-selecting the same file
+  works.
+* The mono limits line reads exactly:
+  `JPEG, PNG, HEIC, PDF · 50 files per batch · 15 MiB each · 50 MiB per batch`.
+  A note below reads `Processing continues in the background.`
+
+**Feedback.** A `role="status" aria-live="polite"` mono line reports `Uploading…`, then
+`{n} file(s) accepted.`, or the batch error. The per-file result list is a ruled stack of rows:
+filename, the backend `error` (if any), and a `StatusPill` using the English stamps above.
+Processing statuses show `Processing`; there is no raw-enum output. The header's `Inbox` ghost
+action is the way back to the workspace.
+
+**Duplicates.** The backend keys a duplicate on sanitized filename plus byte size within the
+workspace and returns the existing receipt (same `id`, no second file, no reprocessing).
+Duplicates inside one request are deduplicated with a `seen` set. Because the existing receipt
+is returned as `PENDING_UPLOAD`/`UPLOADED`, the result list can show `Processing` for a file
+that was not re-queued; the inbox row is the source of truth.
 
 ### 5. `SCR-05`: Export Hub (`/clients/:clientId/exports`)
 
-* **Month picker:** `type="month"`; clearing it exports all verified receipts, and the input's
-  title states that.
-* **Card A — Accounting CSV:** purchase-journal import for AutoCount / SQL Account, with the
-  column list shown inline.
-* **Card B — MyInvois JSON:** labelled **Draft MyInvois envelope — validate before
-  submission.** It is a UBL-shaped draft, not an LHDN-validated or submitted document.
-* **Download both:** `Download Both Files (1-Click)` requests the CSV and the JSON together;
-  the per-card buttons download each alone.
-* **Mark exported:** separate, explicit button. It calls `POST …/exports/mark`; downloading
-  never changes status. The page says so directly beneath the buttons.
-* **States:** loading, error banner, success message naming what was downloaded.
+**Header.** Eyebrow `WORKSPACE · {registration}` (or `WORKSPACE`); title `Exports`; meta is the
+business name plus an `Inbox` link. Actions: the label `Accounting billing period`, a native
+`month` input, and an `All time` toggle (`aria-pressed`) that clears the month.
+
+**Strips.** Error: a `mismatch` strip with `role="alert"` and `Dismiss`. Success: a `verified`
+strip with `role="status"` and `Dismiss`. Both are plain ruled bands, not floating toasts.
+
+**Dispatch sheet.** One `<section aria-label="Export dispatch">` bounded by top and bottom
+rules. Its header row shows the active filter
+(`Filtering verified receipts for {month}` or `Exporting all verified receipts across all
+billing dates`), the `Download both` primary button, and `Mark exported` (ghost) with the note
+`Downloads leave receipt statuses unchanged. Marking is a separate, explicit action.` Buttons
+disable individually while running; labels swap to `Generating bundle...`, `Downloading CSV...`,
+`Downloading JSON...`, and `Marking...`.
+
+Two ruled rows, each an 8/4 grid at `lg`:
+
+| Row | Left | Right |
+|---|---|---|
+| **CSV** — `CSV` stamp, `Accounting batch CSV`, `Purchase journal batch import compatible with AutoCount and SQL Account desktop systems.` | Mono meta `Purchase journal · 11 columns · DocDate → TotalAmount`; `<details>` `Column mapping` listing `DocDate, DocNo, SupplierCode, SupplierName, Description, ItemCode, Qty, UnitPrice, TaxCode, TaxAmount, TotalAmount` | `Download accounting CSV (.csv)` secondary button |
+| **JSON** — `JSON` stamp, `LHDN MyInvois multi-line JSON`, `UBL-shaped draft modelled on the official SDK sample; not validated against the LHDN schema, not signed, and never submitted.` | Mono meta `UBL 2.1 · 1.1-Invoice-MultiLineItem-Sample.json · draft envelope, unsigned`; `<details>` `Schema notes` (UBL namespaces, BRN/SST in `PartyIdentification`, line tax allocated to the document tax total, draft envelope — validate before submission) | `Download MyInvois JSON (.json)` secondary button |
+
+**Copy and states.** Success messages: `Accounting CSV downloaded successfully.`,
+`LHDN MyInvois JSON downloaded successfully.`,
+`Both accounting CSV and LHDN MyInvois JSON downloaded successfully.`, and
+`Marked {n} receipt(s) as exported.` With nothing verified, marking reports
+`No verified receipts to mark as exported.` in the same verified strip. Without a workspace, the
+page renders only an alert strip reading `No workspace client selected.` There is no page-level
+spinner; the sheet stays visible while individual buttons work. The month input defaults to the
+current month; `All time` clears it.
 
 ### 6. `SCR-06`: Spend Dashboard (`/clients/:clientId/dashboard`)
 
-* **Month picker:** `type="month"`, defaults to the current month; changing it re-requests
-  `GET …/dashboard/summary?month=YYYY-MM`, and the response is tagged with its request key so a
-  stale month never renders.
-* **Total spend:** verified receipts only (`STATUS_AUTO_VERIFIED`, `STATUS_VERIFIED`,
-  `STATUS_EXPORTED`); unreviewed receipts are excluded. Rendered as the raw decimal string, with
-  no `RM` prefix added by the page.
-* **Top suppliers:** up to five, spend-descending, in a table with Supplier / Receipts / Spend
-  columns; zero rows render `No supplier totals for this month.`
-* **Spend by category:** horizontal bars over the fixed taxonomy `F&B`, `HARDWARE`,
-  `WORKSHOP`, `RETAIL`, `OTHER`; all five always render, including zeros, and each bar is a
-  `role="img"` element labelled `{category}: {total}`. A note states `Pre-tax line totals;
-  document tax is excluded.`
-* **States:** loading skeleton (four rows), error with retry, empty
-  (`No dashboard data` / `Verified receipts for this month will appear here.`), populated.
+**Header.** Eyebrow `WORKSPACE · {registration ?? CLIENTS}`; title `Dashboard`; meta is the
+business name, the note `verified and exported receipts only`, and an `Inbox` link. The action is
+a labelled (`Month`) `month` input, defaulting to the current month, that drives
+`GET …/dashboard/summary?month=YYYY-MM`.
+
+**Stat strip.** A `<dl>` bounded by top and bottom rules, with 1px `border`-coloured gaps and
+1/2/4 columns. Four `canvas` cells: `Spend this month` (mono money), `Receipts reviewed`,
+`Needs review`, `Total receipts`. Labels are mono uppercase; values are mono at `title`, rising
+to `display` at `sm`. A caption below reads
+`Spend covers the selected month; receipt counts cover the whole workspace.`
+
+**Tables.** Two ruled tables, no charts or bars:
+`Top suppliers` (`Supplier`, `Receipts`, `Spend`; five rows maximum, empty copy
+`No supplier totals for this month.`) and `Spend by category` (`Category`, `Spend`; all five
+categories, pre-tax totals, caption `Pre-tax line totals; document tax is excluded.`). Both use
+`.data-table` with explicit `aria-label`s and scroll horizontally on narrow screens. Category
+labels are the backend's uppercase enums (`F&B`, `HARDWARE`, `WORKSHOP`, `RETAIL`, `OTHER`).
+
+**States.** Loading is four skeleton rows. Error is a `role="alert"` strip with `Retry`. Empty is
+`No dashboard data` with the hint `Verified receipts for this month will appear here.` Requests
+are tagged so a late response for a previous month cannot overwrite the current one.
 
 ---
 
 ## 4.4 Form Control & Accessibility Standards
 
-Implemented practices, all traceable to the source:
+**Skip link.** The first focusable element is `Skip to content`; it is visually hidden until
+focused, then pinned top-left as a 44px `surface` block with a 2px `brand-900` left rule,
+targeting `<main id="main-content" tabIndex={-1}>`.
 
-* **Skip link:** `App.tsx` renders `Skip to content` as the first focusable element, targeting
-  `#main-content` (`tabIndex={-1}`).
-* **Visible focus:** most action buttons, inputs, filter tabs, and the skip link use
-  `focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1
-  focus-visible:outline-none` (the reject strip uses an inset ring). The `/upload` page's
-  `sr-only` file inputs sit inside labels styled with `focus-within:` rings. One exception: the
-  review header's `← Inbox` link signals focus with an underline rather than a ring. Rings are a
-  per-component convention, not a shared focus-management layer.
-* **Field validation:** `AccountantGate` and `ClientForm` render the error beneath the field
-  with a stable id and set `aria-invalid` plus `aria-describedby` on the input; blocking errors
-  use `role="alert"`. **This pattern is not applied to every Review input** — the review header
-  fields rely on the aggregate `Fix {field} before verifying.` message and the `MathBanner`
-  rather than per-field `aria-invalid`.
-* **Labels:** `LabelledInput` binds `<label htmlFor>` to an input `id` (`header-field-{field}`);
-  totals labels wrap their inputs; line-item inputs use `aria-label` such as
-  `Line 2 quantity`; icon-only buttons (zoom, delete, dropzone remove) carry `aria-label`.
-* **Touch targets:** primary actions use `h-11` (44px). Inbox rows are 40px
-  (`h-dense-row`); the row-level `Review` button is 32px (`h-8`). The line-item delete/add and
-  zoom buttons are `h-11`; the line-item *text inputs* are denser at `h-9` (36px), and the
-  review header inputs are `h-9` as well. Pagination controls use `min-h-11`; filter buttons
-  use `min-h-10` (40px).
-* **Status never by colour alone:** pills pair colour with a glyph and visible text and expose
-  `data-status`; mismatch, low-confidence, and error pills also carry a `title` (see the
-  matrix). Thumbnails fall back to a labelled placeholder.
-* **Live regions:** `MathBanner` and the `/upload` status region use
-  `role="status" aria-live="polite"`; the inbox upload feedback region is `aria-live="polite"`;
-  the Review loading shell and skeleton use `role="status" aria-busy="true"`; the invalid-draft
-  message is `role="status"`; error banners use `role="alert"`.
-* **Dialogs:** the reject strip is `role="alertdialog"` and takes focus; the leave dialog is
-  `role="alertdialog" aria-modal="true"` with `aria-labelledby` and an autofocused `Stay`.
-* **Structure:** the inbox table has `aria-label="Receipt inbox"` and `sr-only` header text for
-  the thumbnail and action columns; the filter bar is a `<div role="group"
-  aria-label="Status filter">` with `aria-pressed` buttons; decorative glyphs are `aria-hidden`.
-* **Images:** receipt thumbnails use the filename as `alt`; the review image uses
-  `alt="Scanned receipt for review"`; failed thumbnails render a labelled placeholder.
-* **Reduced motion:** honoured globally (see §4.2).
+**Focus.** One global rule owns focus appearance:
+`:where(a, button, input, select, textarea, summary):focus-visible` gets a 2px solid `#0E5A50`
+outline at 2px offset. `.on-dark` regions (the charcoal canvas and the `brand-950` gate panel)
+use `#DCEBE5`. There are no per-component rings. The only local focus treatment is the hidden
+file input on `/upload`: because it is `sr-only`, its label shows a `focus-within` outline
+(`brand-50` on the teal target, `brand-700` on the outlined target). Disabled controls are
+excluded by the browser.
 
-**No formal accessibility audit has been performed, and this repository makes no WCAG
-conformance or certification claim.** The practices above are WCAG 2.2 AA-aligned where they
-are implemented; a real audit would be a prerequisite for any conformance claim.
+**Labels and errors.** `.field-label` is 10px mono uppercase. `LabelledInput` wires `htmlFor`
+and `id`; totals inputs are wrapped by their `<label>`; line-item inputs carry explicit
+`aria-label`s. Icon-only buttons have `aria-label`s (`Zoom in`, `Remove line 2`, `Sign out`).
+The required field in `ClientForm` and the session-id field in `AccountantGate` set
+`aria-invalid` and point `aria-describedby` at a stable error id; the session gate's error is
+`role="alert"`. The review editor does not mark individual fields invalid: the action bar's
+`Fix {field} before verifying.` message and the math banner carry the error, and neither is tied
+to a specific input by `aria-describedby`.
+
+**Target sizes.** Primary controls, inputs, delete/add, zoom, and toolbar buttons are 44px.
+Line-item text inputs are 34px dense fields, but their delete control and `Add Line` remain
+44px. Inbox filter tabs are 40px; inbox `Open` buttons are 44px and table rows are ≈44px at
+`sm`. Pagination buttons are 36px. Thumbnails are 32×32 and are not interactive. Mobile tab
+targets are at least 56px tall.
+
+**Live regions.** Polite (`role="status"`): inbox upload feedback, inbox pagination range,
+`/upload` upload feedback, review invalid-field message, math banner, export success. Assertive
+(`role="alert"`): page-level error strips, client-form and gate errors, export errors. Loading
+skeletons are `role="status" aria-busy="true"` with screen-reader text (`Loading page`). Status
+stamps are ordinary text, so they are announced when the surrounding row is read.
+
+**Dialogs.** The review leave prompt is a native `<dialog>` opened with `showModal()`: focus is
+trapped by the platform, `Escape` fires `cancel`, the backdrop is `rgb(23 26 24 / 0.58)`, and
+focus returns to the triggering control on close. The reject confirmation is an inline
+`role="alertdialog"` band that receives focus and is cancelled with `Escape`; it is deliberately
+not a second modal, so the receipt stays visible while rejecting.
+
+**Structure and semantics.** The shell exposes two labelled `<nav>` landmarks (rail and mobile
+tabs; one is hidden by breakpoint). Every page has exactly one `h1` (page title or receipt ID).
+The inbox uses one table DOM with explicit ARIA roles so the mobile reflow remains a table to
+assistive technology; its filter group is labelled `Status filter`. Clients uses a labelled
+table at `sm`+ and a labelled list below. The receipt image carries the alt text
+`Scanned receipt for review`, its OCR overlay SVG is `aria-hidden`, and the canvas toolbar is a
+row of labelled 44px buttons.
+
+**Images.** Inbox thumbnails use the filename as alt text and a labelled placeholder when the
+blob is unavailable. The review image's alt is `Scanned receipt for review`; a failed load shows
+a textual `Image unavailable` panel. No information is conveyed by colour alone: every stamp has
+text, and every low-confidence or error state has an icon or sentence.
+
+**Reduced motion and reflow.** The reduced-motion rule collapses transitions, animations, and
+smooth scrolling. At 320px the page shell keeps 20px side padding, page-header actions wrap,
+the inbox table becomes stacked rows, filter tabs scroll horizontally, the review panes stack
+with a 40dvh canvas, line-item and dashboard tables scroll inside their sections, and the fixed
+bottom tab bar never overlaps the last control because pages reserve its height.
 
 ---
 
@@ -550,7 +598,7 @@ export interface ReceiptListItem {
   grand_total: string | null;
   status: ReceiptStatus;
   validation_flags: string[];
-  overall_confidence: number;
+  overall_confidence: number | null;
   math_discrepancy: string;
   image_url: string;
   line_item_count: number;
@@ -603,7 +651,7 @@ export interface ReceiptDetail {
   tax_amount: string | null;
   grand_total: string | null;
   math_discrepancy: string;
-  overall_confidence: number;
+  overall_confidence: number | null;
   validation_flags: string[];
   created_at: string;
   verified_at: string | null;

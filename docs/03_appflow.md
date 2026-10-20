@@ -67,7 +67,7 @@ The upload request returns `202` with `PROCESSING_OCR` for every new file; it do
 
 ---
 
-## 3.3 Screen Inventory (`SCR-01` to `SCR-05`)
+## 3.3 Screen Inventory (`SCR-01` to `SCR-06`)
 
 Every view must explicitly handle all **5 UX States**: Empty, Loading, Populated, Flagged/Review, and Error.
 
@@ -76,9 +76,9 @@ Every view must explicitly handle all **5 UX States**: Empty, Loading, Populated
 * **Target Audience:** Freelance Accountant.
 * **Primary Purpose:** Select or create client profiles (e.g., "Ah Teck Hardware Sdn Bhd", "Uncle Lim Kopi").
 * **States:**
-    * *Empty:* Zero clients configured $\rightarrow$ "Add your first client" modal with business name and SST/BRN inputs.
-    * *Loading:* High-density table skeleton with subtle shimmer (`LoadingSkeleton`).
-    * *Populated:* Table showing: Client Name, Registration, SST, Industry, Unreviewed Receipt Count, Verified Count, and Open action. Both counts arrive with the client list (`GET /api/clients` → `unreviewed_count`, `verified_count`), so opening the page costs one request regardless of client count.
+    * *Empty:* Zero clients configured $\rightarrow$ inline `ClientForm` sheet with business name, registration, SST, and industry inputs.
+    * *Loading:* Ruled skeleton table with subtle shimmer (`LoadingSkeleton`).
+    * *Populated:* Table showing: Client Name, Registration, SST, Unreviewed Receipt Count, Verified Count, and Open action. Industry is rendered under the client name. Both counts arrive with the client list (`GET /api/clients` → `unreviewed_count`, `verified_count`), so opening the page costs one request regardless of client count.
     * *Error:* Inline banner if workspace metadata fails to load with Retry action.
 
 ### `SCR-02`: Batch Inbox & Upload Dropzone (`/clients/:clientId/inbox`)
@@ -93,8 +93,8 @@ Every view must explicitly handle all **5 UX States**: Empty, Loading, Populated
 * **States:**
     * *Empty:* Large drag-and-drop target with label: *"Drop receipts here, or click to browse. Max 50 files per batch."*
     * *Loading:* High-density loading skeleton rows during fetch or upload.
-    * *Populated:* Dense tabular list (`h-dense-row`, 40px) showing Thumbnail (streamed from authenticated `image_url`), Merchant, Date (`font-mono-numbers`), Line Items count, Grand Total (`font-mono-numbers`, text-right), Status Badge (`StatusPill`), and Review action (`Review`).
-    * *Flagged:* Rows with `STATUS_NEEDS_REVIEW` render an amber left border (`border-l-2 border-warning-border`) and display specific warning badges (e.g., `[Math Mismatch: Δ RM 2.40]`). Processing states render a neutral badge; terminal `ERR_*` states render a red left border (`border-l-2 border-mismatch-border`) and the recorded `processing_error`.
+    * *Populated:* Dense table (44px rows) showing Thumbnail (32px, streamed from authenticated `image_url`), Merchant, Date (`font-mono-numbers`), Line Items count, Grand Total (`font-mono-numbers`, text-right), Status stamp (`StatusPill`), and Open action. Below `sm` the same table reflows into stacked rows rather than horizontal scrolling.
+    * *Flagged:* Rows with `STATUS_NEEDS_REVIEW` render an amber left border (`border-l-2 border-warning-border`) and display human-readable flag summaries under the merchant (e.g., `Math mismatch: Δ RM 2.40`, `Missing SST on registered merchant`, `Low OCR confidence: BRN`). Processing states render a neutral stamp; terminal `ERR_*` states render a red left border (`border-l-2 border-mismatch-border`) and the recorded `processing_error`.
     * *Error:* Inline banner (`ErrorBanner`) with Retry action if receipt list fetch fails.
 
 ### `SCR-03`: Split-Screen Review Console (`/clients/:clientId/review/:receiptId`)
@@ -102,12 +102,12 @@ Every view must explicitly handle all **5 UX States**: Empty, Loading, Populated
 * **Target Audience:** Accountant (Optimized for speed and minimal mouse movement).
 * **Primary Purpose:** Correct and verify OCR/LLM extracted fields against the physical receipt image.
 * **Layout:**
-    * **Left Pane (50% width):** High-resolution receipt viewport with canvas-based Pan & Zoom, and bounding box highlights.
-    * **Right Pane (50% width):** Structured form containing header fields and a dynamic line-item table.
+    * **Left Pane (46% width at `lg`):** High-resolution receipt viewport on a charcoal surface with toolbar Zoom Out / Zoom In / Reset, Pan & Zoom, and bounding box highlights. Below `lg` it is a fixed `40dvh` band above the form.
+    * **Right Pane (54% width at `lg`):** Structured form containing header fields and a dynamic line-item table, scrolling independently inside `lg:h-dvh`. The sticky action bar holds the Inbox back link, receipt ID, status stamp, Reject, and Verify & Next.
 
 ```
 ┌────────────────────────────────────────┬────────────────────────────────────────┐
-│ RECEIPT IMAGE VIEWPORT (Left 50%)       │ DATA ENTRY & VERIFICATION (Right 50%)  │
+│ RECEIPT IMAGE VIEWPORT (Left 46%)       │ DATA ENTRY & VERIFICATION (Right 54%)  │
 ├────────────────────────────────────────┼────────────────────────────────────────┤
 │ [Zoom In (+)] [Zoom Out (-)] [Reset]   │ Status: [ NEEDS REVIEW ]   ID: REC-1082│
 │                                        │                                        │
@@ -125,7 +125,7 @@ Every view must explicitly handle all **5 UX States**: Empty, Loading, Populated
 │                                        │ SST (6%):  RM  5.97                    │
 │ [Hovering over "PVC Pipe" highlights   │ Total:     RM 105.47  [✓ Math Matches] │
 │ bounding box on image in teal]         │                                        │
-│                                        │ [Reject / Esc]   [Verify & Next (⌘↵)]  │
+│                                        │ [Reject / Esc]     [Verify & Next]    │
 └────────────────────────────────────────┴────────────────────────────────────────┘
 ```
 
@@ -134,18 +134,31 @@ Every view must explicitly handle all **5 UX States**: Empty, Loading, Populated
 * **Target Audience:** Micro-SME Shop Owner (Phone in hand).
 * **Primary Purpose:** One-tap camera upload with zero friction.
 * **Layout:**
-    * Large full-width camera trigger: *"Ambil Gambar Resit" (Take Photo)*.
-    * File picker fallback: *"Pilih dari Galeri" (Select from Gallery)*.
-    * Recent uploads carousel (last 5 receipts with status pill: `Memproses...`, `Selesai`, `Perlu Semak`).
+    * Large full-width teal camera trigger: *"Take photo"* (`capture="environment"`).
+    * File picker fallback: *"Choose files"* (`multiple`).
+    * One mono limits line: `JPEG, PNG, HEIC, PDF · 50 files per batch · 15 MiB each · 50 MiB per batch`, followed by `Processing continues in the background.`
+    * Per-file results list with filename, any error, and a status stamp (`Verified`, `Processing`, `Unreadable`, …); no recent-uploads carousel.
 
 ### `SCR-05`: Export Hub (`/clients/:clientId/exports`)
 
 * **Target Audience:** Accountant.
 * **Primary Purpose:** Generate accounting files and a MyInvois-shaped draft JSON envelope. The file is structurally modelled on the LHDN sample but is not submitted to or validated by LHDN.
 * **Components:**
-    * **Date Range Selector:** Month-end filter (e.g., `September 2026`).
-    * **Export Option A (CSV/Excel):** Radio options for *AutoCount Batch Format*, *SQL Account Purchase Journal*, and *Generic Clean CSV*.
-    * **Export Option B (LHDN MyInvois v1.1 JSON):** Formatted multi-line JSON modelled on `1.1-Invoice-MultiLineItem-Sample.json`, labelled *"Draft MyInvois envelope — validate before submission."* There is no schema-validator badge and no compliance claim. A separate **Mark exported** action moves verified receipts to `STATUS_EXPORTED`; downloading a file never changes receipt status.
+    * **Month picker:** `type="month"`; clearing it exports all verified receipts (the input title states this). The label reads *"Filtering verified receipts for {month}"*.
+    * **Export Option A (CSV):** A single accounting CSV purchase journal mapped for AutoCount / SQL Account import (11 columns, `DocDate` → `TotalAmount`), with the column list available in a native details disclosure.
+    * **Export Option B (LHDN MyInvois v1.1 JSON):** Formatted multi-line JSON modelled on `1.1-Invoice-MultiLineItem-Sample.json`, labelled *"Draft MyInvois envelope — validate before submission."* There is no schema-validator badge and no compliance claim.
+    * **Download both:** One action downloads the CSV and JSON together; each row also has its own download button. A separate **Mark exported** action moves verified receipts to `STATUS_EXPORTED`; downloading never changes receipt status.
+
+### `SCR-06`: Spend Dashboard (`/clients/:clientId/dashboard`)
+
+* **Target Audience:** Accountant.
+* **Primary Purpose:** Month-scoped spend overview across verified/exported receipts, with top suppliers and category totals.
+* **Components:**
+    * **Month picker:** `type="month"`, defaults to the current month; changing it re-requests `GET …/dashboard/summary?month=YYYY-MM`.
+    * **Stat strip:** Spend this month (`summary.total_spend`), receipts reviewed, needs review, and total receipts. Spend covers the selected month; receipt counts cover the whole workspace (stated in a caption).
+    * **Top suppliers:** up to five, spend-descending, in a ruled table (Supplier / Receipts / Spend); empty state reads `No supplier totals for this month.`
+    * **Spend by category:** ruled table over the fixed taxonomy `F&B`, `HARDWARE`, `WORKSHOP`, `RETAIL`, `OTHER`; caption states `Pre-tax line totals; document tax is excluded.`
+    * **States:** loading skeleton, error banner with retry, empty (`No dashboard data`), populated.
 
 ---
 
@@ -160,7 +173,7 @@ To guarantee the **10-second review goal**, the AI agent implementing the fronte
 | `Alt + A` | Form Inputs | Append a new blank line-item row. |
 | `Alt + Backspace` | Line Items | Delete currently focused line-item row. |
 | `[` and `]` | Canvas | Zoom receipt image in (`+`) and out (`-`). |
-| `R` | Canvas | Reset image zoom to fit-to-width. |
+| `R` | Canvas | Reset image zoom to 100% centered. |
 | `Esc` | Global Review | While an input is focused, blur it. Outside a field, open the inline "Reject this receipt?" confirmation. `Esc` again cancels. |
 | `Tab` focus on field | Canvas Link | When an input field gains focus, smoothly pan the canvas to that field's bounding box coordinates. |
 
