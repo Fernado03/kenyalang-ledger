@@ -16,11 +16,18 @@ const UploadPage = lazy(() => import('./pages/UploadPage'))
 
 function RouteFallback() {
   return (
-    <div className="flex min-h-full flex-col gap-4 p-6">
-      <div className="h-8 w-48 animate-pulse rounded-sm bg-surface-subtle" />
-      <div className="h-6 w-full max-w-3xl animate-pulse rounded-sm bg-surface-subtle" />
-      <div className="h-6 w-full max-w-2xl animate-pulse rounded-sm bg-surface-subtle" />
-      <div className="h-6 w-full max-w-4xl animate-pulse rounded-sm bg-surface-subtle" />
+    <div className="page-shell" role="status" aria-busy="true">
+      <span className="sr-only">Loading page</span>
+      <div className="border-b border-border pb-7">
+        <div className="skeleton h-3 w-28" />
+        <div className="skeleton mt-4 h-9 w-64" />
+        <div className="skeleton mt-3 h-4 w-96 max-w-full" />
+      </div>
+      <div className="mt-8 space-y-3">
+        <div className="skeleton h-11 w-full" />
+        <div className="skeleton h-11 w-full" />
+        <div className="skeleton h-11 w-2/3" />
+      </div>
     </div>
   )
 }
@@ -28,11 +35,11 @@ function RouteFallback() {
 /** Authenticated chrome shared by every route: gate, skip link, lazy boundary. */
 function RootLayout() {
   return (
-    <div className="min-h-screen bg-canvas text-text-primary">
+    <div className="min-h-dvh bg-canvas text-text-primary">
       <AccountantGate>
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:inline-flex focus:h-11 focus:items-center focus:border focus:border-border focus:bg-surface focus:px-4 focus:text-sm focus:font-semibold focus:text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-900"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:inline-flex focus:h-11 focus:items-center focus:border focus:border-border-strong focus:border-l-2 focus:border-l-brand-900 focus:bg-surface focus:px-4 focus:text-ui focus:font-semibold focus:text-text-primary"
         >
           Skip to content
         </a>

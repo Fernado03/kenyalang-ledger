@@ -1,61 +1,105 @@
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
-        // Neutral Slate Foundation (High contrast, clean borders)
-        canvas: '#F8FAFC', // Slate 50
-        surface: '#FFFFFF', // Pure White
-        'surface-subtle': '#F1F5F9', // Slate 100
-        border: '#CBD5E1', // Slate 300 (Crisp, defined outlines)
-        'border-focus': '#0F172A', // Slate 900
-
-        // Typography
-        'text-primary': '#0F172A', // Slate 900
-        'text-secondary': '#475569', // Slate 600
-        'text-muted': '#475569', // Slate 600 (>= 4.5:1 on white and surface-subtle)
-
-        // Brand Wedge: Sarawak Hornbill Teal (Single intentional accent)
+        canvas: '#F6F1E7',
+        surface: '#FBF8F1',
+        'surface-subtle': '#EFE8DA',
+        border: '#D9D2C3',
+        'border-strong': '#8A8274',
+        'border-focus': '#0B3F3A',
+        'text-primary': '#171A18',
+        'text-secondary': '#3F4742',
+        'text-muted': '#5F665F',
+        'text-inverse': '#F6F1E7',
         brand: {
-          50: '#F0FDFA',
-          500: '#14B8A6',
-          700: '#0F766E',
-          900: '#134E4A', // Primary active brand color
+          50: '#E7F0EB',
+          100: '#DCEBE5',
+          500: '#147A6C',
+          700: '#0E5A50',
+          900: '#0B3F3A',
+          950: '#072A26',
         },
-
-        // Semantic confidence & financial status tokens. Text/background pairs are
-        // chosen for legibility; this project makes no formal WCAG conformance claim.
         verified: {
-          bg: '#ECFDF5', // Emerald 50
-          border: '#10B981', // Emerald 500
-          text: '#065F46', // Emerald 800
+          bg: '#E7EFE5',
+          border: '#9DB79F',
+          text: '#2D5334',
         },
         warning: {
-          bg: '#FFFBEB', // Amber 50 (Low-confidence OCR)
-          border: '#F59E0B', // Amber 500
-          text: '#92400E', // Amber 800
+          bg: '#F6E9D2',
+          border: '#C9A05A',
+          text: '#7A4E0A',
         },
         mismatch: {
-          bg: '#FEF2F2', // Red 50 (Math reconciliation failure)
-          border: '#EF4444', // Red 500
-          text: '#991B1B', // Red 800
+          bg: '#F6E2DC',
+          border: '#C58375',
+          text: '#8C2F22',
         },
+        charcoal: '#20241F',
+        'charcoal-raised': '#2A2F29',
+        'charcoal-rule': '#3A4038',
       },
       fontFamily: {
+        sans: [
+          '"Segoe UI Variable Text"',
+          '"Segoe UI"',
+          'system-ui',
+          '-apple-system',
+          '"Helvetica Neue"',
+          'Arial',
+          'sans-serif',
+        ],
+        serif: [
+          '"Iowan Old Style"',
+          '"Palatino Linotype"',
+          '"Book Antiqua"',
+          'Palatino',
+          'Georgia',
+          '"Times New Roman"',
+          'serif',
+        ],
         mono: [
-          'JetBrains Mono',
+          '"Cascadia Mono"',
+          '"SFMono-Regular"',
           'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
+          'Consolas',
+          '"Liberation Mono"',
           'monospace',
         ],
       },
-      height: {
-        'dense-row': '40px',
+      fontSize: {
+        micro: ['10px', '12px'],
+        label: ['11px', '14px'],
+        ui: ['13px', '18px'],
+        body: ['14px', '21px'],
+        title: ['20px', '24px'],
+        display: ['34px', '38px'],
+        'display-lg': ['56px', '52px'],
+      },
+      borderRadius: {
+        none: '0',
+        sm: '2px',
+        DEFAULT: '2px',
+        md: '2px',
+        lg: '3px',
+        xl: '3px',
+        '2xl': '4px',
+        full: '9999px',
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.08)',
+        card: 'none',
+        modal: '0 24px 80px rgba(23, 26, 24, 0.22), 0 2px 8px rgba(23, 26, 24, 0.12)',
+      },
+      maxWidth: {
+        shell: '1240px',
+      },
+      height: {
+        control: '44px',
+        'control-dense': '34px',
+        'dense-row': '44px',
+        row: '52px',
       },
     },
   },

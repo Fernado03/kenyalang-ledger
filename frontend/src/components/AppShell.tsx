@@ -1,19 +1,55 @@
 import type { ReactNode } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { Icon, type IconName, BrandMark } from './Icon'
 import { useSessionStore } from '../store/sessionStore'
 
-/**
- * Dense console chrome (docs/04 §4.1): hairline borders, soft card radius,
- * 56px sticky top bar, single teal accent. Used by every console page.
- */
-function navLinkClass({ isActive }: { isActive: boolean }) {
-  return `inline-flex h-10 items-center rounded-lg px-3 text-sm whitespace-nowrap transition-colors duration-100 ease-out focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
-    isActive
-      ? 'bg-brand-50 font-medium text-brand-900'
-      : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
-  }`
+interface NavItem {
+  label: string
+  to: string
+  icon: IconName
+  end?: boolean
+  activeOnReview?: boolean
+  disabled?: boolean
 }
 
+const railItemClass = (active: boolean) =>
+  `flex h-14 w-full flex-col items-center justify-center gap-1 border-l-2 text-micro font-medium uppercase tracking-[0.04em] transition-colors duration-100 ${
+    active
+      ? 'border-brand-900 bg-surface text-text-primary'
+      : 'border-transparent text-text-muted hover:bg-surface hover:text-text-primary'
+  }`
+
+const tabItemClass = (active: boolean) =>
+  `relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 px-1 text-micro font-medium transition-colors duration-100 ${
+    active ? 'text-brand-900' : 'text-text-muted'
+  }`
+
+const disabledClass = 'pointer-events-none opacity-35'
+
+function NavGlyph({
+  item,
+  active,
+  indicator = false,
+}: {
+  item: NavItem
+  active: boolean
+  indicator?: boolean
+}) {
+  return (
+    <>
+      <Icon name={item.icon} size={20} />
+      <span>{item.label}</span>
+      {indicator && active ? (
+        <span className="absolute inset-x-3 top-0 h-0.5 bg-brand-900" aria-hidden="true" />
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * Console chrome: a compact rail on desktop, a persistent bottom tab bar on
+ * mobile. Navigation never depends on the page rendering its own links.
+ */
 export default function AppShell({
   children,
   clientId,
@@ -25,60 +61,146 @@ export default function AppShell({
   const clearAccountantId = useSessionStore((state) => state.clearAccountantId)
   const { pathname } = useLocation()
   const reviewActive = pathname.includes('/review/')
+  const hasWorkspace = clientId !== undefined
+
+  const items: NavItem[] = [
+    { label: 'Clients', to: '/clients', icon: 'clients', end: true },
+    {
+      label: 'Inbox',
+      to: hasWorkspace ? `/clients/${clientId}/inbox` : '/clients',
+      icon: 'inbox',
+      activeOnReview: true,
+      disabled: !hasWorkspace,
+    },
+    {
+      label: 'Dashboard',
+      to: hasWorkspace ? `/clients/${clientId}/dashboard` : '/clients',
+      icon: 'dashboard',
+      disabled: !hasWorkspace,
+    },
+    {
+      label: 'Exports',
+      to: hasWorkspace ? `/clients/${clientId}/exports` : '/clients',
+      icon: 'exports',
+      disabled: !hasWorkspace,
+    },
+    { label: 'Upload', to: '/upload', icon: 'camera' },
+  ]
+
+  const isItemActive = (item: NavItem): boolean => {
+    if (item.activeOnReview === true && reviewActive) return true;
+    return item.end === true
+      ? pathname === item.to
+      : pathname === item.to || pathname.startsWith(`${item.to}/`);
+  };
 
   return (
-    <div className="min-h-screen bg-canvas text-text-primary">
-      <header className="relative top-0 z-40 border-b border-border bg-surface sm:sticky">
-        <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-5 gap-y-1 px-6 py-2 sm:flex-nowrap sm:py-0">
-          <span className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-            <span aria-hidden="true" className="h-5 w-5 rounded-md bg-brand-900" />
-            <span className="text-[15px] font-semibold tracking-tight">
-              Kenyalang Ledger
-            </span>
+    <div className="min-h-dvh bg-canvas text-text-primary">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[72px] flex-col border-r border-border bg-surface-subtle lg:flex">
+        <Link
+          to="/clients"
+          className="flex h-16 shrink-0 items-center justify-center border-b border-border"
+          aria-label="Kenyalang Ledger — clients"
+        >
+          <BrandMark size={30} />
+        </Link>
+
+        <nav className="flex flex-1 flex-col gap-0.5 py-2" aria-label="Primary">
+          {items.map((item) =>
+            item.disabled ? (
+              <span
+                key={item.label}
+                className={`${railItemClass(false)} ${disabledClass}`}
+                aria-disabled="true"
+                title="Select a workspace first"
+              >
+                <Icon name={item.icon} size={20} />
+                <span>{item.label}</span>
+              </span>
+            ) : (
+              <Link
+                key={item.label}
+                to={item.to}
+                title={item.label}
+                aria-current={isItemActive(item) ? 'page' : undefined}
+                className={railItemClass(isItemActive(item))}
+              >
+                <NavGlyph item={item} active={isItemActive(item)} />
+              </Link>
+            ),
+          )}
+        </nav>
+
+        <div className="flex flex-col items-center gap-1 border-t border-border py-2">
+          <span
+            className="flex h-8 w-8 items-center justify-center border border-border bg-surface font-mono text-micro uppercase text-text-secondary"
+            title={accountantId ?? 'Accountant'}
+          >
+            {accountantId !== null ? accountantId.slice(0, 2).toUpperCase() : '—'}
           </span>
-
-          <nav className="flex flex-wrap items-center gap-1" aria-label="Console">
-            <NavLink to="/clients" end className={navLinkClass}>
-              Clients
-            </NavLink>
-            {clientId !== undefined ? (
-              <>
-                <NavLink
-                  to={`/clients/${clientId}/inbox`}
-                  className={({ isActive }) =>
-                    navLinkClass({ isActive: isActive || reviewActive })
-                  }
-                >
-                  Inbox
-                </NavLink>
-                <NavLink to={`/clients/${clientId}/dashboard`} className={navLinkClass}>
-                  Dashboard
-                </NavLink>
-                <NavLink to={`/clients/${clientId}/exports`} className={navLinkClass}>
-                  Exports
-                </NavLink>
-                <NavLink to="/upload" className={navLinkClass}>
-                  Upload
-                </NavLink>
-              </>
-            ) : null}
-          </nav>
-
-          <div className="ml-auto flex items-center gap-2">
-            <span className="hidden font-mono-numbers text-xs text-text-muted sm:inline">
-              {accountantId !== null ? accountantId.slice(0, 8) : ''}
-            </span>
-            <button
-              type="button"
-              onClick={clearAccountantId}
-              className="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm text-text-secondary transition-colors duration-100 ease-out hover:bg-surface-subtle hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
-            >
-              Sign out
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={clearAccountantId}
+            className="flex h-10 w-10 items-center justify-center text-text-muted transition-colors duration-100 hover:bg-surface hover:text-text-primary"
+            aria-label="Sign out"
+            title="Sign out"
+          >
+            <Icon name="sign-out" size={18} />
+          </button>
         </div>
+      </aside>
+
+      <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-surface px-4 lg:hidden">
+        <Link to="/clients" className="flex min-w-0 items-center gap-2" aria-label="Kenyalang Ledger — clients">
+          <BrandMark size={26} />
+          <span className="truncate font-serif text-[17px] font-semibold tracking-[-0.01em]">
+            Kenyalang <span className="text-text-muted">Ledger</span>
+          </span>
+        </Link>
+        <button
+          type="button"
+          onClick={clearAccountantId}
+          className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center text-text-muted transition-colors duration-100 hover:bg-surface-subtle hover:text-text-primary"
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <Icon name="sign-out" size={18} />
+        </button>
       </header>
-      {children}
+
+      <div className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pl-[72px] lg:pb-0">
+        {children}
+      </div>
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
+        aria-label="Primary"
+      >
+        <div className="flex">
+          {items.map((item) =>
+            item.disabled ? (
+              <span
+                key={item.label}
+                className={`${tabItemClass(false)} ${disabledClass}`}
+                aria-disabled="true"
+                title="Select a workspace first"
+              >
+                <Icon name={item.icon} size={20} />
+                <span>{item.label}</span>
+              </span>
+            ) : (
+              <Link
+                key={item.label}
+                to={item.to}
+                aria-current={isItemActive(item) ? 'page' : undefined}
+                className={tabItemClass(isItemActive(item))}
+              >
+                <NavGlyph item={item} active={isItemActive(item)} indicator />
+              </Link>
+            ),
+          )}
+        </div>
+      </nav>
     </div>
   )
 }

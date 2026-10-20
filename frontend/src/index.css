@@ -3,34 +3,170 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    @apply bg-canvas;
+  }
+
   body {
-    @apply bg-canvas text-text-primary antialiased;
+    @apply min-h-dvh bg-canvas font-sans text-body text-text-primary antialiased;
   }
-  button {
-    @apply rounded-lg;
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
   }
-  input,
-  select,
-  textarea {
-    @apply rounded-md;
+
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary {
+    cursor: pointer;
+  }
+
+  :where(a, button, input, select, textarea, summary):focus-visible {
+    outline: 2px solid #0e5a50;
+    outline-offset: 2px;
+  }
+
+  .on-dark :where(a, button, input, select, textarea, summary):focus-visible {
+    outline-color: #dcebe5;
+  }
+
+  ::selection {
+    background: #dcebe5;
+    color: #0b3f3a;
+  }
+
+  dialog {
+    @apply border border-border bg-surface text-text-primary shadow-modal;
+  }
+
+  dialog::backdrop {
+    background: rgb(23 26 24 / 0.58);
+  }
+
+  dialog[open] {
+    animation: dialog-in 140ms ease-out both;
+  }
+
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
 
-@layer utilities {
-  /* Mandatory CSS rule for all Ringgit values and quantities:
-     tabular numerals keep decimal points aligned vertically in tables. */
+@layer components {
+  .page-shell {
+    @apply mx-auto w-full max-w-shell px-5 py-7 sm:px-8 lg:px-10 lg:py-10;
+  }
+
+  .eyebrow {
+    @apply font-mono text-micro font-medium uppercase tracking-[0.14em] text-text-muted;
+  }
+
+  .section-label {
+    @apply font-mono text-micro font-medium uppercase tracking-[0.12em] text-text-muted;
+  }
+
+  .section-title {
+    @apply font-serif text-title font-normal tracking-[-0.01em] text-text-primary;
+  }
+
+  .field-label {
+    @apply block font-mono text-micro font-medium uppercase tracking-[0.12em] text-text-muted;
+  }
+
+  .field-input {
+    @apply mt-1.5 h-control w-full rounded-sm border border-border-strong bg-surface px-3 text-ui text-text-primary transition-colors duration-100 placeholder:text-text-muted hover:border-text-muted disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted;
+  }
+
+  .field-input-dense {
+    @apply mt-1.5 h-control-dense w-full rounded-sm border border-border-strong bg-surface px-2 text-ui text-text-primary transition-colors duration-100 placeholder:text-text-muted hover:border-text-muted disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted;
+  }
+
+  .field-error {
+    @apply mt-1.5 text-label text-mismatch-text;
+  }
+
+  .btn {
+    @apply inline-flex h-control shrink-0 items-center justify-center gap-2 rounded-sm border px-4 text-ui font-semibold transition-[background-color,border-color,color,transform] duration-100 ease-out active:translate-y-px disabled:pointer-events-none disabled:opacity-40;
+  }
+
+  .btn-primary {
+    @apply border-brand-900 bg-brand-900 text-brand-50 hover:border-brand-700 hover:bg-brand-700;
+  }
+
+  .btn-secondary {
+    @apply border-border-strong bg-surface text-text-primary hover:bg-surface-subtle;
+  }
+
+  .btn-ghost {
+    @apply border-transparent bg-transparent text-text-secondary hover:bg-surface-subtle hover:text-text-primary;
+  }
+
+  .btn-danger {
+    @apply border-mismatch-text bg-mismatch-text text-surface hover:border-[#6f241b] hover:bg-[#6f241b];
+  }
+
+  .btn-sm {
+    @apply h-9 px-3 text-label;
+  }
+
+  .btn-icon {
+    @apply h-control w-control px-0;
+  }
+
+  .link-quiet {
+    @apply inline-flex items-center gap-1 text-ui text-text-secondary underline-offset-4 transition-colors duration-100 hover:text-text-primary hover:underline;
+  }
+
+  .rule-total {
+    border-top: 3px double #8a8274;
+  }
+
+  .stamp {
+    @apply inline-flex h-[22px] items-center gap-1 whitespace-nowrap rounded-[1px] border px-1.5 font-mono text-micro font-medium uppercase tracking-[0.08em];
+  }
+
+  .data-table {
+    @apply w-full border-collapse text-ui;
+  }
+
+  .data-table th {
+    @apply border-b border-border px-3 py-2 text-left font-mono text-micro font-medium uppercase tracking-[0.1em] text-text-muted;
+  }
+
+  .data-table td {
+    @apply border-b border-border px-3 py-2.5 text-text-secondary;
+  }
+
+  .data-table tbody tr {
+    @apply transition-colors duration-100 hover:bg-surface;
+  }
+
   .font-mono-numbers {
-    font-family: 'JetBrains Mono', monospace;
+    @apply font-mono;
     font-variant-numeric: tabular-nums lining-nums;
-    letter-spacing: -0.02em;
+    font-feature-settings: 'tnum' 1, 'lnum' 1;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-[1px] bg-surface-subtle;
   }
 }
 
-/* Reduced Motion Guarantee */
 @media (prefers-reduced-motion: reduce) {
   *,
-  ::before,
-  ::after {
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

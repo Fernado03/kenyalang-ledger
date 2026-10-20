@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useSessionStore } from '../store/sessionStore'
+import { BrandMark } from './Icon'
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -31,55 +32,70 @@ export default function AccountantGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-canvas p-6">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 shadow-card"
-      >
-        <span aria-hidden="true" className="mb-4 inline-flex h-8 w-8 rounded-lg bg-brand-900" />
-        <h1 className="text-xl font-semibold tracking-tight text-text-primary">
-          Kenyalang Ledger
-        </h1>
-        <p className="mt-2 text-sm text-text-secondary">
-          Enter the accountant session id to open the console.
-        </p>
-        <label
-          htmlFor="accountant-id"
-          className="mt-4 block text-xs font-medium text-text-secondary"
-        >
-          Accountant session id
-        </label>
-        <input
-          id="accountant-id"
-          name="accountant_id"
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value)
-            setError(null)
-          }}
-          autoComplete="off"
-          aria-invalid={error !== null}
-          aria-describedby={error === null ? undefined : 'accountant-id-error'}
-          className="mt-1 h-12 w-full border border-border bg-surface px-3 text-sm text-text-primary transition-colors duration-100 ease-out placeholder:text-text-muted focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
-          placeholder="e.g. 7f3a1c92-..."
-        />
-        {error !== null && (
-          <p id="accountant-id-error" role="alert" className="mt-1 text-xs text-mismatch-text">
-            {error}
+    <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-12">
+      <aside className="on-dark bg-brand-950 px-5 py-4 text-brand-50 lg:col-span-5 lg:flex lg:min-h-screen lg:flex-col lg:justify-between lg:px-10 lg:py-12">
+        <div className="flex items-center gap-3">
+          <BrandMark size={30} />
+          <h1 className="font-serif text-title font-normal tracking-[-0.01em]">Kenyalang Ledger</h1>
+        </div>
+
+        <div className="mt-6 hidden lg:mt-0 lg:block">
+          <p className="max-w-xs font-serif text-display font-normal leading-tight tracking-[-0.015em]">
+            Every request carries an accountant id.
           </p>
-        )}
-        <button
-          type="submit"
-          disabled={draft.trim() === ''}
-          className="mt-4 flex h-12 w-full items-center justify-center rounded-lg border border-border bg-brand-900 text-sm font-semibold text-white shadow-sm transition-colors duration-100 ease-out hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted"
-        >
-          Continue
-        </button>
-        <p className="mt-3 text-xs text-text-muted">
-          This value is sent as the <code>X-Accountant-Id</code> header on every
-          request. It is a forgeable demo identity, not authentication.
-        </p>
-      </form>
+          <p className="mt-6 font-mono text-micro uppercase tracking-[0.14em] text-brand-100">
+            Route guard · docs/03 §3.1
+          </p>
+        </div>
+      </aside>
+
+      <div className="flex items-center justify-center px-5 py-10 lg:col-span-7 lg:px-10 lg:py-12">
+        <form onSubmit={handleSubmit} className="w-full max-w-md">
+          <p className="eyebrow">Session</p>
+          <h2 className="section-title mt-2">Open the console</h2>
+          <p className="mt-2 text-body text-text-secondary">
+            Enter the accountant session id to open the console.
+          </p>
+
+          <div className="mt-6">
+            <label htmlFor="accountant-id" className="field-label">
+              Accountant session id
+            </label>
+            <input
+              id="accountant-id"
+              name="accountant_id"
+              value={draft}
+              onChange={(event) => {
+                setDraft(event.target.value)
+                setError(null)
+              }}
+              autoComplete="off"
+              aria-invalid={error !== null}
+              aria-describedby={error === null ? undefined : 'accountant-id-error'}
+              className="field-input"
+              placeholder="e.g. 7f3a1c92-..."
+            />
+            {error !== null && (
+              <p id="accountant-id-error" role="alert" className="field-error">
+                {error}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={draft.trim() === ''}
+            className="btn btn-primary mt-5 w-full"
+          >
+            Continue
+          </button>
+
+          <p className="mt-4 font-mono text-micro leading-relaxed text-text-muted">
+            This value is sent as the <code>X-Accountant-Id</code> header on every
+            request. It is a forgeable demo identity, not authentication.
+          </p>
+        </form>
+      </div>
     </div>
   )
 }
