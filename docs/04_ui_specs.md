@@ -102,8 +102,8 @@ field labels at `0.12em`; stamps at `0.08em`. Body copy is sans at 14px.
   round caps and joins. Names: `clients`, `inbox`, `dashboard`, `exports`, `camera`, `upload`,
   `file`, `download`, `plus`, `minus`, `reset`, `close`, `check`, `alert`, `clock`,
   `chevron-right`, `arrow-left`, `sign-out`. Icons are `aria-hidden` unless a `title` is passed.
-* **`BrandMark`** — a 32px square monogram (2px radius, `brand-900` fill, 1px paper-tinted
-  border, a 2.4px `brand-50` K drawn as a stroke path). No image asset or gradient is used.
+* **`BrandMark`** — a 32px square tile (4px radius, `brand-900` fill) carrying the paper-tinted
+  hornbill mark as a filled path. No image asset or gradient is used.
 * **`PageHeader`** — `eyebrow`, `title`, `meta`, optional `actions`. It renders a bottom rule,
   a mono uppercase eyebrow, a serif `display` title, a secondary-colour meta block, and a
   right-aligned action group that wraps under the title on narrow screens. At `lg` the header is
