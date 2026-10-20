@@ -16,7 +16,7 @@ interface ErrorBannerProps {
 /** Full-width SCR-02 blank state: message, optional hint, optional action. */
 export function EmptyState({ title, hint, action }: EmptyStateProps): JSX.Element {
   return (
-    <div className="flex min-h-11 flex-col items-center justify-center gap-2 border border-border bg-surface px-4 py-10 text-center">
+    <div className="flex min-h-11 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface px-6 py-12 text-center shadow-card">
       <p className="text-sm font-semibold text-text-primary">{title}</p>
       {hint !== undefined && <p className="text-xs text-text-secondary">{hint}</p>}
       {action}
@@ -27,12 +27,16 @@ export function EmptyState({ title, hint, action }: EmptyStateProps): JSX.Elemen
 /** Shimmering SCR-02 table placeholder; one row per expected receipt. */
 export function LoadingSkeleton({ rows }: LoadingSkeletonProps): JSX.Element {
   return (
-    <div className="border border-border bg-surface" role="status" aria-busy="true">
+    <div
+      className="overflow-hidden rounded-xl border border-border bg-surface shadow-card"
+      role="status"
+      aria-busy="true"
+    >
       <span className="sr-only">Loading receipts</span>
       {Array.from({ length: Math.max(rows, 1) }, (_unused, index) => (
         <div
           key={index}
-          className="h-dense-row animate-pulse border-b border-border bg-surface-subtle rounded-sm last:border-b-0"
+          className="h-12 animate-pulse border-b border-border bg-surface-subtle/60 last:border-b-0"
         />
       ))}
     </div>
@@ -44,7 +48,7 @@ export function ErrorBanner({ message, onRetry }: ErrorBannerProps): JSX.Element
   return (
     <div
       role="alert"
-      className="flex min-h-11 flex-wrap items-center justify-between gap-2 border bg-mismatch-bg border-mismatch-border px-3 py-2 text-mismatch-text"
+      className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl border border-mismatch-border bg-mismatch-bg px-4 py-3 text-mismatch-text shadow-card"
     >
       <p className="text-xs">{message}</p>
       {onRetry !== undefined && (

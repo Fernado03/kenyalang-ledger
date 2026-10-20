@@ -200,19 +200,23 @@ export default function ReceiptCanvas({
   useEffect(() => {
     let objectUrl: string | null = null;
     let cancelled = false;
+    const controller = new AbortController();
     const headers: HeadersInit =
       accountantId === null ? {} : { 'X-Accountant-Id': accountantId };
 
-    fetch(receiptImageUrl(clientId, receiptId), { headers })
+    fetch(receiptImageUrl(clientId, receiptId), { headers, signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`Image request failed (HTTP ${response.status})`);
         }
         const blob = await response.blob();
         objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) {
-          setImageUrl(objectUrl);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          objectUrl = null;
+          return;
         }
+        setImageUrl(objectUrl);
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -222,6 +226,7 @@ export default function ReceiptCanvas({
 
     return () => {
       cancelled = true;
+      controller.abort();
       if (objectUrl !== null) {
         URL.revokeObjectURL(objectUrl);
       }
@@ -395,7 +400,6 @@ export default function ReceiptCanvas({
             style={{
               transform: `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`,
               transformOrigin: '0 0',
-              willChange: 'transform',
               transition: 'none',
             }}
           >

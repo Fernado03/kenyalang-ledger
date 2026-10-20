@@ -3,9 +3,18 @@ import { NavLink } from 'react-router-dom'
 import { useSessionStore } from '../store/sessionStore'
 
 /**
- * Dense console chrome (docs/04 §4.1): razor-sharp borders, 44px top bar,
- * single teal accent. Opt-in per page — App.tsx does not wrap routes in it.
+ * Dense console chrome (docs/04 §4.1): hairline borders, soft card radius,
+ * 56px sticky top bar, single teal accent. Opt-in per page — App.tsx does not
+ * wrap routes in it.
  */
+function navLinkClass({ isActive }: { isActive: boolean }) {
+  return `inline-flex h-10 items-center rounded-lg px-3 text-sm whitespace-nowrap transition-colors duration-100 ease-out focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
+    isActive
+      ? 'bg-brand-50 font-medium text-brand-900'
+      : 'text-text-secondary hover:bg-surface-subtle hover:text-text-primary'
+  }`
+}
+
 export default function AppShell({
   children,
   clientId,
@@ -18,82 +27,49 @@ export default function AppShell({
 
   return (
     <div className="min-h-screen bg-canvas text-text-primary">
-      <header className="flex h-11 items-center gap-4 border-b border-border bg-surface px-4">
-        <span className="flex items-center gap-2">
-          <span aria-hidden="true" className="h-3 w-3 bg-brand-700" />
-          <span className="text-sm font-semibold tracking-tight text-text-primary">
-            Kenyalang Ledger
+      <header className="relative top-0 z-40 border-b border-border bg-surface sm:sticky">
+        <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-5 gap-y-1 px-6 py-2 sm:flex-nowrap sm:py-0">
+          <span className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+            <span aria-hidden="true" className="h-5 w-5 rounded-md bg-brand-900" />
+            <span className="text-[15px] font-semibold tracking-tight">
+              Kenyalang Ledger
+            </span>
           </span>
-        </span>
 
-        <nav className="flex items-center gap-4" aria-label="Console">
-          <NavLink
-            to="/clients"
-            className={({ isActive }) =>
-              `text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
-                isActive ? 'font-semibold text-brand-900' : ''
-              }`
-            }
-          >
-            Clients
-          </NavLink>
-          {clientId !== undefined ? (
-            <>
-              <NavLink
-                to={`/clients/${clientId}/inbox`}
-                className={({ isActive }) =>
-                  `text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
-                    isActive ? 'font-semibold text-brand-900' : ''
-                  }`
-                }
-              >
-                Inbox
-              </NavLink>
-              <NavLink
-                to={`/clients/${clientId}/dashboard`}
-                className={({ isActive }) =>
-                  `text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
-                    isActive ? 'font-semibold text-brand-900' : ''
-                  }`
-                }
-              >
-                Dashboard
-              </NavLink>
-              <NavLink
-                to={`/clients/${clientId}/exports`}
-                className={({ isActive }) =>
-                  `text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
-                    isActive ? 'font-semibold text-brand-900' : ''
-                  }`
-                }
-              >
-                Exports
-              </NavLink>
-              <NavLink
-                to="/upload"
-                className={({ isActive }) =>
-                  `text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
-                    isActive ? 'font-semibold text-brand-900' : ''
-                  }`
-                }
-              >
-                Upload
-              </NavLink>
-            </>
-          ) : null}
-        </nav>
+          <nav className="flex flex-wrap items-center gap-1" aria-label="Console">
+            <NavLink to="/clients" className={navLinkClass}>
+              Clients
+            </NavLink>
+            {clientId !== undefined ? (
+              <>
+                <NavLink to={`/clients/${clientId}/inbox`} className={navLinkClass}>
+                  Inbox
+                </NavLink>
+                <NavLink to={`/clients/${clientId}/dashboard`} className={navLinkClass}>
+                  Dashboard
+                </NavLink>
+                <NavLink to={`/clients/${clientId}/exports`} className={navLinkClass}>
+                  Exports
+                </NavLink>
+                <NavLink to="/upload" className={navLinkClass}>
+                  Upload
+                </NavLink>
+              </>
+            ) : null}
+          </nav>
 
-        <div className="ml-auto flex items-center gap-3">
-          <span className="font-mono-numbers text-xs text-text-muted">
-            {accountantId !== null ? accountantId.slice(0, 8) : ''}
-          </span>
-          <button
-            type="button"
-            onClick={clearAccountantId}
-            className="flex h-11 items-center text-sm text-text-secondary transition-colors duration-100 ease-out hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
-          >
-            Sign out
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden font-mono-numbers text-xs text-text-muted sm:inline">
+              {accountantId !== null ? accountantId.slice(0, 8) : ''}
+            </span>
+            <button
+              type="button"
+              onClick={clearAccountantId}
+              className="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-sm text-text-secondary transition-colors duration-100 ease-out hover:bg-surface-subtle hover:text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
       {children}

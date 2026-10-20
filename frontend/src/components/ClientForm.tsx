@@ -66,7 +66,7 @@ export default function ClientForm({
     <form
       onSubmit={handleSubmit}
       noValidate
-      className="border border-border bg-surface p-6"
+      className="rounded-xl border border-border bg-surface p-6 shadow-card"
     >
       <h2 className="text-base font-semibold tracking-tight text-text-primary">
         New client

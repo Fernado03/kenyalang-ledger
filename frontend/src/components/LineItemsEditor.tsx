@@ -11,7 +11,7 @@ interface LineItemsEditorProps {
   onFocusRow: (key: string) => void;
 }
 
-const HEADER_CELL = 'px-2 py-1 text-xs uppercase tracking-wide text-text-muted';
+const HEADER_CELL = 'px-2 py-1 text-[11px] uppercase tracking-wider text-text-muted';
 
 const INPUT_CLASS =
   'h-9 w-full border border-border bg-surface px-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
@@ -133,9 +133,9 @@ export default function LineItemsEditor({
   onFocusRow,
 }: LineItemsEditorProps): JSX.Element {
   return (
-    <div className="border border-border bg-surface">
-      <table className="w-full">
-        <thead className="border-b border-border bg-surface-subtle">
+    <div className="relative overflow-x-auto rounded-lg border border-border bg-surface">
+      <table className="w-full min-w-[32rem]">
+        <thead className="border-b border-border bg-surface-subtle/70">
           <tr>
             <th className={HEADER_CELL}>Description</th>
             <th className={HEADER_CELL}>Qty</th>

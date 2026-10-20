@@ -22,7 +22,7 @@ const PROCESSING_STATUSES: readonly ReceiptStatus[] = [
 ];
 
 const PILL_BASE =
-  'inline-flex h-dense-row items-center gap-1 border px-2 text-xs font-medium whitespace-nowrap';
+  'inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium whitespace-nowrap';
 
 /**
  * SCR-02 status pill (docs/04_ui_specs.md §4.3 matrix): verified → emerald,
@@ -40,6 +40,7 @@ export default function StatusPill({
       <span
         className={`${PILL_BASE} bg-verified-bg border-verified-border text-verified-text`}
         data-status={status}
+        lang="ms"
       >
         <span aria-hidden="true">●</span> Selesai
       </span>
@@ -51,6 +52,7 @@ export default function StatusPill({
       <span
         className={`${PILL_BASE} bg-surface-subtle border-border text-brand-900 font-medium`}
         data-status={status}
+        lang="ms"
       >
         <span aria-hidden="true">↗</span> Dieksport
       </span>
@@ -62,6 +64,7 @@ export default function StatusPill({
       <span
         className={`${PILL_BASE} bg-mismatch-bg border-mismatch-border text-mismatch-text`}
         data-status={status}
+        lang="ms"
       >
         <span aria-hidden="true">✕</span> Ditolak
       </span>
@@ -76,6 +79,7 @@ export default function StatusPill({
         <span
           className={`${PILL_BASE} bg-mismatch-bg border-mismatch-border text-mismatch-text`}
           data-status={status}
+          lang="ms"
           title={`Math mismatch: Δ RM ${delta}`}
         >
           <span aria-hidden="true">⚠️</span> Δ RM {delta}
@@ -93,6 +97,7 @@ export default function StatusPill({
         <span
           className={`${PILL_BASE} bg-warning-bg border-warning-border text-warning-text`}
           data-status={status}
+          lang="ms"
           title="Low OCR confidence"
         >
           <span aria-hidden="true">⚡</span> Semak OCR ({formatConfidence(score)})
@@ -104,6 +109,7 @@ export default function StatusPill({
       <span
         className={`${PILL_BASE} bg-warning-bg border-warning-border text-warning-text`}
         data-status={status}
+        lang="ms"
       >
         <span aria-hidden="true">⚠️</span> Perlu Semak
       </span>
@@ -115,6 +121,7 @@ export default function StatusPill({
       <span
         className={`${PILL_BASE} bg-surface-subtle border-border text-text-secondary`}
         data-status={status}
+        lang="ms"
       >
         <span aria-hidden="true">⏳</span> Memproses...
       </span>
@@ -134,6 +141,7 @@ export default function StatusPill({
     <span
       className={`${PILL_BASE} bg-mismatch-bg border-mismatch-border text-mismatch-text`}
       data-status={status}
+      lang="ms"
       title={processingError ?? errorLabel}
     >
       <span aria-hidden="true">✕</span> {errorLabel}

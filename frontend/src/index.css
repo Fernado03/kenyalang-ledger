@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  body {
+    @apply bg-canvas text-text-primary antialiased;
+  }
+  button {
+    @apply rounded-lg;
+  }
+  input,
+  select,
+  textarea {
+    @apply rounded-md;
+  }
+}
+
 @layer utilities {
   /* Mandatory CSS rule for all Ringgit values and quantities:
      tabular numerals keep decimal points aligned vertically in tables. */
