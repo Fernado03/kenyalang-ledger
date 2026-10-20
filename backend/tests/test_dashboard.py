@@ -95,6 +95,17 @@ def _category_totals(payload: dict) -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------- #
+# Classifier keywords
+# --------------------------------------------------------------------------- #
+
+
+def test_classify_expense_matches_spark_and_gear_keywords() -> None:
+    assert classify_expense("Spark Plug") == "HARDWARE"
+    assert classify_expense("Minyak Gear") == "WORKSHOP"
+    assert classify_expense("Upah Pasang") == "WORKSHOP"
+
+
+# --------------------------------------------------------------------------- #
 # Inclusion rules
 # --------------------------------------------------------------------------- #
 

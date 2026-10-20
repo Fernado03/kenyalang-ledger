@@ -202,6 +202,8 @@ def test_list_clients_counts_receipts_by_review_state(client: TestClient) -> Non
         ReceiptStatus.STATUS_NEEDS_REVIEW,
         ReceiptStatus.STATUS_AUTO_VERIFIED,
         ReceiptStatus.STATUS_VERIFIED,
+        # Exporting follows verification, so an exported receipt stays verified.
+        ReceiptStatus.STATUS_EXPORTED,
         ReceiptStatus.STATUS_REJECTED,
     ):
         _insert_receipt(client_id, status)
@@ -211,7 +213,8 @@ def test_list_clients_counts_receipts_by_review_state(client: TestClient) -> Non
     assert len(items) == 1
     assert items[0]["id"] == client_id
     assert items[0]["unreviewed_count"] == 1
-    assert items[0]["verified_count"] == 2
+    # AUTO_VERIFIED + VERIFIED + EXPORTED — exporting follows verification.
+    assert items[0]["verified_count"] == 3
 
 
 def test_list_clients_counts_do_not_leak_across_workspaces(

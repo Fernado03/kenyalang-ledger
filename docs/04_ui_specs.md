@@ -147,8 +147,10 @@ delta reconciles when `|Δ| <= 2` cents. This matches the backend reconciler's `
   line whose `line_total` differs from `qty × unit_price` by more than
   `TOLERANCE_CENTS * 100n` marks the draft `valid = false`, names the offending fields, and
   disables **Verify & Next** (`Fix {field} before verifying.`).
-* A registered-looking SST number (`^[A-Z]\d+-\d+-\d+$`, e.g. `W10-1808-32000018`) with zero
-  tax adds the amber chip `Missing SST on Registered Merchant`.
+* An SST number anywhere in the field (`[A-Z]\d+-\d+-\d+`, upper-cased before matching, e.g.
+  `W10-1808-32000018` or `200401032489 / Y24-1808-31015655`) with zero tax adds the amber chip
+  `Missing SST on Registered Merchant`. The chip mirrors `extract_sst_number` in the backend so
+  the console and the audit never disagree.
 
 `MathBanner` is `role="status" aria-live="polite"`, so every recalculation is announced as the
 accountant types. It also shows `Unsaved changes` whenever the draft differs from server truth.
@@ -262,10 +264,10 @@ red card with a link back to the inbox.
 │ LEFT: ReceiptCanvas                           │ RIGHT: verification form                      │
 ├───────────────────────────────────────────────┼───────────────────────────────────────────────┤
 │ [−] 100% [+] [Reset]                          │ ← Inbox   ID: 1a2b3c4d   [StatusPill]          │
-│                                               │              [Reject (Esc)] [Verify & Next (⌘↵)]│
+│                                               │         [Reject (Esc)] [Verify & Next (Ctrl+↵)]│
 │ receipt image, wheel-zoom and drag-pan        ├───────────────────────────────────────────────┤
 │ SVG provenance/OCR overlay                    │ Merchant & Date                               │
-│ tooltip on hover                              │ [Supplier Name]        [BRN / SST Number]     │
+│ tooltip on hover                              │ [Supplier Name]        [Merchant SST]         │
 │                                               │ [Invoice Date]         [Invoice Number]       │
 │                                               │ [Merchant BRN]                                │
 │                                               ├───────────────────────────────────────────────┤
@@ -276,7 +278,7 @@ red card with a link back to the inbox.
 │                                               │ Totals & Tax Audit                            │
 │                                               │ [Subtotal] [SST (6%)] [Grand Total]           │
 │                                               │ Line Items Total RM …                         │
-│                                               │ Confidence …% · Lines … + Tax … = Total …     │
+│                                               │ Confidence —% · Lines … + Tax … = Total …     │
 │                                               │ MathBanner                                    │
 │                                               │ Audit history (collapsible)                   │
 └───────────────────────────────────────────────┴───────────────────────────────────────────────┘
@@ -286,7 +288,7 @@ red card with a link back to the inbox.
 
 * `← Inbox` link (leaves without saving), `ID: {receipt.id.slice(0, 8)}` in mono, and the
   `StatusPill`.
-* `Reject (Esc)` opens a confirmation; `Verify & Next (⌘↵)` is disabled while saving or while
+* `Reject (Esc)` opens a confirmation; `Verify & Next (Ctrl+↵)` is disabled while saving or while
   the draft is invalid. While saving the labels become `Rejecting…` and `Saving…`.
 * A successful save sets a `✓ Verified` flash (auto-cleared after 1200 ms) and immediately
   navigates to the next `STATUS_NEEDS_REVIEW` receipt in the loaded inbox list, or back to the
@@ -305,7 +307,7 @@ red card with a link back to the inbox.
 | Label | Draft field | Input |
 |---|---|---|
 | Supplier Name | `merchant_name` | text |
-| BRN / SST Number | `merchant_sst` | text |
+| Merchant SST | `merchant_sst` | text |
 | Invoice Date | `invoice_date` | `type="date"` |
 | Invoice Number | `invoice_number` | text |
 | Merchant BRN | `merchant_brn` | text |

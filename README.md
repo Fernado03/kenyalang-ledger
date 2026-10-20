@@ -146,8 +146,12 @@ export KENYALANG_ENV=local
 # Windows (PowerShell):
 $env:KENYALANG_ENV="local"
 
-# Required for extraction
+# Required for extraction. Nothing loads .env for you, so export the values
+# (or source the file: `set -a && . ./.env && set +a`) before starting uvicorn.
 export OPENAI_API_KEY="your-api-key"
+# Optional: any OpenAI-compatible relay, plus the model it serves.
+export OPENAI_BASE_URL="https://api.example.com/v1"
+export KENYALANG_LLM_MODEL="deepseek-v4.1-flash-1017"
 
 uvicorn app.main:app --reload --port 8000
 ```

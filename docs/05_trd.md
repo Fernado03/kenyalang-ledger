@@ -208,7 +208,12 @@ Return ONLY a validated JSON payload adhering to the requested schema.
 ### 5.3.2 Extraction Strategy
 
 * **Structured output framework:** `instructor` wrapping the OpenAI client in
-  **`Mode.TOOLS`** (function calling). The client is built once per process with
+  **`Mode.MD_JSON`**, with the JSON Schema appended to the user turn. Function
+  calling (`Mode.TOOLS`) is deliberately avoided: instructor sends `tool_choice`
+  as an object, which OpenAI-compatible relays reject outright
+  (`cannot unmarshal object into Go struct field ... of type string`), and
+  MD_JSON is the only mode that survives both a first-party endpoint and a
+  relay. The client is built once per process with
   `timeout=15.0` and `max_retries=0` (the SDK retry loop is disabled so it cannot
   stack on instructor's); instructor itself retries schema validation twice
   (`max_retries=2`). No Anthropic or Ollama provider is wired in. `OPENAI_BASE_URL`,
@@ -271,7 +276,20 @@ MATH_TOLERANCE: Decimal = Decimal("0.02")  # rounding slack on the arithmetic id
 CONFIDENCE_THRESHOLD: float = 0.80        # below this, a human confirms the field
 MAX_RECEIPT_AGE_DAYS: int = 365
 CRITICAL_FIELDS: tuple[str, ...] = ("merchant_name", "invoice_date", "grand_total")
-SST_NUMBER_RE = re.compile(r"^[A-Z]\d+-\d+-\d+$")
+_SST_TOKEN_RE = re.compile(r"[A-Z]\d+-\d+-\d+")
+
+def extract_sst_number(value: str | None) -> str | None:
+    """First well-formed SST number in the field, upper-cased; None otherwise.
+
+    A receipt prints the SST ID beside the BRN ("No. Pendaftaran (BRN) /
+    SST ID"), so extraction stores the concatenation. Both the audit and the
+    MyInvois export canonicalise through this helper instead of demanding the
+    whole field match the registration shape.
+    """
+    if not value:
+        return None
+    match = _SST_TOKEN_RE.search(value.strip().upper())
+    return match.group(0) if match else None
 
 class ReconcilerService:
     @staticmethod
@@ -354,12 +372,14 @@ checks see the same absence. A non-positive total with a printed subtotal is fla
 once, by `INVALID_GRAND_TOTAL`.
 
 **SST review heuristic (not a legal rule).** When `tax_amount` is absent/zero and
-`merchant_sst` matches `^[A-Z]\d+-\d+-\d+$` (upper-cased before matching, e.g.
-`W10-1808-32000018`), the audit raises `MISSING_SST_ON_REGISTERED_MERCHANT` for a
-human to check. This is triage for the review console; it does not assert that every
-SST registrant must charge tax on every receipt (exempt supplies, zero-rated items
-and non-taxable turnover exist). `merchant_sst` is the dedicated SST field; there is
-no combined `brn_tin` column or alias.
+`merchant_sst` contains an SST number — the field is upper-cased and searched for
+`[A-Z]\d+-\d+-\d+`, e.g. `W10-1808-32000018`, including when the BRN is stored alongside it
+(`"200401032489 / Y24-1808-31015655"`) — the audit raises
+`MISSING_SST_ON_REGISTERED_MERCHANT` for a human to check. The same helper canonicalises the
+number the MyInvois export ships under `schemeID: "SST"`. This is triage for the review console;
+it does not assert that every SST registrant must charge tax on every receipt (exempt supplies,
+zero-rated items and non-taxable turnover exist). `merchant_sst` is the dedicated SST field;
+there is no combined `brn_tin` column or alias.
 
 **Confidence gate and critical fields.** `_overall_confidence` returns `0.0` when any
 critical field is absent from provenance or holds `None`/`""`; otherwise it is the
@@ -564,7 +584,7 @@ renders its own `AppShell` chrome.
 | **Image preprocessing** | OpenCV (headless) | 4.9+ | EXIF orientation, CLAHE on LAB-L, bilateral filter, INTER_AREA resize. |
 | **Container decoding** | PyMuPDF + pillow-heif + Pillow | 1.24+ / 0.18+ / 10.3+ | PDF page 1 at 200 DPI, HEIC decode, header pixel probing. |
 | **OCR engine** | EasyOCR (PyTorch) | 1.7+ | English + Malay, normalized polygon boxes, cached reader. |
-| **LLM interface** | `instructor` + OpenAI SDK | 1.7+ / 1.60+ | `Mode.TOOLS`, Pydantic validation retries, 15 s timeout. |
+| **LLM interface** | `instructor` + OpenAI SDK | 1.7+ / 1.60+ | `Mode.MD_JSON` + schema in the user turn, Pydantic validation retries, 15 s timeout. |
 | **Async processing** | FastAPI `BackgroundTasks` | — | In-process, no broker or worker. |
 | **Testing** | pytest / Vitest + Testing Library | 8.2+ / 5.0 + 16.3 | 229 backend tests, 34 frontend tests. |
 | **Containerization** | Docker + Docker Compose | — | Postgres 15 + Python 3.11-slim API with a storage volume. |

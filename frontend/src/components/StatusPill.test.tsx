@@ -15,6 +15,13 @@ describe('StatusPill', () => {
     expect(screen.queryByText(/Semak OCR/)).not.toBeInTheDocument();
   });
 
+  it('treats null confidence as unknown and shows the plain needs-review pill', () => {
+    render(<StatusPill status="STATUS_NEEDS_REVIEW" flags={[]} confidence={null} />);
+    expect(screen.getByText(/Perlu Semak/)).toBeInTheDocument();
+    expect(screen.queryByText(/Semak OCR/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/0%/)).not.toBeInTheDocument();
+  });
+
   it('does not print an out-of-range score above 100%', () => {
     render(<StatusPill status="STATUS_NEEDS_REVIEW" flags={[]} confidence={1.2} />);
     expect(screen.getByText(/Perlu Semak/)).toBeInTheDocument();

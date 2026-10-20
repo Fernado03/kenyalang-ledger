@@ -90,3 +90,9 @@ graphify-out/
 # Local scratch files that must never be committed
 omp-session-*.html
 receipt_crop.jpg
+# Ad-hoc gate logs and provider probes kept in the repo root
+chat.json
+models.json
+pytest-*.txt
+*-final.txt
+gate*.txt

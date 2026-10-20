@@ -139,4 +139,26 @@ describe('auditMath', () => {
     );
     expect(untaxedPlain.missingSstOnRegisteredMerchant).toBe(false);
   });
+
+  it('detects an SST number printed alongside the BRN', () => {
+    // What extraction produces from a "No. Pendaftaran (BRN) / SST ID" header.
+    const combined = auditMath(
+      draft({
+        merchant_sst: '200401032489 / Y24-1808-31015655',
+        tax_amount: '0.00',
+        grand_total: '10.00',
+      }),
+    );
+
+    expect(combined.missingSstOnRegisteredMerchant).toBe(true);
+
+    const lowercase = auditMath(
+      draft({
+        merchant_sst: 'y24-1808-31015655',
+        tax_amount: '0.00',
+        grand_total: '10.00',
+      }),
+    );
+    expect(lowercase.missingSstOnRegisteredMerchant).toBe(true);
+  });
 });

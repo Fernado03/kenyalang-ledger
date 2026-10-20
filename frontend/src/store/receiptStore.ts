@@ -9,6 +9,7 @@ import {
   updateReceipt,
   uploadReceipts,
 } from '../api/client';
+import { formatCents, parseMoneyToCents } from '../lib/format';
 import type { Client, ClientCreate } from '../types/client';
 import type {
   DraftHeaderField,
@@ -25,6 +26,37 @@ import type {
 
 /** localStorage key for the selected client workspace. */
 const CURRENT_CLIENT_ID_KEY = 'kenyalang.current_client_id';
+
+/**
+ * Exact `qty × unit price` in cents (qty is a plain count, both sides parsed as
+ * hundredths through BigInt). Returns `null` when either side is unparseable or
+ * the quantity is not positive, so a bad keystroke never writes a bogus total.
+ */
+function expectedLineCents(item: DraftLineItem): bigint | null {
+  const quantity = parseMoneyToCents(item.quantity);
+  const unitPrice = parseMoneyToCents(item.unit_price);
+  if (quantity === null || unitPrice === null || quantity <= 0n) {
+    return null;
+  }
+  return (quantity * unitPrice + 50n) / 100n;
+}
+
+/**
+ * True while the row's total still mirrors its own qty × unit price (or is
+ * blank). Once the accountant types a different total — a discount, a printed
+ * subtotal — the derived value must never overwrite their number.
+ */
+function lineTotalIsDerived(item: DraftLineItem): boolean {
+  if (item.line_total.trim() === '') {
+    return true;
+  }
+  const printed = parseMoneyToCents(item.line_total);
+  const expected = expectedLineCents(item);
+  if (expected === null) {
+    return printed === null || printed === 0n;
+  }
+  return printed !== null && printed === expected;
+}
 
 /** localStorage prefix for an in-progress review draft: `…draft.${receiptId}`. */
 const DRAFT_KEY_PREFIX = 'kenyalang.draft.';
@@ -437,9 +469,23 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
     }
     const updated: ReceiptDraft = {
       ...draft,
-      line_items: draft.line_items.map((item) =>
-        item.key === key ? { ...item, [field]: value } : item,
-      ),
+      line_items: draft.line_items.map((item) => {
+        if (item.key !== key) {
+          return item;
+        }
+        const next = { ...item, [field]: value };
+        if (field === 'quantity' || field === 'unit_price') {
+          // Keep a printed/discounted total the accountant entered; only fill
+          // rows whose total still mirrors qty × unit price.
+          if (lineTotalIsDerived(item)) {
+            const expected = expectedLineCents(next);
+            if (expected !== null) {
+              next.line_total = formatCents(expected);
+            }
+          }
+        }
+        return next;
+      }),
     };
     set({ draft: updated });
     persistDraftFor(get().activeReceipt?.id ?? "", updated);

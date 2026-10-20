@@ -38,6 +38,8 @@ CATEGORY_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
         "wire",
         "cable",
         "tool",
+        "spark plug",
+        "spark",
     ),
     "WORKSHOP": (
         "oil",
@@ -53,6 +55,7 @@ CATEGORY_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
         "workshop",
         "bengkel",
         "spare",
+        "gear",
     ),
     "RETAIL": (
         "baju",

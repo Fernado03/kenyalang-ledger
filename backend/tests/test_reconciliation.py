@@ -25,6 +25,7 @@ from app.services.reconciler import (
     MATH_TOLERANCE,
     MAX_RECEIPT_AGE_DAYS,
     ReconcilerService,
+    extract_sst_number,
 )
 
 TODAY = date(2026, 10, 5)
@@ -274,6 +275,25 @@ def test_low_confidence_line_item_routes_to_review() -> None:
     assert "LOW_CONFIDENCE_line_items[0]" in result.flags
 
 
+def test_two_low_confidence_fields_produce_one_flag_each() -> None:
+    parsed = _parsed()
+    parsed.fields = [
+        ExtractedField(name="merchant_name", confidence=0.50),
+        ExtractedField(name="merchant_sst", confidence=0.60),
+        ExtractedField(name="invoice_date", confidence=0.55),
+        ExtractedField(name="grand_total", confidence=0.95),
+    ]
+
+    result = ReconcilerService.audit_receipt(parsed, today=TODAY)
+
+    # Names must never be concatenated into "merchant_sst_invoice_date".
+    assert [f for f in result.flags if f.startswith("LOW_CONFIDENCE_")] == [
+        "LOW_CONFIDENCE_merchant_name",
+        "LOW_CONFIDENCE_merchant_sst",
+        "LOW_CONFIDENCE_invoice_date",
+    ]
+
+
 def test_confidence_exactly_at_threshold_passes() -> None:
     parsed = _parsed()
     parsed.fields = [
@@ -369,6 +389,29 @@ def test_unregistered_merchant_without_tax_is_not_flagged() -> None:
     )
 
     assert "MISSING_SST_ON_REGISTERED_MERCHANT" not in result.flags
+
+
+def test_sst_number_wrapped_with_brn_still_counts_as_registered() -> None:
+    """Receipts print the SST ID beside the BRN; the audit must still see it.
+
+    ``"200401032489 / Y24-1808-31015655"`` is what extraction produces from a
+    header like "No. Pendaftaran (BRN) / SST ID". Requiring the whole field to
+    match the registration pattern silently suppresses the missing-tax flag on a
+    genuinely SST-registered merchant.
+    """
+    result = ReconcilerService.audit_receipt(
+        _parsed(
+            merchant_sst="200401032489 / y24-1808-31015655",
+            tax_amount=Decimal("0.00"),
+            subtotal=Decimal("105.47"),
+            grand_total=Decimal("105.47"),
+            line_items=[],
+        ),
+        today=TODAY,
+    )
+
+    assert extract_sst_number("200401032489 / y24-1808-31015655") == "Y24-1808-31015655"
+    assert "MISSING_SST_ON_REGISTERED_MERCHANT" in result.flags
 
 
 # --------------------------------------------------------------------------- #

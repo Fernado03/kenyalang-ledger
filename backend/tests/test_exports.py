@@ -50,6 +50,8 @@ def _seed_receipt(
     client_id: uuid.UUID,
     *,
     merchant_name: str = "Kedai Hardware",
+    merchant_brn: str | None = None,
+    merchant_sst: str | None = None,
     invoice_number: str = "INV-001",
     invoice_date: date | None = date(2026, 9, 12),
     status: ReceiptStatus = ReceiptStatus.STATUS_VERIFIED,
@@ -72,6 +74,8 @@ def _seed_receipt(
             file_size_bytes=128,
             status=status,
             merchant_name=merchant_name,
+            merchant_brn=merchant_brn,
+            merchant_sst=merchant_sst,
             invoice_date=invoice_date,
             invoice_number=invoice_number,
             subtotal=Decimal(subtotal),
@@ -199,6 +203,53 @@ def test_myinvois_line_taxes_sum_to_document_total(accountant_id: uuid.UUID) -> 
 
     line_cents = sum(round(amount * 100) for amount in line_taxes)
     assert line_cents == round(document_tax * 100) == 7
+
+
+def test_myinvois_sst_party_id_is_the_registration_token_only(
+    accountant_id: uuid.UUID,
+) -> None:
+    """A stored SST field that also carries the BRN must not leak into the party ID.
+
+    Extraction on the demo receipt produced ``"200401032489 / Y24-1808-31015655"``;
+    exporting that verbatim ships a malformed ``schemeID: "SST"`` value to MyInvois.
+    """
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(
+        client_id,
+        invoice_number="INV-SST",
+        merchant_brn="200401032489",
+        merchant_sst="200401032489 / Y24-1808-31015655",
+    )
+
+    with SessionLocal() as db:
+        payload = generate_myinvois_json(client_id, month="2026-09", db=db)
+
+    party = payload["Invoice"][0]["AccountingSupplierParty"][0]["Party"][0]
+    ids = {pid["ID"][0]["schemeID"]: pid["ID"][0]["_"] for pid in party["PartyIdentification"]}
+
+    assert ids["SST"] == "Y24-1808-31015655"
+    assert ids["BRN"] == "200401032489"
+
+
+def test_myinvois_omits_unparseable_sst_instead_of_exporting_it(
+    accountant_id: uuid.UUID,
+) -> None:
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(
+        client_id,
+        invoice_number="INV-SST-BAD",
+        merchant_brn="200401032489",
+        merchant_sst="not-a-number",
+    )
+
+    with SessionLocal() as db:
+        payload = generate_myinvois_json(client_id, month="2026-09", db=db)
+
+    party = payload["Invoice"][0]["AccountingSupplierParty"][0]["Party"][0]
+    schemes = [pid["ID"][0]["schemeID"] for pid in party["PartyIdentification"]]
+
+    assert "SST" not in schemes
+    assert schemes == ["BRN"]
 
 
 # --------------------------------------------------------------------------- #

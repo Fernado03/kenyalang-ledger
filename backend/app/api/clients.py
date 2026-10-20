@@ -89,6 +89,11 @@ def list_clients(db: DbSession, accountant_id: AccountantId) -> ClientListRespon
                         (
                             ReceiptStatus.STATUS_AUTO_VERIFIED,
                             ReceiptStatus.STATUS_VERIFIED,
+                            # Exporting is a step after verification, so an
+                            # exported receipt is still a verified one; without
+                            # this a client whose whole month was exported shows
+                            # a misleading "0 verified".
+                            ReceiptStatus.STATUS_EXPORTED,
                         )
                     ),
                     1,

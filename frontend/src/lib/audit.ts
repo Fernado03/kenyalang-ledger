@@ -22,8 +22,20 @@ export interface MathAudit {
   missingSstOnRegisteredMerchant: boolean;
 }
 
-/** LHDN SST registration number shape, e.g. `W10-1808-32000018`. */
-const SST_NUMBER_PATTERN = /^[A-Z]\d+-\d+-\d+$/;
+/** LHDN SST registration number shape, e.g. `W10-1808-32000018`.
+ *
+ * Anchors are deliberately dropped: receipts print the SST ID beside the BRN
+ * ("200401032489 / Y24-1808-31015655"), so a full-match test would hide the
+ * missing-tax chip on a genuinely SST-registered merchant. Mirrors
+ * `extract_sst_number` in backend `services/reconciler.py`.
+ */
+const SST_NUMBER_PATTERN = /[A-Z]\d+-\d+-\d+/;
+
+/** True when the field carries a well-formed SST registration number. */
+export function hasSstNumber(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return SST_NUMBER_PATTERN.test(value.trim().toUpperCase());
+}
 
 /** Tolerance in cents: Δ ≤ RM 0.02 counts as reconciled. */
 const TOLERANCE_CENTS = 2n;
@@ -86,7 +98,7 @@ export function auditMath(draft: ReceiptDraft): MathAudit {
   )} (Difference: RM ${formatCents(magnitude)})`;
 
   const missingSstOnRegisteredMerchant =
-    resolvedTax === 0n && SST_NUMBER_PATTERN.test(draft.merchant_sst.trim());
+    resolvedTax === 0n && hasSstNumber(draft.merchant_sst);
 
   return {
     lineCents,

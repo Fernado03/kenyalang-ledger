@@ -107,7 +107,7 @@ function LabelledInput({
 /**
  * SCR-03 split-screen review console: receipt viewport on the left, the
  * correction form and math audit on the right, with the accountant-only
- * keyboard workflow (⌘↵ save, Alt+A add line, Alt+Backspace delete, Esc out).
+ * keyboard workflow (Ctrl+↵ save, Alt+A add line, Alt+Backspace delete, Esc out).
  */
 export default function ReviewPage(): JSX.Element {
   const { clientId, receiptId } = useParams<{ clientId: string; receiptId: string }>();
@@ -463,7 +463,7 @@ export default function ReviewPage(): JSX.Element {
               disabled={saveState === 'saving' || !audit.valid}
               onClick={() => void saveAndNext()}
             >
-              {saveState === 'saving' ? 'Saving…' : 'Verify & Next (⌘↵)'}
+              {saveState === 'saving' ? 'Saving…' : 'Verify & Next (Ctrl+↵)'}
             </button>
           </div>
         </div>
@@ -511,7 +511,7 @@ export default function ReviewPage(): JSX.Element {
               onBlur={clearActiveField}
             />
             <LabelledInput
-              label="BRN / SST Number"
+              label="Merchant SST"
               field="merchant_sst"
               value={draft?.merchant_sst ?? ''}
               onChange={setDraftField}
