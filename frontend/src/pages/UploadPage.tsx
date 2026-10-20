@@ -1,12 +1,18 @@
 import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
+import { Icon } from '../components/Icon';
+import PageHeader from '../components/PageHeader';
+import StatusPill from '../components/StatusPill';
 import { useReceiptStore } from '../store/receiptStore';
 
 const FILE_INPUT_ACCEPT = 'image/jpeg,image/png,image/heic,application/pdf';
 
-const UPLOAD_BUTTON_CLASS =
-  'inline-flex h-11 cursor-pointer items-center justify-center rounded-lg border border-brand-900 bg-brand-900 px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-700 focus-within:ring-2 focus-within:ring-brand-900 focus-within:ring-offset-2';
+const CAPTURE_BUTTON_CLASS =
+  'flex h-24 w-full cursor-pointer items-center justify-center gap-3 rounded-sm bg-brand-900 text-ui font-semibold text-brand-50 transition-colors duration-100 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-50';
+
+const PICK_BUTTON_CLASS =
+  'flex h-14 w-full cursor-pointer items-center justify-center gap-2 rounded-sm border border-border-strong bg-surface text-ui font-semibold text-text-primary transition-colors duration-100 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-700';
 
 /** SCR-02b mobile capture: upload receipts straight from a phone camera. */
 export default function UploadPage() {
@@ -38,38 +44,45 @@ export default function UploadPage() {
 
   return (
     <AppShell clientId={currentClientId ?? undefined}>
-      <div className="mx-auto max-w-2xl space-y-6 px-6 py-8">
-        <div className="rounded-xl border border-border bg-surface p-5 shadow-card">
-          <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
-            Upload receipts
-          </h1>
-          <p className="mt-1 text-sm text-text-secondary">
-            Workspace:{' '}
-            <span className="font-semibold text-text-primary">
-              {client?.business_name ?? (currentClientId ? 'Selected client' : 'No client selected')}
-            </span>
-          </p>
-        </div>
+      <div className="page-shell">
+        <PageHeader
+          eyebrow="CAPTURE"
+          title="Upload receipts"
+          meta={
+            client?.business_name ??
+            (currentClientId !== null ? 'Selected client' : 'Choose a workspace to begin')
+          }
+          actions={
+            currentClientId !== null ? (
+              <Link to={`/clients/${currentClientId}/inbox`} className="btn btn-ghost">
+                <Icon name="arrow-left" size={16} />
+                Inbox
+              </Link>
+            ) : undefined
+          }
+        />
 
         {currentClientId === null ? (
-          <div className="rounded-xl border border-border bg-surface p-6 text-center shadow-card">
-            <p className="text-sm font-semibold text-text-primary">
+          <div className="mt-8 max-w-[560px] border-y border-border py-6">
+            <p className="text-ui font-semibold text-text-primary">
               Select a client workspace first
             </p>
-            <p className="mt-1 text-sm text-text-secondary">
+            <p className="mt-1 text-body text-text-secondary">
               Receipts are uploaded into the selected client.
             </p>
-            <Link
-              to="/clients"
-              className="mt-4 inline-flex h-11 items-center rounded-lg border border-border bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
-            >
+            <Link to="/clients" className="btn btn-secondary mt-4">
               Choose a client
             </Link>
           </div>
         ) : (
-          <div className="space-y-4 rounded-xl border border-border bg-surface p-6 shadow-card">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className={UPLOAD_BUTTON_CLASS}>
+          <main className="mt-8 max-w-[560px] space-y-5">
+            <div className="space-y-3">
+              <label
+                className={`${CAPTURE_BUTTON_CLASS} ${
+                  uploadState === 'uploading' ? 'pointer-events-none opacity-40' : 'hover:bg-brand-700'
+                }`}
+              >
+                <Icon name="camera" size={24} />
                 Take photo
                 <input
                   key={`camera-${inputKey}`}
@@ -82,7 +95,12 @@ export default function UploadPage() {
                   onChange={(event) => handleFiles(event.target.files)}
                 />
               </label>
-              <label className={UPLOAD_BUTTON_CLASS}>
+              <label
+                className={`${PICK_BUTTON_CLASS} ${
+                  uploadState === 'uploading' ? 'pointer-events-none opacity-40' : 'hover:bg-surface-subtle'
+                }`}
+              >
+                <Icon name="upload" size={18} />
                 Choose files
                 <input
                   key={`files-${inputKey}`}
@@ -97,12 +115,12 @@ export default function UploadPage() {
               </label>
             </div>
 
-            <p className="text-xs text-text-secondary">
-              JPEG, PNG, HEIC or PDF. Up to 50 files per batch, 15 MiB each,
-              50 MiB per batch. Processing continues in the background.
+            <p className="font-mono text-micro text-text-muted">
+              JPEG, PNG, HEIC, PDF · 50 files per batch · 15 MiB each · 50 MiB per batch
             </p>
+            <p className="text-label text-text-muted">Processing continues in the background.</p>
 
-            <div aria-live="polite" role="status" className="min-h-6 text-sm">
+            <div aria-live="polite" role="status" className="min-h-5 font-mono text-label">
               {uploadState === 'uploading' ? (
                 <span className="text-text-secondary">Uploading…</span>
               ) : null}
@@ -118,37 +136,25 @@ export default function UploadPage() {
             </div>
 
             {uploadResult !== null && uploadResult.uploaded.length > 0 ? (
-              <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+              <ul className="divide-y divide-border border-y border-border">
                 {uploadResult.uploaded.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
-                  >
+                  <li key={item.id} className="flex items-center justify-between gap-3 py-3">
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-text-primary">
+                      <span className="block truncate text-ui text-text-primary">
                         {item.filename}
                       </span>
                       {item.error ? (
-                        <span className="block text-mismatch-text">{item.error}</span>
+                        <span className="mt-1 block text-label text-mismatch-text">
+                          {item.error}
+                        </span>
                       ) : null}
                     </span>
-                    <span className="font-mono-numbers text-text-secondary">
-                      {item.status}
-                    </span>
+                    <StatusPill status={item.status} flags={[]} processingError={item.error ?? null} />
                   </li>
                 ))}
               </ul>
             ) : null}
-
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link
-                to={`/clients/${currentClientId}/inbox`}
-                className="inline-flex h-11 items-center rounded-lg border border-border bg-surface px-4 text-sm text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
-              >
-                ← Inbox
-              </Link>
-            </div>
-          </div>
+          </main>
         )}
       </div>
     </AppShell>

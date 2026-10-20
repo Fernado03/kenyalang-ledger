@@ -1,19 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getDashboardSummary } from '../api/client';
-import type { DashboardSummary } from '../api/client';
+import type { ClientSummary, DashboardSummary } from '../api/client';
 import AppShell from '../components/AppShell';
 import { EmptyState, ErrorBanner, LoadingSkeleton } from '../components/DataStates';
+import { Icon } from '../components/Icon';
+import PageHeader from '../components/PageHeader';
+import { formatMoneyDisplay } from '../lib/format';
 import { useReceiptStore } from '../store/receiptStore';
 
 function currentMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
-
-const HEADER_CLASS =
-  'px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-text-muted';
-const CELL_CLASS = 'px-3 py-2 text-sm text-text-secondary';
 
 /** SCR-06 spend dashboard: month total, top suppliers, category split. */
 export default function DashboardPage() {
@@ -27,7 +26,8 @@ export default function DashboardPage() {
   }>({ requestKey: '', summary: null, error: null });
   const clients = useReceiptStore((state) => state.clients);
   const loadClients = useReceiptStore((state) => state.loadClients);
-  const client = clients.find((item) => item.id === clientId) ?? null;
+  // The list endpoint carries the aggregates, but the store types clients as Client.
+  const client = (clients as ClientSummary[]).find((item) => item.id === clientId) ?? null;
 
   useEffect(() => {
     if (clients.length === 0) {
@@ -65,37 +65,44 @@ export default function DashboardPage() {
   if (!clientId) {
     return (
       <AppShell>
-        <div className="p-6">
+        <div className="page-shell">
           <ErrorBanner message="No workspace client selected." />
         </div>
       </AppShell>
     );
   }
 
-  const maxCategorySpend = Math.max(
-    0,
-    ...(summary?.category_breakdown ?? []).map((row) => Number(row.total_spend) || 0),
-  );
+  const reviewed = client === null ? '—' : String(client.verified_count ?? 0);
+  const needsReview = client === null ? '—' : String(client.unreviewed_count ?? 0);
+  const totalReceipts =
+    client === null ? '—' : String((client.verified_count ?? 0) + (client.unreviewed_count ?? 0));
 
   return (
     <AppShell clientId={clientId}>
-      <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
-              Dashboard
-            </h1>
-            <p className="mt-1 text-xs text-text-secondary">
-              {client?.business_name ?? 'Client workspace'} · verified and exported
-              receipts only
-            </p>
-          </div>
-          <div className="flex items-end gap-3">
+      <div className="page-shell space-y-7">
+        <PageHeader
+          eyebrow={`WORKSPACE · ${client?.registration_number ?? 'CLIENTS'}`}
+          title="Dashboard"
+          meta={
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-text-primary">
+                {client?.business_name ?? 'Client workspace'}
+              </span>
+              <span aria-hidden="true" className="text-text-muted">
+                ·
+              </span>
+              <span className="text-label text-text-muted">
+                verified and exported receipts only
+              </span>
+              <Link to={`/clients/${clientId}/inbox`} className="link-quiet text-label">
+                <Icon name="arrow-left" size={14} />
+                Inbox
+              </Link>
+            </div>
+          }
+          actions={
             <div>
-              <label
-                htmlFor="dashboard-month"
-                className="block text-xs font-semibold uppercase tracking-wider text-text-secondary"
-              >
+              <label htmlFor="dashboard-month" className="field-label">
                 Month
               </label>
               <input
@@ -103,17 +110,11 @@ export default function DashboardPage() {
                 type="month"
                 value={month}
                 onChange={(event) => setMonth(event.target.value)}
-                className="mt-1 h-11 border border-border bg-canvas px-3 text-sm font-mono-numbers text-text-primary focus-visible:border-border-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-900"
+                className="field-input mt-0 w-auto font-mono-numbers"
               />
             </div>
-            <Link
-              to={`/clients/${clientId}/inbox`}
-              className="inline-flex h-11 items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
-            >
-              ← Inbox
-            </Link>
-          </div>
-        </div>
+          }
+        />
 
         {error !== null ? (
           <ErrorBanner message={error} onRetry={() => setReloadKey((key) => key + 1)} />
@@ -128,93 +129,86 @@ export default function DashboardPage() {
           />
         ) : (
           <>
-            <section className="rounded-xl border border-brand-900 bg-brand-900 px-6 py-5 text-white shadow-card">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-brand-50/80">
-                Total spend · {summary.month}
-              </h2>
-              <p className="mt-2 font-mono-numbers text-4xl font-semibold tracking-tight text-white">
-                {summary.total_spend}
-              </p>
-            </section>
+            <dl className="grid grid-cols-1 gap-px border-y border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: 'Spend this month', value: formatMoneyDisplay(summary.total_spend) },
+                { label: 'Receipts reviewed', value: reviewed },
+                { label: 'Needs review', value: needsReview },
+                { label: 'Total receipts', value: totalReceipts },
+              ].map((stat) => (
+                <div key={stat.label} className="bg-canvas px-4 py-4 sm:px-5 sm:py-5">
+                  <dt className="section-label">{stat.label}</dt>
+                  <dd className="mt-1.5 break-words font-mono-numbers text-title text-text-primary sm:text-display">
+                    {stat.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <p className="-mt-4 text-label text-text-muted">
+              Spend covers the selected month; receipt counts cover the whole workspace.
+            </p>
 
-            <section className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
-              <h2 className="p-5 pb-3 text-sm font-semibold text-text-primary">
-                Top suppliers
-              </h2>
+            <section>
+              <h2 className="section-title">Top suppliers</h2>
               {summary.top_suppliers.length === 0 ? (
-                <p className="px-5 pb-5 text-sm text-text-secondary">
+                <p className="mt-2 text-ui text-text-secondary">
                   No supplier totals for this month.
                 </p>
               ) : (
-                <div className="relative overflow-x-auto">
-                <table className="w-full min-w-[20rem]" aria-label="Top suppliers by spend">
-                  <thead className="border-y border-border bg-surface-subtle/70">
+                <div className="mt-3 overflow-x-auto">
+                  <table className="data-table" aria-label="Top suppliers by spend">
+                    <thead>
+                      <tr>
+                        <th>Supplier</th>
+                        <th className="text-right">Receipts</th>
+                        <th className="text-right">Spend</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.top_suppliers.map((supplier) => (
+                        <tr key={supplier.supplier_name}>
+                          <td className="break-words font-semibold text-text-primary">
+                            {supplier.supplier_name}
+                          </td>
+                          <td className="text-right font-mono-numbers">
+                            {supplier.receipt_count}
+                          </td>
+                          <td className="text-right font-mono-numbers">
+                            {formatMoneyDisplay(supplier.total_spend)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section>
+              <h2 className="section-title">Spend by category</h2>
+              <p className="mt-1 text-label text-text-muted">
+                Pre-tax line totals; document tax is excluded.
+              </p>
+              <div className="mt-3 overflow-x-auto">
+                <table className="data-table" aria-label="Spend by category">
+                  <thead>
                     <tr>
-                      <th className={HEADER_CLASS}>Supplier</th>
-                      <th className={`${HEADER_CLASS} text-right`}>Receipts</th>
-                      <th className={`${HEADER_CLASS} text-right`}>Spend</th>
+                      <th>Category</th>
+                      <th className="text-right">Spend</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.top_suppliers.map((supplier) => (
-                      <tr
-                        key={supplier.supplier_name}
-                        className="h-dense-row border-b border-border last:border-b-0 hover:bg-surface-subtle/60"
-                      >
-                        <td className="px-3 py-2 text-sm font-semibold text-text-primary">
-                          {supplier.supplier_name}
-                        </td>
-                        <td className={`${CELL_CLASS} text-right font-mono-numbers`}>
-                          {supplier.receipt_count}
-                        </td>
-                        <td className={`${CELL_CLASS} text-right font-mono-numbers`}>
-                          {supplier.total_spend}
+                    {summary.category_breakdown.map((row) => (
+                      <tr key={row.category}>
+                        <td className="font-semibold text-text-primary">{row.category}</td>
+                        <td className="text-right font-mono-numbers">
+                          {formatMoneyDisplay(row.total_spend)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                </div>
-              )}
-            </section>
-
-            <section className="rounded-xl border border-border bg-surface shadow-card">
-              <h2 className="px-5 pt-5 text-sm font-semibold text-text-primary">
-                Spend by category
-              </h2>
-              <p className="px-5 pt-1 text-[11px] text-text-muted">
-                Pre-tax line totals; document tax is excluded.
-              </p>
-              <ul className="space-y-3 p-5">
-                {summary.category_breakdown.map((row) => {
-                  const width =
-                    maxCategorySpend > 0
-                      ? `${Math.max(
-                          2,
-                          ((Number(row.total_spend) || 0) / maxCategorySpend) * 100,
-                        )}%`
-                      : '0%';
-                  return (
-                    <li key={row.category}>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-text-primary">
-                          {row.category}
-                        </span>
-                        <span className="font-mono-numbers text-text-secondary">
-                          {row.total_spend}
-                        </span>
-                      </div>
-                      <div
-                        className="mt-1 h-2 w-full rounded-full bg-surface-subtle"
-                        role="img"
-                        aria-label={`${row.category}: ${row.total_spend}`}
-                      >
-                        <div className="h-2 rounded-full bg-brand-700" style={{ width }} />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+              </div>
             </section>
           </>
         )}
