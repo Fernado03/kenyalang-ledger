@@ -14,6 +14,7 @@ Nothing here touches the database or the filesystem.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -59,6 +60,16 @@ CRITICAL LOCAL KNOWLEDGE:
 
 Return ONLY a validated JSON payload adhering to the requested schema.
 """
+
+# Appended to the user turn: MD_JSON is prompt-based, so the model only sees the
+# schema if we spell it out. Computed once -- it is a pure function of the model.
+_SCHEMA_HINT: Final = (
+    "\n\nRespond with minified JSON only, no prose and no markdown fences, "
+    "conforming to this JSON Schema:\n"
+    + json.dumps(
+        ExtractedReceiptData.model_json_schema(), separators=(",", ":"), ensure_ascii=False
+    )
+)
 
 MODEL_ENV: Final = "KENYALANG_LLM_MODEL"
 BASE_URL_ENV: Final = "OPENAI_BASE_URL"
@@ -228,9 +239,12 @@ def get_llm_client() -> instructor.Instructor:
         # instructor's validation retries and blow the §5.3.2 time budget.
         max_retries=0,
     )
-    # TOOLS (function calling) rather than JSON mode: it is the only mode that
-    # accepts the full Pydantic surface we need (Decimal, date, Optional).
-    return instructor.from_openai(client, mode=instructor.Mode.TOOLS)
+    # MD_JSON, not TOOLS: OpenAI-compatible relays frequently reject the object
+    # form of ``tool_choice`` that instructor sends for TOOLS mode
+    # ("cannot unmarshal object into Go struct field ... of type string"), which
+    # would make extraction fail against a perfectly good provider. The schema is
+    # carried in the user turn instead -- see ``_SCHEMA_HINT``.
+    return instructor.from_openai(client, mode=instructor.Mode.MD_JSON)
 
 
 def _is_timeout_error(exc: BaseException) -> bool:
@@ -270,7 +284,7 @@ def extract_receipt_data(
             max_retries=2,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": render_tokens(tokens)},
+                {"role": "user", "content": render_tokens(tokens) + _SCHEMA_HINT},
             ],
         )
     except Exception as exc:  # instructor retries already exhausted

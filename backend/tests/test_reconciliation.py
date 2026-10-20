@@ -275,6 +275,25 @@ def test_low_confidence_line_item_routes_to_review() -> None:
     assert "LOW_CONFIDENCE_line_items[0]" in result.flags
 
 
+def test_two_low_confidence_fields_produce_one_flag_each() -> None:
+    parsed = _parsed()
+    parsed.fields = [
+        ExtractedField(name="merchant_name", confidence=0.50),
+        ExtractedField(name="merchant_sst", confidence=0.60),
+        ExtractedField(name="invoice_date", confidence=0.55),
+        ExtractedField(name="grand_total", confidence=0.95),
+    ]
+
+    result = ReconcilerService.audit_receipt(parsed, today=TODAY)
+
+    # Names must never be concatenated into "merchant_sst_invoice_date".
+    assert [f for f in result.flags if f.startswith("LOW_CONFIDENCE_")] == [
+        "LOW_CONFIDENCE_merchant_name",
+        "LOW_CONFIDENCE_merchant_sst",
+        "LOW_CONFIDENCE_invoice_date",
+    ]
+
+
 def test_confidence_exactly_at_threshold_passes() -> None:
     parsed = _parsed()
     parsed.fields = [

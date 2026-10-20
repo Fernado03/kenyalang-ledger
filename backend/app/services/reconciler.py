@@ -112,11 +112,12 @@ class ReconcilerService:
             flags.append("MISSING_SST_ON_REGISTERED_MERCHANT")
 
         # 4. Confidence gate
-        low_confidence = [
-            f.name for f in data.get_fields() if f.confidence < CONFIDENCE_THRESHOLD
-        ]
-        if low_confidence:
-            flags.append(f"LOW_CONFIDENCE_{'_'.join(low_confidence)}")
+        # One flag per field: joining the names produced a single chip reading
+        # "LOW_CONFIDENCE_merchant_sst_invoice_date", which is indistinguishable
+        # from a field genuinely called that.
+        for field in data.get_fields():
+            if field.confidence < CONFIDENCE_THRESHOLD:
+                flags.append(f"LOW_CONFIDENCE_{field.name}")
 
         # 5. Critical-field provenance: a value with no OCR evidence behind it
         # cannot be auto-verified, whatever the arithmetic says.
