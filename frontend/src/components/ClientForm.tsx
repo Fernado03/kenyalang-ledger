@@ -3,7 +3,7 @@ import { useReceiptStore } from '../store/receiptStore'
 import type { Client } from '../types/client'
 
 const INPUT_CLASS =
-  'h-11 w-full border border-border bg-surface px-3 text-sm text-text-primary transition-colors duration-100 ease-out placeholder:text-text-muted focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
+  'mt-1.5 h-11 w-full border border-border bg-surface px-3 text-sm text-text-primary transition-colors duration-100 ease-out placeholder:text-text-muted focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
 
 const LABEL_CLASS = 'block text-xs font-medium text-text-secondary'
 

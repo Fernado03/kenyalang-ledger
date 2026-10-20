@@ -47,7 +47,7 @@ export default function MathBanner({ audit, missingSst, dirty }: MathBannerProps
         </p>
       ) : (
         <p className="text-sm font-semibold">
-          <span aria-hidden="true">⚠️</span> Math Mismatch:{' '}
+          <span aria-hidden="true">!</span> Math Mismatch:{' '}
           <span className="font-mono-numbers">{audit.message}</span>
         </p>
       )}

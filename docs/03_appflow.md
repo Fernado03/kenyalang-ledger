@@ -176,7 +176,7 @@ $$\Delta = \left| \sum (\text{item.qty} \times \text{item.unit\_price}) + \text{
 
 2. **Reconciliation States:**
     * **$\Delta \le 0.02$:** Field displays green checkmark `[✓ Math Matches]`.
-    * **$\Delta > 0.02$:** Field turns high-contrast Amber/Red and displays discrepancy calculation: `[⚠️ Math Mismatch: Line items total RM 99.50 + Tax RM 5.97 ≠ Grand Total RM 108.00 (Difference: RM 2.53)]`.
+    * **$\Delta > 0.02$:** Field turns high-contrast Amber/Red and displays discrepancy calculation: `[! Math Mismatch: Line items total RM 99.50 + Tax RM 5.97 ≠ Grand Total RM 108.00 (Difference: RM 2.53)]`.
 
 3. **Missing Tax Logic:**
     * If `sst_amount` is 0 or null, check if `brn_tin` contains an SST registration number. If yes, flag: `[Missing SST on Registered Merchant]`.

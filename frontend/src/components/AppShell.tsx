@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useSessionStore } from '../store/sessionStore'
 
 /**
  * Dense console chrome (docs/04 §4.1): hairline borders, soft card radius,
- * 56px sticky top bar, single teal accent. Opt-in per page — App.tsx does not
- * wrap routes in it.
+ * 56px sticky top bar, single teal accent. Used by every console page.
  */
 function navLinkClass({ isActive }: { isActive: boolean }) {
   return `inline-flex h-10 items-center rounded-lg px-3 text-sm whitespace-nowrap transition-colors duration-100 ease-out focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
@@ -24,6 +23,8 @@ export default function AppShell({
 }) {
   const accountantId = useSessionStore((state) => state.accountantId)
   const clearAccountantId = useSessionStore((state) => state.clearAccountantId)
+  const { pathname } = useLocation()
+  const reviewActive = pathname.includes('/review/')
 
   return (
     <div className="min-h-screen bg-canvas text-text-primary">
@@ -37,12 +38,17 @@ export default function AppShell({
           </span>
 
           <nav className="flex flex-wrap items-center gap-1" aria-label="Console">
-            <NavLink to="/clients" className={navLinkClass}>
+            <NavLink to="/clients" end className={navLinkClass}>
               Clients
             </NavLink>
             {clientId !== undefined ? (
               <>
-                <NavLink to={`/clients/${clientId}/inbox`} className={navLinkClass}>
+                <NavLink
+                  to={`/clients/${clientId}/inbox`}
+                  className={({ isActive }) =>
+                    navLinkClass({ isActive: isActive || reviewActive })
+                  }
+                >
                   Inbox
                 </NavLink>
                 <NavLink to={`/clients/${clientId}/dashboard`} className={navLinkClass}>

@@ -24,7 +24,7 @@ const DELETE_BUTTON_CLASS =
 const ADD_BUTTON_CLASS =
   'inline-flex h-11 items-center border border-border bg-surface px-3 text-sm font-medium text-text-primary transition-colors duration-100 ease-out hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
 
-/** Low-confidence OCR threshold: amber row + dashed underline + ⚡ badge. */
+/** Low-confidence OCR threshold: amber row + dashed underline + ? badge. */
 const LOW_CONFIDENCE = 0.8;
 
 function LineRow({
@@ -66,7 +66,7 @@ function LineRow({
           />
           {lowConfidence && serverItem !== undefined && (
             <span className="shrink-0 text-xs font-medium text-warning-text">
-              <span aria-hidden="true">⚡</span> {formatConfidence(serverItem.confidence)}
+              <span aria-hidden="true">?</span> {formatConfidence(serverItem.confidence)}
             </span>
           )}
         </div>

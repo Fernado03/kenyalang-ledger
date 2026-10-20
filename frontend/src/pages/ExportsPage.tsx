@@ -140,7 +140,7 @@ export default function ExportsPage(): JSX.Element {
               to={`/clients/${clientId}/inbox`}
               className="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
             >
-              ← Return to Inbox
+              ← Inbox
             </Link>
           </div>
         </div>
@@ -216,7 +216,7 @@ export default function ExportsPage(): JSX.Element {
                     <span>Generating Bundle...</span>
                   ) : (
                     <>
-                      <span aria-hidden="true">⬇</span>
+                      <span aria-hidden="true">↓</span>
                       <span>Download Both Files (1-Click)</span>
                     </>
                   )}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router-dom';
+import AppShell from '../components/AppShell';
 import LineItemsEditor from '../components/LineItemsEditor';
 import MathBanner from '../components/MathBanner';
 import ReceiptCanvas from '../components/ReceiptCanvas';
@@ -393,33 +394,38 @@ export default function ReviewPage(): JSX.Element {
 
   if (receiptLoading) {
     return (
-      <div className="grid h-dvh grid-rows-2 lg:grid-cols-2 lg:grid-rows-1" role="status" aria-busy="true">
-        <div className="animate-pulse bg-surface-subtle" />
-        <div className="animate-pulse bg-surface-subtle" />
-      </div>
+      <AppShell clientId={clientId}>
+        <div className="grid min-h-[60dvh] grid-rows-2 lg:grid-cols-2 lg:grid-rows-1" role="status" aria-busy="true">
+          <div className="animate-pulse bg-surface-subtle" />
+          <div className="animate-pulse bg-surface-subtle" />
+        </div>
+      </AppShell>
     );
   }
 
   if (activeReceipt === null) {
     const message = receiptsError ?? 'Receipt not found or it may belong to another client.';
     return (
-      <div className="grid h-dvh place-items-center bg-canvas p-6">
-        <div className="w-full max-w-md rounded-xl border border-mismatch-border bg-mismatch-bg px-4 py-6 text-center">
-          <p className="text-sm font-medium text-mismatch-text">{message}</p>
-          <Link
-            to={clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`}
-            className={`${ACTION_BUTTON_CLASS} mt-4`}
-          >
-            Back to inbox
-          </Link>
+      <AppShell clientId={clientId}>
+        <div className="grid min-h-[70dvh] place-items-center bg-canvas p-6">
+          <div className="w-full max-w-md rounded-xl border border-mismatch-border bg-mismatch-bg px-4 py-6 text-center">
+            <p className="text-sm font-medium text-mismatch-text">{message}</p>
+            <Link
+              to={clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`}
+              className={`${ACTION_BUTTON_CLASS} mt-4`}
+            >
+              Back to inbox
+            </Link>
+          </div>
         </div>
-      </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="grid h-dvh grid-rows-[40dvh_1fr] lg:grid-cols-2 lg:grid-rows-1">
-      <div className="min-h-0 min-w-0 border-b border-border lg:border-b-0 lg:border-r">
+    <AppShell clientId={clientId}>
+      <div className="grid grid-rows-[40dvh_1fr] lg:h-[calc(100dvh-57px)] lg:grid-cols-2 lg:grid-rows-1">
+        <div className="min-h-0 min-w-0 border-b border-border lg:border-b-0 lg:border-r">
         {clientId !== undefined && receiptId !== undefined ? (
           <ReceiptCanvas
             clientId={clientId}
@@ -459,7 +465,7 @@ export default function ReviewPage(): JSX.Element {
               confidence={activeReceipt.overall_confidence}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 gap-y-1">
             <button
               ref={rejectTriggerRef}
               type="button"
@@ -480,7 +486,10 @@ export default function ReviewPage(): JSX.Element {
               </span>
             ) : null}
             {!audit.valid ? (
-              <span className="text-xs font-medium text-mismatch-text" role="status">
+              <span
+                className="order-last basis-full text-xs font-medium text-mismatch-text sm:order-none sm:basis-auto"
+                role="status"
+              >
                 Fix {audit.invalidFields[0]} before verifying.
               </span>
             ) : null}
@@ -717,6 +726,7 @@ export default function ReviewPage(): JSX.Element {
           </button>
         </div>
       </dialog>
-    </div>
+      </div>
+    </AppShell>
   );
 }

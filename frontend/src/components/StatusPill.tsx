@@ -54,7 +54,7 @@ export default function StatusPill({
         data-status={status}
         lang="ms"
       >
-        <span aria-hidden="true">↗</span> Dieksport
+        <span aria-hidden="true">→</span> Dieksport
       </span>
     );
   }
@@ -82,7 +82,7 @@ export default function StatusPill({
           lang="ms"
           title={`Math mismatch: Δ RM ${delta}`}
         >
-          <span aria-hidden="true">⚠️</span> Δ RM {delta}
+          <span aria-hidden="true">!</span> Δ RM {delta}
         </span>
       );
     }
@@ -100,7 +100,7 @@ export default function StatusPill({
           lang="ms"
           title="Low OCR confidence"
         >
-          <span aria-hidden="true">⚡</span> Semak OCR ({formatConfidence(score)})
+          <span aria-hidden="true">?</span> Semak OCR ({formatConfidence(score)})
         </span>
       );
     }
@@ -111,7 +111,7 @@ export default function StatusPill({
         data-status={status}
         lang="ms"
       >
-        <span aria-hidden="true">⚠️</span> Perlu Semak
+        <span aria-hidden="true">!</span> Perlu Semak
       </span>
     );
   }
@@ -123,7 +123,7 @@ export default function StatusPill({
         data-status={status}
         lang="ms"
       >
-        <span aria-hidden="true">⏳</span> Memproses...
+        Memproses...
       </span>
     );
   }

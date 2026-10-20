@@ -59,6 +59,15 @@ see §4.4.
 
 `border-focus` (`#0F172A`) is also used as the hover-tooltip background in `ReceiptCanvas`.
 
+### Console Chrome (`frontend/src/components/AppShell.tsx`)
+
+Every authenticated console page renders inside `AppShell`: a 56px top bar with the 20px brand
+mark, the client-scoped nav (`Clients`, `Inbox`, `Dashboard`, `Exports`, `Upload`), the
+accountant id, and Sign out. `Clients` is active only on `/clients`; `Inbox` stays active on
+both the inbox and review routes. The bar is static below `sm` (it scrolls away) and sticky
+from `sm` up. The brand mark and favicon use the deep teal token; no purple placeholder
+remains.
+
 ### Typography & Tabular Numerals
 
 * **Interface font:** default Tailwind sans stack (no custom `fontFamily.sans` override).
@@ -175,12 +184,14 @@ accountant types. It also shows `Unsaved changes` whenever the draft differs fro
 
 ### 2. `SCR-02`: Batch Inbox & Upload Dropzone (`/clients/:clientId/inbox`)
 
-* **Header:** client business name (falling back to `Inbox`) and links to `← Review Clients`,
-  `Dashboard`, `Upload`, and `Exports →`.
+* **Header:** `← Clients` link, page title `Inbox`, and the client business name as a subtitle.
+  Global navigation is owned by `AppShell`; the page header does not repeat nav links.
+* **Back links:** `← Clients` on Inbox; `← Inbox` on Dashboard, Exports, Review, and Upload.
 * **Density:** 40px rows (`h-dense-row`).
 * **Columns:** Thumbnail, Supplier, Date, Items, Grand Total (right-aligned), Status, and the
   per-row action that opens the receipt in the review console.
-  * Thumbnail: 40×40 (`h-10 w-10`), fetched as an authenticated blob with
+  * Thumbnail: 36×36 (`h-9 w-9`) in a 56px preview column (`w-14`), fetched as an authenticated
+    blob with
     `X-Accountant-Id` and rendered from an object URL that is revoked on cleanup. `alt` is the
     filename. A missing image or failed fetch renders a bordered placeholder with
     `role="img"` and `aria-label="No preview for {filename}"`.
@@ -192,8 +203,9 @@ accountant types. It also shows `Unsaved changes` whenever the draft differs fro
   * Status: `StatusPill` (matrix below).
   * Action: a focusable `Review` `<button>` in the last cell. The whole row is also clickable
     for mouse users, so the button is the keyboard-accessible affordance; there is no row-level
-    Enter binding. Rows in a processing state render `Processing` and are disabled; clicking
-    anywhere on such a row does nothing.
+    Enter binding. Rows in a processing state keep the label `Review` but disable the button;
+    clicking anywhere on such a row does nothing. The status pill already communicates the
+    processing state, so the action never repeats a second `Processing` label.
 * **Row accents:** a 2px left border in `warning-border` for `STATUS_NEEDS_REVIEW`, and in
   `mismatch-border` for `ERR_UNREADABLE`, `ERR_TIMEOUT`, `ERR_FILE_CORRUPT`, or
   `ERR_EXTRACTION`.
@@ -229,12 +241,12 @@ are `aria-hidden`; the text carries meaning.
 | Status | Visual | Text | `title` |
 |---|---|---|---|
 | `STATUS_AUTO_VERIFIED`, `STATUS_VERIFIED` | verified bg/border/text | `● Selesai` | — |
-| `STATUS_EXPORTED` | `surface-subtle` + `border` + `brand-900` | `↗ Dieksport` | — |
+| `STATUS_EXPORTED` | `surface-subtle` + `border` + `brand-900` | `→ Dieksport` | — |
 | `STATUS_REJECTED` | mismatch bg/border/text | `✕ Ditolak` | — |
-| `STATUS_NEEDS_REVIEW` + a flag starting `MATH_MISMATCH_DELTA_` | mismatch bg/border/text | `⚠️ Δ RM {suffix}` | `Math mismatch: Δ RM {suffix}` |
-| `STATUS_NEEDS_REVIEW` + confidence known and `< 0.8` | warning bg/border/text | `⚡ Semak OCR ({formatConfidence(score)})` | `Low OCR confidence` |
-| `STATUS_NEEDS_REVIEW`, otherwise | warning bg/border/text | `⚠️ Perlu Semak` | — |
-| `PENDING_UPLOAD`, `UPLOADED`, `PROCESSING_OCR`, `PROCESSING_LLM`, `VALIDATING_MATH` | `surface-subtle` + `border` + `text-secondary` | `⏳ Memproses...` | — |
+| `STATUS_NEEDS_REVIEW` + a flag starting `MATH_MISMATCH_DELTA_` | mismatch bg/border/text | `! Δ RM {suffix}` | `Math mismatch: Δ RM {suffix}` |
+| `STATUS_NEEDS_REVIEW` + confidence known and `< 0.8` | warning bg/border/text | `? Semak OCR ({formatConfidence(score)})` | `Low OCR confidence` |
+| `STATUS_NEEDS_REVIEW`, otherwise | warning bg/border/text | `! Perlu Semak` | — |
+| `PENDING_UPLOAD`, `UPLOADED`, `PROCESSING_OCR`, `PROCESSING_LLM`, `VALIDATING_MATH` | `surface-subtle` + `border` + `text-secondary` | `Memproses...` | — |
 | `ERR_UNREADABLE` | mismatch bg/border/text | `✕ Tidak Boleh Dibaca` | `processingError ?? label` |
 | `ERR_TIMEOUT` | mismatch bg/border/text | `✕ Masa Tamat` | `processingError ?? label` |
 | `ERR_EXTRACTION` | mismatch bg/border/text | `✕ Ekstraksi Gagal` | `processingError ?? label` |
@@ -257,11 +269,12 @@ fallback label as their tooltip even though the backend writes that message into
 
 ### 3. `SCR-03`: Split-Screen Review Console (`/clients/:clientId/review/:receiptId`)
 
-A 50/50 desktop split: `grid h-dvh lg:grid-cols-2`, canvas left, scrolling form right. Below
-`lg` the panes stack: canvas at `40dvh` above a scrolling form, the field and total grids
-collapse to one column, and the line-item grid scrolls horizontally. Loading renders two
-pulsing panes with `role="status" aria-busy="true"`; a missing receipt renders a red card with
-a link back to the inbox.
+A 50/50 desktop split inside `AppShell`: the 57px app header sits above a
+`lg:h-[calc(100dvh-57px)] lg:grid-cols-2` grid, canvas left and scrolling form right. Below
+`lg` the panes stack: canvas at `40dvh` above the form, the field and total grids
+collapse to one column, and the line-item grid scrolls horizontally. Loading and error states
+also render inside `AppShell`, keeping the nav visible. The diagram below shows the review
+region only.
 
 ```
 ┌───────────────────────────────────────────────┬───────────────────────────────────────────────┐
@@ -328,7 +341,7 @@ it as the canvas's active field; blurring clears it.
   `Line 2 unit price`, `Line 2 total`.
 * `+ Add Line (Alt+A)` appends a row; the footer prints `{n} lines`.
 * A row whose **server** line item has `confidence < 0.8` renders on `warning-bg` with a dashed
-  underline on the description and a `⚡ {formatConfidence(...)}` badge. Editing the draft does
+  underline on the description and a `? {formatConfidence(...)}` badge. Editing the draft does
   not change that badge; it is provenance, not validation.
 * The focused row gets `bg-brand-50`, and the canvas highlights the matching
   `line_items[i]` box.
@@ -425,7 +438,7 @@ the root `AccountantGate`, and uploads into the currently selected client worksp
   reprocessing). Duplicates inside one request are deduplicated with a `seen` set. Because the
   file inputs are remounted via `inputKey` after every attempt, re-selecting the *same* file
   does fire `onChange` again and reaches that duplicate path.
-* **After upload:** a `Go to Inbox` link. The upload happens immediately on selection; there is
+* **After upload:** a `← Inbox` link. The upload happens immediately on selection; there is
   no staged-review or submit step on this page.
 
 ### 5. `SCR-05`: Export Hub (`/clients/:clientId/exports`)

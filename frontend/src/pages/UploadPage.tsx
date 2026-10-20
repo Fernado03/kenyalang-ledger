@@ -145,7 +145,7 @@ export default function UploadPage() {
                 to={`/clients/${currentClientId}/inbox`}
                 className="inline-flex h-11 items-center rounded-lg border border-border bg-surface px-4 text-sm text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
               >
-                Go to Inbox
+                ← Inbox
               </Link>
             </div>
           </div>
