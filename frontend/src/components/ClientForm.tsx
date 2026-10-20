@@ -2,14 +2,6 @@ import { useState, type FormEvent } from 'react'
 import { useReceiptStore } from '../store/receiptStore'
 import type { Client } from '../types/client'
 
-const INPUT_CLASS =
-  'mt-1.5 h-11 w-full border border-border bg-surface px-3 text-sm text-text-primary transition-colors duration-100 ease-out placeholder:text-text-muted focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
-
-const LABEL_CLASS = 'block text-xs font-medium text-text-secondary'
-
-const BUTTON_CLASS =
-  'flex h-11 items-center justify-center border border-border px-4 text-sm font-semibold transition-colors duration-100 ease-out focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none'
-
 /**
  * Create-workspace form (SCR-01 empty + header action, docs/04 §4.4 validation
  * placement). Business name is the only required field; the rest are optional.
@@ -66,89 +58,81 @@ export default function ClientForm({
     <form
       onSubmit={handleSubmit}
       noValidate
-      className="rounded-xl border border-border bg-surface p-6 shadow-card"
+      className="border-t-2 border-brand-900 bg-surface p-5 sm:p-6"
     >
-      <h2 className="text-base font-semibold tracking-tight text-text-primary">
-        New client
-      </h2>
+      <h2 className="section-title">New client</h2>
 
-      <div className="mt-4">
-        <label htmlFor="business_name" className={LABEL_CLASS}>
-          Business name
-        </label>
-        <input
-          id="business_name"
-          name="business_name"
-          required
-          value={businessName}
-          onChange={(event) => setBusinessName(event.target.value)}
-          aria-invalid={error !== null}
-          aria-describedby={error !== null ? 'error-business_name' : undefined}
-          className={INPUT_CLASS}
-          placeholder="Ah Teck Hardware Sdn Bhd"
-        />
-        {error !== null ? (
-          <p id="error-business_name" className="mt-1 text-xs text-mismatch-text">
-            {error}
-          </p>
-        ) : null}
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label htmlFor="business_name" className="field-label">
+            Business name
+          </label>
+          <input
+            id="business_name"
+            name="business_name"
+            required
+            value={businessName}
+            onChange={(event) => setBusinessName(event.target.value)}
+            aria-invalid={error !== null}
+            aria-describedby={error !== null ? 'error-business_name' : undefined}
+            className="field-input"
+            placeholder="Ah Teck Hardware Sdn Bhd"
+          />
+          {error !== null ? (
+            <p id="error-business_name" className="field-error">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <div>
+          <label htmlFor="registration_number" className="field-label">
+            Registration number
+          </label>
+          <input
+            id="registration_number"
+            name="registration_number"
+            value={registrationNumber}
+            onChange={(event) => setRegistrationNumber(event.target.value)}
+            className="field-input"
+            placeholder="002938192-K"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="sst_number" className="field-label">
+            SST number
+          </label>
+          <input
+            id="sst_number"
+            name="sst_number"
+            value={sstNumber}
+            onChange={(event) => setSstNumber(event.target.value)}
+            className="field-input"
+            placeholder="W10-1808-31000052"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="industry_category" className="field-label">
+            Industry category
+          </label>
+          <input
+            id="industry_category"
+            name="industry_category"
+            value={industryCategory}
+            onChange={(event) => setIndustryCategory(event.target.value)}
+            className="field-input"
+            placeholder="Hardware & Building Materials"
+          />
+        </div>
       </div>
 
-      <div className="mt-4">
-        <label htmlFor="registration_number" className={LABEL_CLASS}>
-          Registration number
-        </label>
-        <input
-          id="registration_number"
-          name="registration_number"
-          value={registrationNumber}
-          onChange={(event) => setRegistrationNumber(event.target.value)}
-          className={INPUT_CLASS}
-          placeholder="002938192-K"
-        />
-      </div>
-
-      <div className="mt-4">
-        <label htmlFor="sst_number" className={LABEL_CLASS}>
-          SST number
-        </label>
-        <input
-          id="sst_number"
-          name="sst_number"
-          value={sstNumber}
-          onChange={(event) => setSstNumber(event.target.value)}
-          className={INPUT_CLASS}
-          placeholder="W10-1808-31000052"
-        />
-      </div>
-
-      <div className="mt-4">
-        <label htmlFor="industry_category" className={LABEL_CLASS}>
-          Industry category
-        </label>
-        <input
-          id="industry_category"
-          name="industry_category"
-          value={industryCategory}
-          onChange={(event) => setIndustryCategory(event.target.value)}
-          className={INPUT_CLASS}
-          placeholder="Hardware & Building Materials"
-        />
-      </div>
-
-      <div className="mt-6 flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className={`${BUTTON_CLASS} border-brand-900 bg-brand-900 text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted`}
-        >
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        <button type="submit" disabled={saving} className="btn btn-primary">
           {saving ? 'Saving…' : submitLabel}
         </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className={`${BUTTON_CLASS} bg-surface text-text-secondary hover:bg-surface-subtle`}
-        >
+        <button type="button" onClick={onCancel} className="btn btn-ghost">
           Cancel
         </button>
       </div>

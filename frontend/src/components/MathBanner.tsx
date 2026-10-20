@@ -1,3 +1,4 @@
+import { Icon } from './Icon';
 import type { MathAudit } from '../lib/audit';
 
 interface MathBannerProps {
@@ -13,50 +14,57 @@ const MATCH_PREFIX = 'Math Matches — ';
 function matchBreakdown(message: string): string {
   return message.startsWith(MATCH_PREFIX) ? message.slice(MATCH_PREFIX.length) : message;
 }
-const MATCH_STRIP =
-  'flex flex-wrap items-center gap-x-3 gap-y-1 border bg-verified-bg border-verified-border px-3 py-2 text-verified-text';
 
-const MISMATCH_STRIP =
-  'flex flex-wrap items-center gap-x-3 gap-y-1 border bg-mismatch-bg border-mismatch-border px-3 py-2 text-mismatch-text';
+/** Cardless ruled strip: the 3px left rule carries the state. */
+const MATCH_STRIP = 'flex flex-wrap items-center gap-x-3 gap-y-1 border-l-[3px] border-verified-border px-3 py-2 text-verified-text';
 
-const WARNING_CHIP =
-  'inline-flex items-center border bg-warning-bg border-warning-border px-2 py-0.5 text-xs font-medium text-warning-text';
+const MISMATCH_STRIP = 'flex flex-wrap items-center gap-x-3 gap-y-1 border-l-[3px] border-mismatch-border px-3 py-2 text-mismatch-text';
+
+const WARNING_STRIP = 'flex flex-wrap items-center gap-x-3 gap-y-1 border-l-[3px] border-warning-border px-3 py-2 text-text-secondary';
 
 /**
- * SCR-03 §3.5 math audit strip: verified emerald vs. mismatch red, the
- * "missing SST on a registered merchant" warning chip, and an unsaved-changes
+ * SCR-03 §3.5 math audit strip: verified green vs. mismatch red, the
+ * "missing SST on a registered merchant" warning stamp, and an unsaved-changes
  * hint. `role="status"` + `aria-live="polite"` announce each recalculation as
  * the accountant types.
  */
 export default function MathBanner({ audit, missingSst, dirty }: MathBannerProps): JSX.Element {
+  const stateClass = !audit.valid || !audit.matches
+    ? MISMATCH_STRIP
+    : missingSst
+      ? WARNING_STRIP
+      : MATCH_STRIP;
+
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={audit.valid && audit.matches ? MATCH_STRIP : MISMATCH_STRIP}
-    >
+    <div role="status" aria-live="polite" className={stateClass}>
+      <span className="section-label">Math check</span>
+
       {!audit.valid ? (
-        <p className="text-sm font-semibold">
-          <span aria-hidden="true">✕</span> Invalid amount:{' '}
+        <p className="text-ui font-semibold">
+          <Icon name="close" size={12} className="mr-1 inline align-[-2px]" />
+          Invalid amount:{' '}
           <span className="font-mono-numbers">{audit.invalidFields.join(', ')}</span>
         </p>
       ) : audit.matches ? (
-        <p className="text-sm font-semibold">
-          <span aria-hidden="true">✓</span>{' '}
+        <p className="text-ui font-semibold">
+          <Icon name="check" size={12} className="mr-1 inline align-[-2px]" />
           <span className="font-mono-numbers">{matchBreakdown(audit.message)}</span>
         </p>
       ) : (
-        <p className="text-sm font-semibold">
-          <span aria-hidden="true">!</span> Math Mismatch:{' '}
+        <p className="text-ui font-semibold">
+          <Icon name="alert" size={12} className="mr-1 inline align-[-2px]" />
+          Math Mismatch:{' '}
           <span className="font-mono-numbers">{audit.message}</span>
         </p>
       )}
 
       {missingSst && (
-        <span className={WARNING_CHIP}>Missing SST on Registered Merchant</span>
+        <span className="stamp bg-warning-bg border-warning-border text-warning-text">
+          <Icon name="alert" size={12} /> Missing SST on registered merchant
+        </span>
       )}
 
-      {dirty && <span className="ml-auto text-xs text-text-muted">Unsaved changes</span>}
+      {dirty && <span className="ml-auto text-label text-text-muted">Unsaved changes</span>}
     </div>
   );
 }

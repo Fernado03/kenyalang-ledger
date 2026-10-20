@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { receiptImageUrl } from '../api/client';
 import AppShell from '../components/AppShell';
 import { EmptyState, ErrorBanner, LoadingSkeleton } from '../components/DataStates';
+import { Icon } from '../components/Icon';
+import PageHeader from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import UploadDropzone from '../components/UploadDropzone';
 import { formatDate, formatMoneyDisplay } from '../lib/format';
@@ -12,7 +14,7 @@ import type { ReceiptListItem, ReceiptListStatus, ReceiptStatus } from '../types
 
 const FILTER_TABS: readonly { label: string; value: ReceiptListStatus }[] = [
   { label: 'All', value: 'ALL' },
-  { label: 'Needs Review', value: 'NEEDS_REVIEW' },
+  { label: 'Needs review', value: 'NEEDS_REVIEW' },
   { label: 'Verified', value: 'VERIFIED' },
   { label: 'Exported', value: 'EXPORTED' },
   { label: 'Rejected', value: 'REJECTED' },
@@ -92,10 +94,10 @@ function ReceiptThumb({ clientId, receipt }: { clientId: string; receipt: Receip
   const showPlaceholder = accountantId === null || accountantId === '' || failed || url === null;
 
   return (
-    <div ref={holderRef} className="h-9 w-9 overflow-hidden rounded border border-border">
+    <div ref={holderRef} className="h-8 w-8 overflow-hidden rounded-[1px] border border-border">
       {showPlaceholder ? (
         <div
-          className="h-full w-full rounded bg-surface-subtle"
+          className="h-full w-full bg-surface-subtle"
           aria-label={`No preview for ${receipt.filename}`}
           role="img"
         />
@@ -104,22 +106,60 @@ function ReceiptThumb({ clientId, receipt }: { clientId: string; receipt: Receip
           src={url}
           alt={receipt.filename}
           loading="lazy"
-          className="h-full w-full rounded object-cover"
+          className="h-full w-full object-cover"
         />
       )}
     </div>
   );
 }
 
+const FLAG_LABELS: Record<string, string> = {
+  MISSING_MERCHANT_NAME: 'Missing merchant name',
+  MISSING_DATE: 'Missing date',
+  INVALID_GRAND_TOTAL: 'Invalid grand total',
+  DATE_IN_FUTURE: 'Date in the future',
+  DATE_EXCEEDS_1_YEAR: 'Date older than a year',
+  MISSING_SUBTOTAL: 'Missing subtotal',
+  MISSING_SST_ON_REGISTERED_MERCHANT: 'Missing SST on registered merchant',
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  merchant_name: 'merchant name',
+  merchant_brn: 'BRN',
+  merchant_sst: 'SST',
+  invoice_date: 'invoice date',
+  invoice_number: 'invoice number',
+  subtotal: 'subtotal',
+  tax_amount: 'tax',
+  grand_total: 'grand total',
+};
+
+function humanizeField(field: string): string {
+  return FIELD_LABELS[field] ?? field.replace(/_/g, ' ');
+}
+
 /** Flag summaries rendered under the merchant name on flagged rows. */
 function flagDetails(flags: string[]): string[] {
-  return flags.map((flag) =>
-    flag.startsWith(DELTA_PREFIX)
-      ? `Math Mismatch: Δ RM ${flag.slice(DELTA_PREFIX.length)}`
-      : flag === 'MISSING_DATE'
-        ? 'Missing Date'
-        : flag,
-  );
+  return flags.map((flag) => {
+    if (flag.startsWith(DELTA_PREFIX)) {
+      return `Math mismatch: Δ RM ${flag.slice(DELTA_PREFIX.length)}`;
+    }
+    if (flag.startsWith('LOW_CONFIDENCE_')) {
+      return `Low OCR confidence: ${humanizeField(flag.slice('LOW_CONFIDENCE_'.length))}`;
+    }
+    if (flag.startsWith('MISSING_CRITICAL_EVIDENCE_')) {
+      return `No OCR evidence: ${humanizeField(flag.slice('MISSING_CRITICAL_EVIDENCE_'.length))}`;
+    }
+    return FLAG_LABELS[flag] ?? humanizeField(flag);
+  });
+}
+
+/** Splits the formatted money string so "RM" can sit as its own label. */
+function moneyParts(value: string | null): { currency: string | null; amount: string } {
+  const text = formatMoneyDisplay(value);
+  return text.startsWith('RM ')
+    ? { currency: 'RM', amount: text.slice(3) }
+    : { currency: null, amount: text };
 }
 
 /** SCR-02 Batch Inbox: dropzone, status filter tabs, dense receipt table. */
@@ -173,7 +213,7 @@ export default function InboxPage(): JSX.Element {
   if (clientId === undefined) {
     return (
       <AppShell>
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <div className="page-shell">
           <ErrorBanner message="No client selected." />
         </div>
       </AppShell>
@@ -191,36 +231,51 @@ export default function InboxPage(): JSX.Element {
 
   return (
     <AppShell clientId={clientId}>
-      <div className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
-        <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface p-4 shadow-card sm:p-5">
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-text-primary">
-              Inbox
-            </h1>
-            <p className="mt-1 text-sm text-text-secondary">
-              {client?.business_name ?? 'Client workspace'}
-            </p>
-          </div>
-          <Link
-            to="/clients"
-            className="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
-          >
-            ← Clients
-          </Link>
-        </header>
+      <div className="page-shell space-y-7">
+        <PageHeader
+          eyebrow={`WORKSPACE · ${client?.registration_number ?? client?.business_name ?? 'CLIENT'}`}
+          title="Inbox"
+          meta={
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span>{client?.business_name ?? 'Client workspace'}</span>
+              {receiptsTotal > 0 && (
+                <>
+                  <span aria-hidden="true" className="text-text-muted">
+                    ·
+                  </span>
+                  <span className="font-mono-numbers text-label text-text-muted">
+                    receipts {pageStart}–{pageEnd} of {receiptsTotal}
+                  </span>
+                </>
+              )}
+            </span>
+          }
+          actions={
+            <>
+              <Link to="/clients" className="link-quiet min-h-11">
+                <Icon name="arrow-left" size={16} />
+                Clients
+              </Link>
+              <Link to="/upload" className="btn btn-secondary">
+                <Icon name="camera" size={18} />
+                Capture
+              </Link>
+            </>
+          }
+        />
 
         <UploadDropzone disabled={uploading} onFiles={(files) => void uploadFiles(files)} />
 
-        <div aria-live="polite" className="min-h-0 text-xs">
+        <div aria-live="polite" className="min-h-0 text-ui">
           {uploadState === 'uploading' && <p className="text-text-secondary">Uploading…</p>}
           {uploadState === 'done' && uploadResult !== null && (
             <div className="space-y-1">
-              <p className="font-medium text-text-primary">
+              <p className="font-semibold text-text-primary">
                 {uploadResult.uploaded.length} file
                 {uploadResult.uploaded.length === 1 ? '' : 's'} queued for processing.
               </p>
               {uploadResult.uploaded.some((item) => item.error !== undefined) && (
-                <ul className="space-y-0.5 text-mismatch-text">
+                <ul className="space-y-0.5 text-label text-mismatch-text">
                   {uploadResult.uploaded.map((item) =>
                     item.error === undefined ? null : (
                       <li key={item.id}>
@@ -233,30 +288,32 @@ export default function InboxPage(): JSX.Element {
             </div>
           )}
           {uploadState === 'error' && uploadResult !== null && uploadResult.failed !== null && (
-            <p className="font-medium text-mismatch-text">{uploadResult.failed}</p>
+            <p className="font-semibold text-mismatch-text">{uploadResult.failed}</p>
           )}
         </div>
 
         <div
           role="group"
           aria-label="Status filter"
-          className="flex w-full flex-wrap gap-1 rounded-lg border border-border bg-surface-subtle p-1"
+          className="-mx-5 overflow-x-auto border-b border-border px-5 sm:mx-0 sm:px-0"
         >
-          {FILTER_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              type="button"
-              aria-pressed={statusFilter === tab.value}
-              onClick={() => void setStatusFilter(tab.value)}
-              className={`min-h-10 flex-1 rounded-md px-3 text-xs font-medium whitespace-nowrap focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none ${
-                statusFilter === tab.value
-                  ? 'bg-surface text-text-primary shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          <div className="flex min-w-max items-end gap-6">
+            {FILTER_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                aria-pressed={statusFilter === tab.value}
+                onClick={() => void setStatusFilter(tab.value)}
+                className={`flex h-10 items-center border-b-2 px-0.5 text-ui whitespace-nowrap transition-colors duration-100 ${
+                  statusFilter === tab.value
+                    ? 'border-brand-900 font-semibold text-text-primary'
+                    : 'border-transparent text-text-muted hover:text-text-primary'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {receiptsError !== null && (
@@ -276,101 +333,126 @@ export default function InboxPage(): JSX.Element {
             hint="JPG, PNG, HEIC or PDF, up to 50 files per batch."
           />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-card">
-            <div className="relative overflow-x-auto">
-              <table className="w-full border-collapse text-xs" aria-label="Receipt inbox">
-                <thead>
-                  <tr className="h-dense-row border-b border-border bg-surface-subtle/70 text-left text-[11px] uppercase tracking-wider text-text-muted">
-                    <th className="w-14 pl-3 pr-1">
-                      <span className="sr-only">Preview</span>
-                    </th>
-                    <th className="px-3">Supplier</th>
-                    <th className="w-[100px] px-2">Date</th>
-                    <th className="w-20 px-2">Items</th>
-                    <th className="w-[110px] px-2 text-right">Grand Total</th>
-                    <th className="w-[130px] px-2">Status</th>
-                    <th className="w-20 px-2">
-                      <span className="sr-only">Action</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {receipts.map((receipt) => {
-                  const needsReview = receipt.status === 'STATUS_NEEDS_REVIEW';
-                  const processing = PROCESSING_STATUSES.includes(receipt.status);
-                  const failed =
-                    receipt.status === 'ERR_UNREADABLE' ||
-                    receipt.status === 'ERR_TIMEOUT' ||
-                    receipt.status === 'ERR_FILE_CORRUPT' ||
-                    receipt.status === 'ERR_EXTRACTION';
-                  const details = flagDetails(receipt.validation_flags);
-                  return (
-                    <tr
-                      key={receipt.id}
-                      onClick={() => {
-                        if (!processing) openReview(receipt.id);
-                      }}
-                      className={`h-dense-row border-b border-border hover:bg-surface-subtle ${
-                        processing ? '' : 'cursor-pointer'
-                      } ${
-                        needsReview
-                          ? 'border-l-2 border-warning-border'
-                          : failed
-                            ? 'border-l-2 border-mismatch-border'
-                            : ''
-                      }`}
+          <table className="data-table block sm:table" role="table" aria-label="Receipt inbox">
+            <thead className="hidden sm:table-header-group" role="rowgroup">
+              <tr role="row">
+                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-11 border-b border-border bg-canvas py-2 pl-0 pr-2">
+                  <span className="sr-only">Preview</span>
+                </th>
+                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 border-b border-border bg-canvas px-2 py-2">
+                  Supplier
+                </th>
+                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-24 border-b border-border bg-canvas px-2 py-2">
+                  Date
+                </th>
+                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-16 border-b border-border bg-canvas px-2 py-2">
+                  Items
+                </th>
+                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-32 border-b border-border bg-canvas px-2 py-2 text-right">
+                  Grand total
+                </th>
+                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-32 border-b border-border bg-canvas px-2 py-2">
+                  Status
+                </th>
+                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-24 border-b border-border bg-canvas px-2 py-2">
+                  <span className="sr-only">Action</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="block sm:table-row-group" role="rowgroup">
+              {receipts.map((receipt) => {
+                const needsReview = receipt.status === 'STATUS_NEEDS_REVIEW';
+                const processing = PROCESSING_STATUSES.includes(receipt.status);
+                const failed =
+                  receipt.status === 'ERR_UNREADABLE' ||
+                  receipt.status === 'ERR_TIMEOUT' ||
+                  receipt.status === 'ERR_FILE_CORRUPT' ||
+                  receipt.status === 'ERR_EXTRACTION';
+                const details = flagDetails(receipt.validation_flags);
+                const money = moneyParts(receipt.grand_total);
+                return (
+                  <tr
+                    key={receipt.id}
+                    role="row"
+                    onClick={() => {
+                      if (!processing) openReview(receipt.id);
+                    }}
+                    className={`grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-border py-3 transition-colors duration-100 hover:bg-surface sm:table-row sm:border-b-0 sm:py-0 ${
+                      processing ? '' : 'cursor-pointer'
+                    } ${
+                      needsReview
+                        ? 'border-l-2 border-l-warning-border'
+                        : failed
+                          ? 'border-l-2 border-l-mismatch-border'
+                          : ''
+                    }`}
+                  >
+                    <td
+                      role="cell"
+                      className="row-span-2 self-start border-b-0 px-0 py-0 align-middle sm:row-span-1 sm:table-cell sm:border-b sm:pl-0 sm:pr-2"
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      <td className="pl-3 pr-1 align-middle" onClick={(event) => event.stopPropagation()}>
-                        <ReceiptThumb clientId={clientId} receipt={receipt} />
-                      </td>
-                      <td className="max-w-0 px-3">
-                        <span className="block truncate font-semibold text-text-primary">
-                          {receipt.merchant_name ?? receipt.filename}
-                        </span>
-                        {details.length > 0 && (
-                          <span className="block truncate text-[11px] text-warning-text">
-                            {details.join(' · ')}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-2 font-mono-numbers text-text-secondary">
-                        {formatDate(receipt.invoice_date)}
-                      </td>
-                      <td className="px-2 font-mono-numbers text-text-secondary">
-                        {receipt.line_item_count}
-                      </td>
-                      <td className="px-2 text-right font-mono-numbers text-text-primary">
-                        {formatMoneyDisplay(receipt.grand_total)}
-                      </td>
-                      <td className="px-2">
-                        <StatusPill
-                          status={receipt.status}
-                          flags={receipt.validation_flags}
-                          confidence={receipt.overall_confidence}
-                        />
-                      </td>
-                      <td className="px-2" onClick={(event) => event.stopPropagation()}>
-                        <button
-                          type="button"
-                          disabled={processing}
-                          onClick={() => openReview(receipt.id)}
-                          className="inline-flex h-8 w-20 items-center justify-center rounded-md border border-border bg-surface font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted"
+                      <ReceiptThumb clientId={clientId} receipt={receipt} />
+                    </td>
+                    <td role="cell" className="col-span-2 min-w-0 border-b-0 px-0 py-0 align-middle sm:col-span-1 sm:table-cell sm:max-w-0 sm:border-b sm:px-2">
+                      <span className="block truncate text-ui font-semibold text-text-primary">
+                        {receipt.merchant_name ?? receipt.filename}
+                      </span>
+                      {details.length > 0 && (
+                        <span
+                          className="mt-0.5 block truncate text-label text-warning-text"
+                          title={details.join(' · ')}
                         >
-                          Review
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            </div>
-          </div>
+                          {details.join(' · ')}
+                        </span>
+                      )}
+                    </td>
+                    <td role="cell" className="border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary sm:table-cell sm:border-b sm:px-2 sm:text-ui">
+                      {formatDate(receipt.invoice_date)}
+                    </td>
+                    <td role="cell" className="hidden border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary sm:table-cell sm:border-b sm:px-2 sm:text-ui">
+                      {receipt.line_item_count}
+                    </td>
+                    <td role="cell" className="border-b-0 px-0 py-0 text-right align-middle sm:table-cell sm:border-b sm:px-2">
+                      {money.currency !== null && (
+                        <span className="mr-1 text-label text-text-muted">{money.currency}</span>
+                      )}
+                      <span className="font-mono-numbers text-body text-text-primary sm:text-ui">
+                        {money.amount}
+                      </span>
+                    </td>
+                    <td role="cell" className="col-span-3 border-b-0 px-0 py-0 align-middle sm:col-span-1 sm:table-cell sm:border-b sm:px-2">
+                      <StatusPill
+                        status={receipt.status}
+                        flags={receipt.validation_flags}
+                        confidence={receipt.overall_confidence}
+                      />
+                    </td>
+                    <td
+                      role="cell"
+                      className="col-span-3 border-b-0 px-0 py-0 align-middle sm:col-span-1 sm:table-cell sm:border-b sm:px-2"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        disabled={processing}
+                        onClick={() => openReview(receipt.id)}
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-1 border border-border-strong bg-surface px-3 text-ui font-semibold text-text-primary transition-colors duration-100 hover:bg-surface-subtle disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-subtle disabled:text-text-muted sm:w-24"
+                      >
+                        Open
+                        <Icon name="chevron-right" size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
 
         {receiptsTotal > 0 && (
-          <div className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-2 text-xs shadow-card">
-            <span role="status" className="text-text-secondary">
+          <div className="rule-total flex flex-wrap items-center justify-between gap-3 pt-3">
+            <span role="status" className="font-mono-numbers text-label text-text-secondary">
               Showing {pageStart}–{pageEnd} of {receiptsTotal}
             </span>
             <div className="flex items-center gap-2">
@@ -378,7 +460,7 @@ export default function InboxPage(): JSX.Element {
                 type="button"
                 disabled={!hasPrevious}
                 onClick={() => void loadClientReceipts(clientId, Math.max(0, receiptsOffset - PAGE_SIZE))}
-                className="inline-flex min-h-11 items-center border border-border bg-surface px-3 font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-muted"
+                className="btn btn-secondary btn-sm"
               >
                 Previous
               </button>
@@ -386,7 +468,7 @@ export default function InboxPage(): JSX.Element {
                 type="button"
                 disabled={!hasNext}
                 onClick={() => void loadClientReceipts(clientId, receiptsOffset + PAGE_SIZE)}
-                className="inline-flex min-h-11 items-center border border-border bg-surface px-3 font-medium text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-muted"
+                className="btn btn-secondary btn-sm"
               >
                 Next
               </button>

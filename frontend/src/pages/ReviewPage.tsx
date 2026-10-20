@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBeforeUnload, useBlocker, useNavigate, useParams } from 'react-router-dom';
 import AppShell from '../components/AppShell';
+import { Icon } from '../components/Icon';
 import LineItemsEditor from '../components/LineItemsEditor';
 import MathBanner from '../components/MathBanner';
 import ReceiptCanvas from '../components/ReceiptCanvas';
@@ -30,26 +31,19 @@ const EMPTY_DRAFT: ReceiptDraft = {
   line_items: [],
 };
 
-const FIELD_CLASS =
-  'mt-1 h-9 w-full border border-border bg-surface px-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
+const FIELD_CLASS = 'field-input';
 
-const NUMERIC_FIELD_CLASS = `${FIELD_CLASS} text-right font-mono-numbers`;
+const NUMERIC_FIELD_CLASS = 'field-input mt-0 w-36 text-right font-mono-numbers';
 
-const ACTION_BUTTON_CLASS =
-  'inline-flex h-11 items-center rounded-lg border border-border bg-surface px-3 text-sm font-medium text-text-primary transition-colors duration-100 ease-out hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
+const ACTION_BUTTON_CLASS = 'btn btn-secondary';
 
-const PRIMARY_BUTTON_CLASS =
-  'inline-flex h-11 items-center rounded-lg border border-brand-900 bg-brand-900 px-3 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
+const PRIMARY_BUTTON_CLASS = 'btn btn-primary';
 
-const DANGER_BUTTON_CLASS =
-  'inline-flex h-11 items-center rounded-lg border border-mismatch-border bg-mismatch-text px-3 text-sm font-semibold text-white transition-colors duration-100 ease-out hover:opacity-90 focus-visible:ring-2 focus-visible:ring-mismatch-text focus-visible:ring-offset-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted';
+const DANGER_BUTTON_CLASS = 'btn btn-danger';
 
-const SECTION_CLASS = 'border-b border-border px-5 py-4';
+const SECTION_CLASS = 'border-b border-border px-5 py-6 lg:px-8';
 
-const SECTION_HEADING_CLASS =
-  'mb-3 text-xs font-semibold uppercase tracking-wider text-text-secondary';
-
-const LABEL_CLASS = 'block text-xs uppercase tracking-wide text-text-muted';
+const LABEL_CLASS = 'field-label';
 
 /** `line_items[2]` matches the canvas's active-row convention. */
 function lineFieldNameFor(index: number): string {
@@ -74,6 +68,7 @@ interface LabelledInputProps {
   field: DraftHeaderField;
   value: string;
   type?: 'text' | 'date';
+  className?: string;
   onChange: (field: DraftHeaderField, value: string) => void;
   onFocus: (field: string) => void;
   onBlur: () => void;
@@ -84,13 +79,14 @@ function LabelledInput({
   field,
   value,
   type = 'text',
+  className,
   onChange,
   onFocus,
   onBlur,
 }: LabelledInputProps): JSX.Element {
   const inputId = `header-field-${field}`;
   return (
-    <div className="block">
+    <div className={`block ${className ?? ''}`}>
       <label htmlFor={inputId} className={LABEL_CLASS}>
         {label}
       </label>
@@ -395,9 +391,14 @@ export default function ReviewPage(): JSX.Element {
   if (receiptLoading) {
     return (
       <AppShell clientId={clientId}>
-        <div className="grid min-h-[60dvh] grid-rows-2 lg:grid-cols-2 lg:grid-rows-1" role="status" aria-busy="true">
-          <div className="animate-pulse bg-surface-subtle" />
-          <div className="animate-pulse bg-surface-subtle" />
+        <div className="grid lg:h-dvh lg:grid-cols-[46fr_54fr]" role="status" aria-busy="true">
+          <div className="skeleton h-[40dvh] lg:h-auto" />
+          <div className="space-y-4 border-b border-border bg-surface px-5 py-6 lg:px-8">
+            <div className="skeleton h-5 w-44" />
+            <div className="skeleton h-10 w-full" />
+            <div className="skeleton h-10 w-full" />
+            <div className="skeleton h-10 w-2/3" />
+          </div>
         </div>
       </AppShell>
     );
@@ -407,12 +408,16 @@ export default function ReviewPage(): JSX.Element {
     const message = receiptsError ?? 'Receipt not found or it may belong to another client.';
     return (
       <AppShell clientId={clientId}>
-        <div className="grid min-h-[70dvh] place-items-center bg-canvas p-6">
-          <div className="w-full max-w-md rounded-xl border border-mismatch-border bg-mismatch-bg px-4 py-6 text-center">
-            <p className="text-sm font-medium text-mismatch-text">{message}</p>
+        <div className="grid min-h-[60dvh] place-items-center px-5 py-12">
+          <div className="w-full max-w-md border-l-2 border-mismatch-text pl-4">
+            <p className="section-label flex items-center gap-1.5 text-mismatch-text">
+              <Icon name="alert" size={14} />
+              Receipt unavailable
+            </p>
+            <p className="mt-2 text-body text-text-primary">{message}</p>
             <Link
               to={clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`}
-              className={`${ACTION_BUTTON_CLASS} mt-4`}
+              className={`${ACTION_BUTTON_CLASS} mt-5`}
             >
               Back to inbox
             </Link>
@@ -424,308 +429,355 @@ export default function ReviewPage(): JSX.Element {
 
   return (
     <AppShell clientId={clientId}>
-      <div className="grid grid-rows-[40dvh_1fr] lg:h-[calc(100dvh-57px)] lg:grid-cols-2 lg:grid-rows-1">
-        <div className="min-h-0 min-w-0 border-b border-border lg:border-b-0 lg:border-r">
-        {clientId !== undefined && receiptId !== undefined ? (
-          <ReceiptCanvas
-            clientId={clientId}
-            receiptId={receiptId}
-            fields={activeReceipt.fields}
-            lineItems={activeReceipt.line_items}
-            tokens={activeReceipt.ocr_tokens}
-            activeField={activeField}
-            onHoverToken={() => {}}
-            mismatchFields={mismatchFields}
-            processingError={activeReceipt.processing_error}
-            scale={scale}
-            setScale={setScale}
-            onZoomIn={onZoomIn}
-            onZoomOut={onZoomOut}
-            onReset={onReset}
-          />
-        ) : null}
-      </div>
-
-      <div className="min-h-0 min-w-0 overflow-y-auto">
-        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface px-5 py-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <Link
-              to={clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`}
-              className="inline-flex items-center text-xs text-text-secondary hover:text-text-primary focus-visible:outline-none focus-visible:underline"
-              title="Back to inbox without saving"
-            >
-              ← Inbox
-            </Link>
-            <h1 className="font-mono-numbers text-xs font-normal text-text-muted">
-              ID: {activeReceipt.id.slice(0, 8)}
-            </h1>
-            <StatusPill
-              status={activeReceipt.status}
-              flags={activeReceipt.validation_flags}
-              confidence={activeReceipt.overall_confidence}
+      <div className="grid lg:h-dvh lg:grid-cols-[46fr_54fr]">
+        <div className="h-[40dvh] min-h-0 min-w-0 border-b border-border lg:h-auto lg:border-b-0 lg:border-r">
+          {clientId !== undefined && receiptId !== undefined ? (
+            <ReceiptCanvas
+              clientId={clientId}
+              receiptId={receiptId}
+              fields={activeReceipt.fields}
+              lineItems={activeReceipt.line_items}
+              tokens={activeReceipt.ocr_tokens}
+              activeField={activeField}
+              onHoverToken={() => {}}
+              mismatchFields={mismatchFields}
+              processingError={activeReceipt.processing_error}
+              scale={scale}
+              setScale={setScale}
+              onZoomIn={onZoomIn}
+              onZoomOut={onZoomOut}
+              onReset={onReset}
             />
+          ) : null}
+        </div>
+
+        <div className="min-w-0 bg-surface lg:min-h-0 lg:overflow-y-auto">
+          <div className="sticky top-14 z-10 border-b border-border bg-surface lg:top-0">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-2.5 lg:px-8">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+                <Link
+                  to={clientId === undefined ? '/clients' : `/clients/${clientId}/inbox`}
+                  className="link-quiet"
+                  title="Back to inbox without saving"
+                >
+                  <Icon name="arrow-left" size={15} />
+                  Inbox
+                </Link>
+                <span className="h-4 w-px bg-border" aria-hidden="true" />
+                <h1 className="font-mono-numbers text-label font-normal text-text-muted">
+                  <span className="sr-only">Review receipt </span>ID: {activeReceipt.id.slice(0, 8)}
+                </h1>
+                <StatusPill
+                  status={activeReceipt.status}
+                  flags={activeReceipt.validation_flags}
+                  confidence={activeReceipt.overall_confidence}
+                />
+              </div>
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                {saveState === 'error' ? (
+                  <p className="flex items-center gap-1.5 text-label text-mismatch-text">
+                    <Icon name="alert" size={14} />
+                    {saveError}
+                  </p>
+                ) : null}
+                {saveState === 'saved' && flash ? (
+                  <span className="stamp border-verified-border bg-verified-bg text-verified-text">
+                    <Icon name="check" size={12} />
+                    VERIFIED
+                  </span>
+                ) : null}
+                {!audit.valid ? (
+                  <span className="text-label text-mismatch-text" role="status">
+                    Fix {audit.invalidFields[0]} before verifying.
+                  </span>
+                ) : null}
+                <button
+                  ref={rejectTriggerRef}
+                  type="button"
+                  className={ACTION_BUTTON_CLASS}
+                  disabled={saveState === 'saving'}
+                  onClick={() => setConfirmingReject(true)}
+                >
+                  {saveState === 'saving' ? 'Rejecting…' : 'Reject'}
+                  <span className="font-mono text-micro text-text-muted" aria-hidden="true">
+                    Esc
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={PRIMARY_BUTTON_CLASS}
+                  disabled={saveState === 'saving' || !audit.valid}
+                  onClick={() => void saveAndNext()}
+                  aria-keyshortcuts="Control+Enter"
+                >
+                  {saveState === 'saving' ? 'Saving…' : 'Verify & Next'}
+                  <span
+                    className="hidden font-mono text-micro text-brand-100 sm:inline"
+                    aria-hidden="true"
+                  >
+                    Ctrl+↵
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 gap-y-1">
+
+          {confirmingReject ? (
+            <div
+              ref={rejectStripRef}
+              tabIndex={-1}
+              role="alertdialog"
+              aria-label="Confirm rejection"
+              className="flex flex-wrap items-center justify-between gap-3 border-b border-mismatch-border bg-mismatch-bg px-5 py-3 lg:px-8"
+            >
+              <p className="flex items-center gap-2 text-ui font-semibold text-mismatch-text">
+                <Icon name="alert" size={16} />
+                Reject this receipt? This cannot be undone.
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className={ACTION_BUTTON_CLASS}
+                  onClick={() => setConfirmingReject(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={DANGER_BUTTON_CLASS}
+                  disabled={saveState === 'saving'}
+                  onClick={() => void rejectAndNext()}
+                >
+                  {saveState === 'saving' ? 'Rejecting…' : 'Reject'}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <section className={SECTION_CLASS}>
+            <div className="mb-4 flex items-baseline gap-3">
+              <span className="section-label">01</span>
+              <h2 className="section-title">Supplier &amp; date</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
+              <LabelledInput
+                className="sm:col-span-2"
+                label="Supplier Name"
+                field="merchant_name"
+                value={draft?.merchant_name ?? ''}
+                onChange={setDraftField}
+                onFocus={setActiveField}
+                onBlur={clearActiveField}
+              />
+              <LabelledInput
+                label="Merchant SST"
+                field="merchant_sst"
+                value={draft?.merchant_sst ?? ''}
+                onChange={setDraftField}
+                onFocus={setActiveField}
+                onBlur={clearActiveField}
+              />
+              <LabelledInput
+                label="Invoice Date"
+                field="invoice_date"
+                type="date"
+                value={draft?.invoice_date ?? ''}
+                onChange={setDraftField}
+                onFocus={setActiveField}
+                onBlur={clearActiveField}
+              />
+              <LabelledInput
+                label="Invoice Number"
+                field="invoice_number"
+                value={draft?.invoice_number ?? ''}
+                onChange={setDraftField}
+                onFocus={setActiveField}
+                onBlur={clearActiveField}
+              />
+              <LabelledInput
+                label="Merchant BRN"
+                field="merchant_brn"
+                value={draft?.merchant_brn ?? ''}
+                onChange={setDraftField}
+                onFocus={setActiveField}
+                onBlur={clearActiveField}
+              />
+            </div>
+          </section>
+
+          <section className={SECTION_CLASS}>
+            <div className="mb-4 flex items-baseline gap-3">
+              <span className="section-label">02</span>
+              <h2 className="section-title">Line items</h2>
+            </div>
+            <LineItemsEditor
+              items={draft?.line_items ?? []}
+              serverLineItems={activeReceipt.line_items}
+              activeKey={focusedLineKey}
+              onChange={updateDraftLine}
+              onRemove={removeDraftLine}
+              onAdd={addDraftLine}
+              onFocusRow={(key) => {
+                setFocusedLineKey(key);
+                const index = draft?.line_items.findIndex((item) => item.key === key) ?? -1;
+                if (index >= 0) {
+                  setActiveField(lineFieldNameFor(index));
+                }
+              }}
+            />
+          </section>
+
+          <section className="px-5 py-6 lg:px-8">
+            <div className="mb-4 flex items-baseline gap-3">
+              <span className="section-label">03</span>
+              <h2 className="section-title">Totals &amp; audit</h2>
+            </div>
+
+            <div className="ml-auto grid w-full max-w-md gap-2">
+              <label className="flex items-center justify-between gap-3">
+                <span className={LABEL_CLASS}>Subtotal</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-mono text-micro text-text-muted" aria-hidden="true">
+                    RM
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={draft?.subtotal ?? ''}
+                    onChange={(event) => setDraftField('subtotal', event.target.value)}
+                    onFocus={() => setActiveField('subtotal')}
+                    onBlur={clearActiveField}
+                    className={NUMERIC_FIELD_CLASS}
+                  />
+                </span>
+              </label>
+              <label className="flex items-center justify-between gap-3">
+                <span className={LABEL_CLASS}>SST (6%)</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-mono text-micro text-text-muted" aria-hidden="true">
+                    RM
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={draft?.tax_amount ?? ''}
+                    onChange={(event) => setDraftField('tax_amount', event.target.value)}
+                    onFocus={() => setActiveField('tax_amount')}
+                    onBlur={clearActiveField}
+                    className={NUMERIC_FIELD_CLASS}
+                  />
+                </span>
+              </label>
+              <label className="rule-total flex items-center justify-between gap-3 pt-2">
+                <span className={LABEL_CLASS}>Grand Total</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-mono text-micro text-text-muted" aria-hidden="true">
+                    RM
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={draft?.grand_total ?? ''}
+                    onChange={(event) => setDraftField('grand_total', event.target.value)}
+                    onFocus={() => setActiveField('grand_total')}
+                    onBlur={clearActiveField}
+                    className="field-input mt-0 w-36 text-right font-mono-numbers text-[22px]"
+                  />
+                </span>
+              </label>
+            </div>
+
+            <dl className="ml-auto mt-4 w-full max-w-md space-y-1 border-t border-border pt-3">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-label text-text-muted">Line Items Total</dt>
+                <dd className="font-mono-numbers text-label text-text-secondary">
+                  RM {formatCents(audit.lineCents)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-label text-text-muted">Confidence</dt>
+                <dd className="font-mono-numbers text-label text-text-secondary">
+                  {formatConfidence(activeReceipt.overall_confidence)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-label text-text-muted">Lines + Tax = Total</dt>
+                <dd className="font-mono-numbers text-label text-text-muted">
+                  {formatCents(audit.lineCents)} + {formatCents(audit.taxCents)} ={' '}
+                  {formatCents(audit.totalCents)}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="mt-4">
+              <MathBanner audit={audit} missingSst={audit.missingSstOnRegisteredMerchant} dirty={isDirty} />
+            </div>
+
+            <details className="mt-5 border-t border-border">
+              <summary className="section-label cursor-pointer py-3">Audit history</summary>
+              {auditError !== null ? (
+                <p className="border-t border-border py-2 text-label text-mismatch-text">{auditError}</p>
+              ) : auditEntries.length === 0 ? (
+                <p className="border-t border-border py-2 text-label text-text-muted">
+                  No changes recorded yet.
+                </p>
+              ) : (
+                <ul className="max-h-64 divide-y divide-border overflow-y-auto border-t border-border">
+                  {auditEntries.map((entry) => (
+                    <li key={entry.id} className="py-2 text-label text-text-secondary">
+                      <span className="font-medium text-text-primary">{entry.field_name}</span>{' '}
+                      <span className="font-mono-numbers">
+                        {entry.old_value ?? '—'} → {entry.new_value ?? '—'}
+                      </span>
+                      <span className="mt-0.5 block text-text-muted">
+                        {entry.user_id.slice(0, 8)} · {formatDate(entry.created_at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
+          </section>
+        </div>
+
+        <dialog
+          ref={leaveDialogRef}
+          role="alertdialog"
+          aria-labelledby="leave-dialog-title"
+          className="m-auto w-[calc(100%_-_3rem)] max-w-sm p-5"
+          onCancel={(event) => {
+            event.preventDefault();
+            if (blocker.state === 'blocked') blocker.reset();
+          }}
+        >
+          <h2 id="leave-dialog-title" className="section-title">
+            Leave without saving?
+          </h2>
+          <p className="mt-2 text-ui text-text-secondary">
+            Your corrections on this receipt will be lost.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
             <button
-              ref={rejectTriggerRef}
               type="button"
               className={ACTION_BUTTON_CLASS}
-              disabled={saveState === 'saving'}
-              onClick={() => setConfirmingReject(true)}
+              onClick={() => {
+                if (blocker.state === 'blocked') blocker.reset();
+              }}
             >
-              {saveState === 'saving' ? 'Rejecting…' : 'Reject (Esc)'}
+              Stay
             </button>
-            {saveState === 'error' ? (
-              <div className="rounded-md border border-mismatch-border bg-mismatch-bg px-2 py-1 text-xs text-mismatch-text">
-                {saveError}
-              </div>
-            ) : null}
-            {saveState === 'saved' && flash ? (
-              <span className="inline-flex h-11 items-center rounded-md border border-verified-border bg-verified-bg px-2 text-xs font-medium text-verified-text">
-                <span aria-hidden="true">✓</span> Verified
-              </span>
-            ) : null}
-            {!audit.valid ? (
-              <span
-                className="order-last basis-full text-xs font-medium text-mismatch-text sm:order-none sm:basis-auto"
-                role="status"
-              >
-                Fix {audit.invalidFields[0]} before verifying.
-              </span>
-            ) : null}
             <button
               type="button"
               className={PRIMARY_BUTTON_CLASS}
-              disabled={saveState === 'saving' || !audit.valid}
-              onClick={() => void saveAndNext()}
+              onClick={() => {
+                dirtyRef.current = false;
+                if (blocker.state === 'blocked') blocker.proceed();
+              }}
             >
-              {saveState === 'saving' ? 'Saving…' : 'Verify & Next (Ctrl+↵)'}
+              Leave
             </button>
           </div>
-        </div>
-
-        {confirmingReject ? (
-          <div
-            ref={rejectStripRef}
-            tabIndex={-1}
-            role="alertdialog"
-            aria-label="Confirm rejection"
-            className="flex flex-wrap items-center justify-between gap-3 border-b border-mismatch-border bg-mismatch-bg px-5 py-3 focus-visible:ring-2 focus-visible:ring-mismatch-text focus-visible:ring-inset focus-visible:outline-none"
-          >
-            <p className="text-sm font-semibold text-mismatch-text">
-              Reject this receipt? This cannot be undone.
-            </p>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className={ACTION_BUTTON_CLASS}
-                onClick={() => setConfirmingReject(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={DANGER_BUTTON_CLASS}
-                disabled={saveState === 'saving'}
-                onClick={() => void rejectAndNext()}
-              >
-                {saveState === 'saving' ? 'Rejecting…' : 'Reject'}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        <section className={SECTION_CLASS}>
-          <h2 className={SECTION_HEADING_CLASS}>Merchant &amp; Date</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <LabelledInput
-              label="Supplier Name"
-              field="merchant_name"
-              value={draft?.merchant_name ?? ''}
-              onChange={setDraftField}
-              onFocus={setActiveField}
-              onBlur={clearActiveField}
-            />
-            <LabelledInput
-              label="Merchant SST"
-              field="merchant_sst"
-              value={draft?.merchant_sst ?? ''}
-              onChange={setDraftField}
-              onFocus={setActiveField}
-              onBlur={clearActiveField}
-            />
-            <LabelledInput
-              label="Invoice Date"
-              field="invoice_date"
-              type="date"
-              value={draft?.invoice_date ?? ''}
-              onChange={setDraftField}
-              onFocus={setActiveField}
-              onBlur={clearActiveField}
-            />
-            <LabelledInput
-              label="Invoice Number"
-              field="invoice_number"
-              value={draft?.invoice_number ?? ''}
-              onChange={setDraftField}
-              onFocus={setActiveField}
-              onBlur={clearActiveField}
-            />
-            <LabelledInput
-              label="Merchant BRN"
-              field="merchant_brn"
-              value={draft?.merchant_brn ?? ''}
-              onChange={setDraftField}
-              onFocus={setActiveField}
-              onBlur={clearActiveField}
-            />
-          </div>
-        </section>
-
-        <section className={SECTION_CLASS}>
-          <h2 className={SECTION_HEADING_CLASS}>Line Items</h2>
-          <LineItemsEditor
-            items={draft?.line_items ?? []}
-            serverLineItems={activeReceipt.line_items}
-            activeKey={focusedLineKey}
-            onChange={updateDraftLine}
-            onRemove={removeDraftLine}
-            onAdd={addDraftLine}
-            onFocusRow={(key) => {
-              setFocusedLineKey(key);
-              const index = draft?.line_items.findIndex((item) => item.key === key) ?? -1;
-              if (index >= 0) {
-                setActiveField(lineFieldNameFor(index));
-              }
-            }}
-          />
-        </section>
-
-        <section className={SECTION_CLASS}>
-          <h2 className={SECTION_HEADING_CLASS}>Totals &amp; Tax Audit</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="block">
-              <span className={LABEL_CLASS}>Subtotal</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={draft?.subtotal ?? ''}
-                onChange={(event) => setDraftField('subtotal', event.target.value)}
-                onFocus={() => setActiveField('subtotal')}
-                onBlur={clearActiveField}
-                className={NUMERIC_FIELD_CLASS}
-              />
-            </label>
-            <label className="block">
-              <span className={LABEL_CLASS}>SST (6%)</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={draft?.tax_amount ?? ''}
-                onChange={(event) => setDraftField('tax_amount', event.target.value)}
-                onFocus={() => setActiveField('tax_amount')}
-                onBlur={clearActiveField}
-                className={NUMERIC_FIELD_CLASS}
-              />
-            </label>
-            <label className="block">
-              <span className={LABEL_CLASS}>Grand Total</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={draft?.grand_total ?? ''}
-                onChange={(event) => setDraftField('grand_total', event.target.value)}
-                onFocus={() => setActiveField('grand_total')}
-                onBlur={clearActiveField}
-                className={NUMERIC_FIELD_CLASS}
-              />
-            </label>
-          </div>
-
-          <dl className="mt-3 flex items-center justify-between rounded-lg border border-border bg-surface-subtle px-3 py-2">
-            <dt className="text-xs uppercase tracking-wide text-text-muted">Line Items Total</dt>
-            <dd className="font-mono-numbers text-sm text-text-primary">
-              RM {formatCents(audit.lineCents)}
-            </dd>
-          </dl>
-
-          <p className="mt-2 font-mono-numbers text-xs text-text-muted">
-            Confidence {formatConfidence(activeReceipt.overall_confidence)} · Lines{' '}
-            {formatCents(audit.lineCents)} + Tax {formatCents(audit.taxCents)} = Total{' '}
-            {formatCents(audit.totalCents)}
-          </p>
-
-          <div className="mt-2">
-            <MathBanner audit={audit} missingSst={audit.missingSstOnRegisteredMerchant} dirty={isDirty} />
-          </div>
-
-          <details className="mt-3 rounded-lg border border-border bg-surface">
-            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-text-secondary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-inset focus-visible:outline-none">
-              Audit history
-            </summary>
-            {auditError !== null ? (
-              <p className="border-t border-border px-3 py-2 text-xs text-mismatch-text">{auditError}</p>
-            ) : auditEntries.length === 0 ? (
-              <p className="border-t border-border px-3 py-2 text-xs text-text-muted">
-                No changes recorded yet.
-              </p>
-            ) : (
-              <ul className="max-h-64 divide-y divide-border overflow-y-auto">
-                {auditEntries.map((entry) => (
-                  <li key={entry.id} className="px-3 py-2 text-xs text-text-secondary">
-                    <span className="font-medium text-text-primary">{entry.field_name}</span>{' '}
-                    <span className="font-mono-numbers">
-                      {entry.old_value ?? '—'} → {entry.new_value ?? '—'}
-                    </span>
-                    <span className="mt-0.5 block text-text-muted">
-                      {entry.user_id.slice(0, 8)} · {formatDate(entry.created_at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </details>
-        </section>
-      </div>
-
-      <dialog
-        ref={leaveDialogRef}
-        role="alertdialog"
-        aria-labelledby="leave-dialog-title"
-        className="m-auto w-[calc(100%_-_3rem)] max-w-sm rounded-xl border border-border bg-surface p-4 backdrop:bg-black/40"
-        onCancel={(event) => {
-          event.preventDefault();
-          if (blocker.state === 'blocked') blocker.reset();
-        }}
-      >
-        <h2 id="leave-dialog-title" className="text-sm font-semibold text-text-primary">
-          Leave without saving?
-        </h2>
-        <p className="mt-1 text-xs text-text-secondary">
-          Your corrections on this receipt will be lost.
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            className={ACTION_BUTTON_CLASS}
-            onClick={() => {
-              if (blocker.state === 'blocked') blocker.reset();
-            }}
-          >
-            Stay
-          </button>
-          <button
-            type="button"
-            className={PRIMARY_BUTTON_CLASS}
-            onClick={() => {
-              dirtyRef.current = false;
-              if (blocker.state === 'blocked') blocker.proceed();
-            }}
-          >
-            Leave
-          </button>
-        </div>
-      </dialog>
+        </dialog>
       </div>
     </AppShell>
   );

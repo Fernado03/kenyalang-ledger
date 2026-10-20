@@ -7,7 +7,8 @@ import {
   markExported,
 } from '../api/client';
 import AppShell from '../components/AppShell';
-import { ErrorBanner } from '../components/DataStates';
+import { Icon } from '../components/Icon';
+import PageHeader from '../components/PageHeader';
 import { useReceiptStore } from '../store/receiptStore';
 import type { Client } from '../types/client';
 
@@ -17,6 +18,9 @@ function getCurrentMonthString(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   return `${year}-${month}`;
 }
+
+const CSV_COLUMNS =
+  'DocDate, DocNo, SupplierCode, SupplierName, Description, ItemCode, Qty, UnitPrice, TaxCode, TaxAmount, TotalAmount';
 
 export default function ExportsPage(): JSX.Element {
   const { clientId } = useParams<{ clientId: string }>();
@@ -42,8 +46,13 @@ export default function ExportsPage(): JSX.Element {
   if (!clientId) {
     return (
       <AppShell>
-        <div className="p-6">
-          <ErrorBanner message="No workspace client selected." />
+        <div className="page-shell">
+          <div
+            role="alert"
+            className="border-l-[3px] border-l-mismatch-text bg-mismatch-bg py-3 pl-4 pr-3 text-ui text-mismatch-text"
+          >
+            No workspace client selected.
+          </div>
         </div>
       </AppShell>
     );
@@ -112,206 +121,224 @@ export default function ExportsPage(): JSX.Element {
 
   return (
     <AppShell clientId={clientId}>
-      <div className="mx-auto max-w-6xl space-y-6 px-6 py-8">
-        {/* Header Bar */}
-        <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5 shadow-card sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-brand-700" aria-hidden="true" />
-              <h1 className="text-2xl font-semibold tracking-tight text-text-primary">
-                Export Hub
-              </h1>
+      <div className="page-shell">
+        <PageHeader
+          eyebrow={
+            client?.registration_number
+              ? `WORKSPACE · ${client.registration_number}`
+              : 'WORKSPACE'
+          }
+          title="Exports"
+          meta={
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-text-primary">
+                {client?.business_name ?? 'Client workspace'}
+              </span>
+              <Link to={`/clients/${clientId}/inbox`} className="link-quiet text-label">
+                <Icon name="arrow-left" size={14} />
+                Inbox
+              </Link>
             </div>
-            <p className="mt-1 text-xs text-text-secondary">
-              Workspace:{' '}
-              <span className="font-semibold text-text-primary">
-                {client?.business_name ?? 'Client Workspace'}
-              </span>{' '}
-              {client?.registration_number && (
-                <span className="font-mono-numbers text-text-muted">
-                  ({client.registration_number})
-                </span>
-              )}
-            </p>
-          </div>
+          }
+          actions={
+            <div className="flex flex-wrap items-end justify-end gap-2">
+              <div>
+                <label htmlFor="month-picker" id="period-selection" className="field-label">
+                  Accounting billing period
+                </label>
+                <input
+                  id="month-picker"
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="field-input mt-0 w-auto font-mono-numbers"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedMonth('')}
+                aria-pressed={selectedMonth === ''}
+                title="Export all verified receipts without month filter"
+                className={`btn btn-secondary btn-sm ${
+                  selectedMonth === '' ? 'border-brand-900 text-brand-900' : ''
+                }`}
+              >
+                All time
+              </button>
+            </div>
+          }
+        />
 
-          <div className="flex items-center gap-3">
-            <Link
-              to={`/clients/${clientId}/inbox`}
-              className="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-3 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900"
-            >
-              ← Inbox
-            </Link>
-          </div>
-        </div>
-
-        {/* Feedback Alerts */}
         {error !== null && (
-          <ErrorBanner message={error} />
-        )}
-        {successMessage !== null && (
           <div
-            role="status"
-            className="flex items-center justify-between rounded-xl border border-verified-border bg-verified-bg px-4 py-3 text-xs font-medium text-verified-text shadow-card"
+            role="alert"
+            className="mt-5 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-l-mismatch-text bg-mismatch-bg py-2 pl-3 pr-2"
           >
-            <span>✓ {successMessage}</span>
+            <p className="flex min-w-0 items-center gap-2 text-ui text-mismatch-text">
+              <Icon name="alert" size={16} />
+              <span>{error}</span>
+            </p>
             <button
               type="button"
-              onClick={() => setSuccessMessage(null)}
-              className="text-verified-text hover:underline"
+              onClick={() => setError(null)}
+              className="btn btn-ghost btn-sm text-mismatch-text"
             >
               Dismiss
             </button>
           </div>
         )}
 
-        {/* Filter Controls & 1-Click Action */}
-        <section
-          aria-labelledby="period-selection"
-          className="rounded-xl border border-border bg-surface p-5 shadow-card"
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <label
-                htmlFor="month-picker"
-                id="period-selection"
-                className="block text-xs font-semibold uppercase tracking-wider text-text-secondary"
-              >
-                Accounting Billing Period
-              </label>
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  id="month-picker"
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="h-10 border border-border bg-canvas px-3 text-sm font-mono-numbers text-text-primary focus-visible:border-border-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-900"
-                />
-                <button
-                  type="button"
-                  onClick={() => setSelectedMonth('')}
-                  className="h-10 border border-border bg-surface px-3 text-xs text-text-secondary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-900"
-                  title="Export all verified receipts without month filter"
-                >
-                  All Time
-                </button>
-              </div>
-              <p className="mt-1 text-[11px] text-text-muted">
-                {selectedMonth
-                  ? `Filtering verified receipts for ${selectedMonth}`
-                  : 'Exporting all verified receipts across all billing dates'}
-              </p>
-            </div>
+        {successMessage !== null && (
+          <div
+            role="status"
+            className="mt-5 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-l-verified-text bg-verified-bg py-2 pl-3 pr-2"
+          >
+            <p className="flex min-w-0 items-center gap-2 text-ui text-verified-text">
+              <Icon name="check" size={16} />
+              <span>{successMessage}</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => setSuccessMessage(null)}
+              className="btn btn-ghost btn-sm text-verified-text"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
-            {/* One-Click Download Both Files CTA */}
-            <div className="flex flex-col items-stretch gap-2 sm:items-end">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleDownloadBoth()}
-                  disabled={isExportingBoth || isExportingCsv || isExportingJson}
-                  className="inline-flex h-11 items-center justify-center gap-2 border border-brand-900 bg-brand-900 px-5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-2"
-                >
-                  {isExportingBoth ? (
-                    <span>Generating Bundle...</span>
-                  ) : (
-                    <>
-                      <span aria-hidden="true">↓</span>
-                      <span>Download Both Files (1-Click)</span>
-                    </>
-                  )}
-                </button>
+        <section aria-label="Export dispatch" className="mt-6 border-y border-border">
+          <div className="flex flex-col gap-4 border-b border-border py-4 lg:flex-row lg:items-center lg:justify-between">
+            <p className="text-label text-text-muted">
+              {selectedMonth ? (
+                <>
+                  Filtering verified receipts for{' '}
+                  <span className="font-mono-numbers text-text-secondary">{selectedMonth}</span>
+                </>
+              ) : (
+                'Exporting all verified receipts across all billing dates'
+              )}
+            </p>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end">
+              <button
+                type="button"
+                onClick={() => void handleDownloadBoth()}
+                disabled={isExportingBoth || isExportingCsv || isExportingJson}
+                className="btn btn-primary w-full sm:w-auto"
+              >
+                {isExportingBoth ? (
+                  'Generating bundle...'
+                ) : (
+                  <>
+                    <Icon name="download" size={16} />
+                    Download both
+                  </>
+                )}
+              </button>
+
+              <div className="flex flex-col gap-1 sm:border-l sm:border-border sm:pl-4">
                 <button
                   type="button"
                   onClick={() => void handleMarkExported()}
                   disabled={isMarking || isExportingBoth || isExportingCsv || isExportingJson}
-                  className="inline-flex h-11 items-center justify-center border border-border bg-surface px-4 text-xs font-semibold text-text-primary transition-colors hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-2"
+                  className="btn btn-ghost w-full justify-start border-border-strong sm:w-auto"
                 >
                   {isMarking ? 'Marking...' : 'Mark exported'}
                 </button>
+                <p className="max-w-[38ch] text-micro text-text-muted">
+                  Downloads leave receipt statuses unchanged. Marking is a separate, explicit
+                  action.
+                </p>
               </div>
-              <p className="text-[11px] text-text-muted">
-                Downloads leave receipt statuses unchanged. Marking is a separate,
-                explicit action.
-              </p>
             </div>
           </div>
-        </section>
 
-        {/* Dual Export Cards Grid */}
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {/* Card A: Accounting CSV */}
-          <article className="flex flex-col justify-between rounded-xl border border-border bg-surface p-5 shadow-card">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="rounded-full border border-border bg-surface-subtle px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-secondary">
-                  Option A · Purchase Journal
-                </span>
-                <span className="text-xs font-mono-numbers text-text-muted">
-                  AutoCount / SQL Account
-                </span>
-              </div>
-              <h2 className="mt-3 text-sm font-semibold text-text-primary">
-                Accounting Batch CSV
-              </h2>
-              <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-                Purchase journal batch import compatible with AutoCount and SQL Account desktop systems. Includes column mapping:
-              </p>
-              <div className="mt-3 rounded-lg bg-surface-subtle p-4 font-mono text-[10px] text-text-secondary">
-                DocDate, DocNo, SupplierCode, SupplierName, Description, ItemCode, Qty, UnitPrice, TaxCode, TaxAmount, TotalAmount
+          {/* Accounting CSV */}
+          <div className="grid gap-4 border-b border-border py-6 lg:grid-cols-12 lg:items-start">
+            <div className="flex min-w-0 items-start gap-3 lg:col-span-8">
+              <span className="stamp border-border bg-surface-subtle text-text-secondary">
+                CSV
+              </span>
+              <div className="min-w-0">
+                <h2 className="section-title">Accounting batch CSV</h2>
+                <p className="mt-1 text-ui text-text-secondary">
+                  Purchase journal batch import compatible with AutoCount and SQL Account desktop
+                  systems.
+                </p>
+                <div className="mt-2 overflow-x-auto">
+                  <p className="whitespace-nowrap font-mono text-micro text-text-muted">
+                    Purchase journal · 11 columns · DocDate → TotalAmount
+                  </p>
+                </div>
+                <details className="mt-3">
+                  <summary className="flex w-fit items-center gap-1 text-label text-text-secondary hover:text-text-primary">
+                    <Icon name="chevron-right" size={14} />
+                    Column mapping
+                  </summary>
+                  <div className="mt-2 overflow-x-auto border-l-2 border-border pl-3">
+                    <p className="whitespace-nowrap font-mono text-micro leading-5 text-text-secondary">
+                      {CSV_COLUMNS}
+                    </p>
+                  </div>
+                </details>
               </div>
             </div>
-
-            <div className="mt-6 pt-4 border-t border-border">
+            <div className="lg:col-span-4 lg:flex lg:justify-end">
               <button
                 type="button"
                 onClick={() => void handleDownloadCsv()}
                 disabled={isExportingCsv || isExportingBoth}
-                className="w-full inline-flex h-10 items-center justify-center border border-border bg-surface px-4 text-xs font-medium text-text-primary hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-900"
+                className="btn btn-secondary w-full sm:w-auto"
               >
-                {isExportingCsv ? 'Downloading CSV...' : 'Download Accounting CSV (.csv)'}
+                {isExportingCsv ? 'Downloading CSV...' : 'Download accounting CSV (.csv)'}
               </button>
             </div>
-          </article>
+          </div>
 
-          {/* Card B: LHDN MyInvois v1.1 JSON */}
-          <article className="flex flex-col justify-between rounded-xl border border-border bg-surface p-5 shadow-card">
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="rounded-full border border-verified-border bg-verified-bg px-2 py-0.5 text-[10px] font-semibold text-verified-text">
-                  Option B · LHDN MyInvois v1.1
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full border border-border bg-surface-subtle px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
-                  Draft MyInvois envelope — validate before submission.
-                </span>
+          {/* LHDN MyInvois JSON */}
+          <div className="grid gap-4 py-6 lg:grid-cols-12 lg:items-start">
+            <div className="flex min-w-0 items-start gap-3 lg:col-span-8">
+              <span className="stamp border-border bg-surface-subtle text-text-secondary">
+                JSON
+              </span>
+              <div className="min-w-0">
+                <h2 className="section-title">LHDN MyInvois multi-line JSON</h2>
+                <p className="mt-1 text-ui text-text-secondary">
+                  A UBL-shaped draft modelled on the official SDK sample; it is not validated
+                  against the LHDN schema, not signed, and never submitted.
+                </p>
+                <div className="mt-2 overflow-x-auto">
+                  <p className="whitespace-nowrap font-mono text-micro text-text-muted">
+                    UBL 2.1 · 1.1-Invoice-MultiLineItem-Sample.json · draft envelope, unsigned
+                  </p>
+                </div>
+                <details className="mt-3">
+                  <summary className="flex w-fit items-center gap-1 text-label text-text-secondary hover:text-text-primary">
+                    <Icon name="chevron-right" size={14} />
+                    Schema notes
+                  </summary>
+                  <ul className="mt-2 space-y-1 border-l-2 border-border pl-3 font-mono text-micro leading-5 text-text-secondary">
+                    <li>UBL 2.1 CommonBasic and CommonAggregate namespaces</li>
+                    <li>PartyIdentification carries the merchant BRN and SST registration number</li>
+                    <li>InvoiceLine tax allocated from the document tax total</li>
+                    <li>Draft MyInvois envelope — validate before submission.</li>
+                  </ul>
+                </details>
               </div>
-              <h2 className="mt-3 text-sm font-semibold text-text-primary">
-                LHDN MyInvois Multi-Line JSON
-              </h2>
-              <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-                A UBL-shaped draft modelled on the official SDK sample (
-                <span className="font-mono text-[11px]">1.1-Invoice-MultiLineItem-Sample.json</span>).
-                It is not validated against the LHDN schema, not signed, and never submitted.
-              </p>
-              <ul className="mt-3 space-y-1 text-[11px] text-text-secondary list-disc list-inside">
-                <li>UBL 2.1 CommonBasic & CommonAggregate namespaces</li>
-                <li>PartyIdentification carries the merchant BRN and SST registration number</li>
-                <li>InvoiceLine tax allocated from the document tax total</li>
-              </ul>
             </div>
-
-            <div className="mt-6 pt-4 border-t border-border">
+            <div className="lg:col-span-4 lg:flex lg:justify-end">
               <button
                 type="button"
                 onClick={() => void handleDownloadJson()}
                 disabled={isExportingJson || isExportingBoth}
-                className="w-full inline-flex h-10 items-center justify-center border border-brand-900 bg-surface px-4 text-xs font-medium text-brand-900 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-900"
+                className="btn btn-secondary w-full sm:w-auto"
               >
                 {isExportingJson ? 'Downloading JSON...' : 'Download MyInvois JSON (.json)'}
               </button>
             </div>
-          </article>
-        </div>
+          </div>
+        </section>
       </div>
     </AppShell>
   );

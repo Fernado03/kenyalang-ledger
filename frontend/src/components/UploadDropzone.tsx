@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { Icon } from './Icon';
 
 interface UploadDropzoneProps {
   disabled?: boolean;
@@ -30,7 +31,7 @@ export default function UploadDropzone({
     : 'Drop receipts here, or click to browse. Max 50 files per batch.';
 
   return (
-    <section className="rounded-xl border border-border bg-surface p-3 shadow-card" aria-label="Upload receipts">
+    <section aria-label="Upload receipts">
       <div
         onDragOver={(event) => {
           if (disabled) return;
@@ -44,25 +45,19 @@ export default function UploadDropzone({
           setDragging(false);
           stage(Array.from(event.dataTransfer.files));
         }}
-        className={
-          dragging
-            ? 'rounded-lg border-2 border-dashed border-brand-700 bg-brand-50/40 transition-colors duration-100 ease-out'
-            : 'rounded-lg border-2 border-dashed border-border bg-surface-subtle transition-colors duration-100 ease-out'
-        }
+        className={`flex min-h-[52px] items-center gap-3 border-y px-3 transition-colors duration-100 ease-out ${
+          dragging ? 'border-dashed border-brand-700 bg-brand-100' : 'border-border bg-surface'
+        }`}
       >
+        <Icon name="upload" size={18} className="shrink-0 text-text-muted" />
+        <p className="min-w-0 flex-1 text-ui text-text-secondary">{label}</p>
         <button
           type="button"
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
-          className="flex min-h-24 w-full items-center justify-center px-6 py-8 text-sm focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none"
+          className="btn btn-secondary"
         >
-          <span
-            className={
-              dragging ? 'text-center text-sm text-text-primary' : 'text-center text-sm text-text-secondary'
-            }
-          >
-            {label}
-          </span>
+          Browse
         </button>
       </div>
 

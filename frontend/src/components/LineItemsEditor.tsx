@@ -1,3 +1,4 @@
+import { Icon } from './Icon';
 import { formatConfidence } from '../lib/format';
 import type { DraftLineField, DraftLineItem, ReceiptLineItem } from '../types/receipt';
 
@@ -11,20 +12,19 @@ interface LineItemsEditorProps {
   onFocusRow: (key: string) => void;
 }
 
-const HEADER_CELL = 'px-2 py-1 text-[11px] uppercase tracking-wider text-text-muted';
+const HEADER_CELL =
+  'border-b border-border px-2 py-2 text-left font-mono text-micro font-medium uppercase tracking-[0.1em] text-text-muted';
 
-const INPUT_CLASS =
-  'h-9 w-full border border-border bg-surface px-2 text-sm text-text-primary focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
+const NUMERIC_HEADER_CELL = `${HEADER_CELL} text-right`;
+
+const INPUT_CLASS = 'field-input-dense mt-0';
 
 const NUMERIC_INPUT_CLASS = `${INPUT_CLASS} text-right font-mono-numbers`;
 
 const DELETE_BUTTON_CLASS =
-  'inline-flex h-11 w-11 items-center justify-center border border-border bg-surface text-sm text-text-primary transition-colors duration-100 ease-out hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
+  'inline-flex h-11 w-11 items-center justify-center border border-transparent text-text-muted transition-colors duration-100 ease-out hover:border-border hover:bg-surface-subtle hover:text-mismatch-text';
 
-const ADD_BUTTON_CLASS =
-  'inline-flex h-11 items-center border border-border bg-surface px-3 text-sm font-medium text-text-primary transition-colors duration-100 ease-out hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
-
-/** Low-confidence OCR threshold: amber row + dashed underline + ? badge. */
+/** Low-confidence OCR threshold: amber row + dashed underline + alert badge. */
 const LOW_CONFIDENCE = 0.8;
 
 function LineRow({
@@ -48,11 +48,11 @@ function LineRow({
 
   return (
     <tr
-      className={`h-dense-row border-b border-border transition-colors duration-100 ease-out ${
+      className={`border-b border-border transition-colors duration-100 ease-out ${
         active ? 'bg-brand-50' : lowConfidence ? 'bg-warning-bg' : ''
       }`}
     >
-      <td className="px-1 py-1">
+      <td className="px-1.5 py-1">
         <div className="flex items-center gap-2">
           <input
             type="text"
@@ -61,17 +61,17 @@ function LineRow({
             onFocus={() => onFocusRow(item.key)}
             aria-label={`Line ${index + 1} description`}
             className={`${INPUT_CLASS} flex-1 ${
-              lowConfidence ? 'decoration-warning-border decoration-dashed underline' : ''
+              lowConfidence ? 'border-warning-border decoration-warning-border decoration-dashed underline' : ''
             }`}
           />
           {lowConfidence && serverItem !== undefined && (
-            <span className="shrink-0 text-xs font-medium text-warning-text">
-              <span aria-hidden="true">?</span> {formatConfidence(serverItem.confidence)}
+            <span className="inline-flex shrink-0 items-center gap-1 font-mono text-micro font-medium uppercase tracking-[0.08em] text-warning-text">
+              <Icon name="alert" size={12} /> {formatConfidence(serverItem.confidence)}
             </span>
           )}
         </div>
       </td>
-      <td className="px-1 py-1">
+      <td className="px-1.5 py-1">
         <input
           type="text"
           inputMode="decimal"
@@ -82,7 +82,7 @@ function LineRow({
           className={NUMERIC_INPUT_CLASS}
         />
       </td>
-      <td className="px-1 py-1">
+      <td className="px-1.5 py-1">
         <input
           type="text"
           inputMode="decimal"
@@ -93,7 +93,7 @@ function LineRow({
           className={NUMERIC_INPUT_CLASS}
         />
       </td>
-      <td className="px-1 py-1">
+      <td className="px-1.5 py-1">
         <input
           type="text"
           inputMode="decimal"
@@ -111,7 +111,7 @@ function LineRow({
           className={DELETE_BUTTON_CLASS}
           onClick={() => onRemove(item.key)}
         >
-          <span aria-hidden="true">✕</span>
+          <Icon name="close" size={16} />
         </button>
       </td>
     </tr>
@@ -133,15 +133,15 @@ export default function LineItemsEditor({
   onFocusRow,
 }: LineItemsEditorProps): JSX.Element {
   return (
-    <div className="relative overflow-x-auto rounded-lg border border-border bg-surface">
-      <table className="w-full min-w-[32rem]">
-        <thead className="border-b border-border bg-surface-subtle/70">
+    <div className="relative overflow-x-auto border-y border-border bg-surface">
+      <table className="w-full min-w-[32rem] border-collapse">
+        <thead>
           <tr>
             <th className={HEADER_CELL}>Description</th>
-            <th className={HEADER_CELL}>Qty</th>
-            <th className={HEADER_CELL}>Unit (RM)</th>
-            <th className={HEADER_CELL}>Total (RM)</th>
-            <th className="w-11 px-1 py-1" aria-label="Delete line" />
+            <th className={NUMERIC_HEADER_CELL}>Qty</th>
+            <th className={NUMERIC_HEADER_CELL}>Unit (RM)</th>
+            <th className={NUMERIC_HEADER_CELL}>Total (RM)</th>
+            <th className="w-11 border-b border-border px-1 py-2" aria-label="Delete line" />
           </tr>
         </thead>
         <tbody>
@@ -159,11 +159,11 @@ export default function LineItemsEditor({
           ))}
         </tbody>
       </table>
-      <div className="flex items-center justify-between border-t border-border px-2 py-1">
-        <button type="button" className={ADD_BUTTON_CLASS} onClick={onAdd}>
-          + Add Line (Alt+A)
+      <div className="flex items-center justify-between px-2 py-1">
+        <button type="button" className="btn btn-ghost" onClick={onAdd}>
+          <Icon name="plus" size={14} /> Add Line (Alt+A)
         </button>
-        <span className="font-mono-numbers text-xs text-text-muted">{items.length} lines</span>
+        <span className="font-mono-numbers text-label text-text-muted">{items.length} lines</span>
       </div>
     </div>
   );

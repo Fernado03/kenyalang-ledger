@@ -3,6 +3,7 @@ import type { Dispatch, PointerEvent as ReactPointerEvent, SetStateAction } from
 
 import { receiptImageUrl } from '../api/client';
 import { formatConfidence } from '../lib/format';
+import { Icon } from './Icon';
 import { useSessionStore } from '../store/sessionStore';
 import type { FieldProvenance, OcrToken, ReceiptLineItem } from '../types/receipt';
 
@@ -12,13 +13,13 @@ const MAX_SCALE = 8;
 const ZOOM_STEP = 1.25;
 
 /** Bounding-box colour encoding (docs/04_ui_specs.md §4.3). */
-const ACTIVE_STROKE = '#14B8A6';
-const ACTIVE_FILL = 'rgba(20,184,166,0.15)';
-const LOW_CONFIDENCE_STROKE = '#F59E0B';
-const LOW_CONFIDENCE_FILL = 'rgba(245,158,11,0.10)';
-const MISMATCH_STROKE = '#EF4444';
-const MISMATCH_FILL = 'rgba(239,68,68,0.10)';
-const IDLE_STROKE = 'rgba(100,116,139,0.55)';
+const ACTIVE_STROKE = '#147A6C';
+const ACTIVE_FILL = 'rgba(20,122,108,0.14)';
+const LOW_CONFIDENCE_STROKE = '#B07A1E';
+const LOW_CONFIDENCE_FILL = 'rgba(176,122,30,0.10)';
+const MISMATCH_STROKE = '#B4452F';
+const MISMATCH_FILL = 'rgba(180,69,47,0.10)';
+const IDLE_STROKE = 'rgba(23,26,24,0.45)';
 
 /** Confidence below which a provenance box is flagged amber. */
 const LOW_CONFIDENCE_THRESHOLD = 0.8;
@@ -132,10 +133,10 @@ function isActiveLineRow(activeField: string | null, index: number): boolean {
 }
 
 const ICON_BUTTON =
-  'inline-flex h-11 w-11 items-center justify-center border border-border bg-surface text-sm text-text-primary hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
+  'inline-flex h-11 w-11 items-center justify-center border border-charcoal-rule bg-transparent text-text-inverse transition-colors duration-100 ease-out hover:bg-charcoal-rule';
 
 const TEXT_BUTTON =
-  'inline-flex h-11 items-center justify-center border border-border bg-surface px-3 text-sm font-medium text-text-primary hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-brand-900 focus-visible:ring-offset-1 focus-visible:outline-none';
+  'inline-flex h-11 items-center justify-center gap-1.5 border border-charcoal-rule bg-transparent px-3 text-ui font-medium text-text-inverse transition-colors duration-100 ease-out hover:bg-charcoal-rule';
 
 /**
  * Props for the SCR-03 receipt viewport. Zoom lives in the review page so the
@@ -362,16 +363,16 @@ export default function ReceiptCanvas({
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-surface-subtle">
-      <div className="flex h-dense-row shrink-0 items-center gap-2 border-b border-border bg-surface px-2">
+    <div className="on-dark flex h-full min-h-0 flex-col bg-charcoal">
+      <div className="flex h-dense-row shrink-0 items-center gap-2 border-b border-charcoal-rule bg-charcoal-raised px-2">
         <button type="button" className={ICON_BUTTON} onClick={onZoomOut} aria-label="Zoom out">
-          −
+          <Icon name="minus" size={16} />
         </button>
-        <span className="w-14 text-center font-mono-numbers text-xs text-text-secondary">
+        <span className="w-14 text-center font-mono-numbers text-label text-text-inverse">
           {Math.round(scale * 100)}%
         </span>
         <button type="button" className={ICON_BUTTON} onClick={onZoomIn} aria-label="Zoom in">
-          +
+          <Icon name="plus" size={16} />
         </button>
         <button
           type="button"
@@ -379,7 +380,7 @@ export default function ReceiptCanvas({
           onClick={handleReset}
           aria-label="Reset zoom and center"
         >
-          Reset
+          <Icon name="reset" size={16} /> Reset
         </button>
       </div>
 
@@ -404,7 +405,7 @@ export default function ReceiptCanvas({
             }}
           >
             {imageUrl === null ? (
-              <div className="h-64 w-full animate-pulse bg-surface-subtle" />
+              <div className="h-64 w-full animate-pulse bg-charcoal-raised" />
             ) : (
               <ReceiptImage src={imageUrl} alt="Scanned receipt for review" />
             )}
@@ -452,7 +453,7 @@ export default function ReceiptCanvas({
 
         {hovered !== null && (
           <div
-            className="pointer-events-none absolute z-10 bg-border-focus px-2 py-1 text-xs text-surface"
+            className="pointer-events-none absolute z-10 border border-border bg-surface px-2 py-1 font-mono text-micro text-text-primary shadow-[0_1px_3px_rgba(23,26,24,0.28)]"
             style={{ left: hovered.x, top: hovered.y }}
           >
             {hovered.text}
@@ -471,5 +472,12 @@ const ReceiptImage = memo(function ReceiptImage({
   src: string;
   alt: string;
 }): JSX.Element {
-  return <img src={src} alt={alt} draggable={false} className="block h-auto w-full select-none" />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      draggable={false}
+      className="block h-auto w-full select-none bg-surface shadow-[0_1px_3px_rgba(23,26,24,0.28)]"
+    />
+  );
 });
