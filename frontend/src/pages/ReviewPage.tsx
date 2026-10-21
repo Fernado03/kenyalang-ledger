@@ -41,7 +41,7 @@ const PRIMARY_BUTTON_CLASS = 'btn btn-primary';
 
 const DANGER_BUTTON_CLASS = 'btn btn-danger';
 
-const SECTION_CLASS = 'border-b border-border px-5 py-6 lg:px-8';
+const SECTION_CLASS = 'border-b border-border px-5 py-6 lg:px-8 lg:py-5';
 
 const LABEL_CLASS = 'field-label';
 
@@ -555,7 +555,7 @@ export default function ReviewPage(): JSX.Element {
           ) : null}
 
           <section className={SECTION_CLASS}>
-            <div className="mb-4 flex items-baseline gap-3">
+            <div className="mb-3 flex items-baseline gap-3">
               <span className="section-label">01</span>
               <h2 className="section-title">Supplier &amp; date</h2>
             </div>
@@ -606,7 +606,7 @@ export default function ReviewPage(): JSX.Element {
           </section>
 
           <section className={SECTION_CLASS}>
-            <div className="mb-4 flex items-baseline gap-3">
+            <div className="mb-3 flex items-baseline gap-3">
               <span className="section-label">02</span>
               <h2 className="section-title">Line items</h2>
             </div>
@@ -627,13 +627,14 @@ export default function ReviewPage(): JSX.Element {
             />
           </section>
 
-          <section className="px-5 py-6 lg:px-8">
-            <div className="mb-4 flex items-baseline gap-3">
+          <section className="px-5 py-6 lg:px-8 lg:py-5">
+            <div className="mb-3 flex items-baseline gap-3">
               <span className="section-label">03</span>
               <h2 className="section-title">Totals &amp; audit</h2>
             </div>
 
-            <div className="ml-auto grid w-full max-w-md gap-2">
+            <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
+            <div className="ml-auto grid w-full max-w-md gap-2 lg:ml-0 lg:max-w-none">
               <label className="flex items-center justify-between gap-3">
                 <span className={LABEL_CLASS}>Subtotal</span>
                 <span className="flex items-center gap-1.5">
@@ -687,7 +688,7 @@ export default function ReviewPage(): JSX.Element {
               </label>
             </div>
 
-            <dl className="ml-auto mt-4 w-full max-w-md space-y-1 border-t border-border pt-3">
+            <dl className="ml-auto mt-4 w-full max-w-md space-y-1 border-t border-border pt-3 lg:ml-0 lg:mt-0 lg:max-w-none lg:border-t-0 lg:pt-0">
               <div className="flex items-center justify-between gap-3">
                 <dt className="text-label text-text-muted">Line Items Total</dt>
                 <dd className="font-mono-numbers text-label text-text-secondary">
@@ -708,12 +709,13 @@ export default function ReviewPage(): JSX.Element {
                 </dd>
               </div>
             </dl>
+            </div>
 
-            <div className="mt-4">
+            <div className="mt-3">
               <MathBanner audit={audit} missingSst={audit.missingSstOnRegisteredMerchant} dirty={isDirty} />
             </div>
 
-            <details className="mt-5 border-t border-border">
+            <details className="mt-4 border-t border-border">
               <summary className="section-label cursor-pointer py-3">Audit history</summary>
               {auditError !== null ? (
                 <p className="border-t border-border py-2 text-label text-mismatch-text">{auditError}</p>

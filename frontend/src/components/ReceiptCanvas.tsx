@@ -196,6 +196,48 @@ export default function ReceiptCanvas({
   const [hovered, setHovered] = useState<{ x: number; y: number; text: string } | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const [stage, setStage] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  // Track the stage box so the scan can be contained inside it at 100%.
+  useEffect(() => {
+    const node = panRef.current;
+    if (node === null) {
+      return undefined;
+    }
+    const observer = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (box !== undefined) {
+        setStage({ w: box.width, h: box.height });
+      }
+    });
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  const handleNaturalSize = useCallback((w: number, h: number): void => {
+    setNatural({ w, h });
+  }, []);
+
+  // Contain-fit at 100%: both axes are respected so a landscape scan on a tall
+  // pane is centred rather than stranded at the top of an empty stage.
+  const fit = useMemo(() => {
+    if (natural === null || stage.w === 0 || stage.h === 0) {
+      return null;
+    }
+    const factor = Math.min(stage.w / natural.w, stage.h / natural.h);
+    return {
+      width: Math.round(natural.w * factor),
+      height: Math.round(natural.h * factor),
+    };
+  }, [natural, stage]);
+
+  // Top-left of the fitted scan inside the stage. Zoom scales from this corner,
+  // so the resting position must be part of the transform rather than layout.
+  const originX = fit === null ? 0 : Math.round((stage.w - fit.width) / 2);
+  const originY = fit === null ? 0 : Math.round((stage.h - fit.height) / 2);
 
   // Authenticated blob fetch; the object URL is revoked on cleanup.
   useEffect(() => {
@@ -253,15 +295,21 @@ export default function ReceiptCanvas({
       const rect = node.getBoundingClientRect();
       const cursorX = event.clientX - rect.left;
       const cursorY = event.clientY - rect.top;
-      setTx((prev) => cursorX - (cursorX - prev) * ratio);
-      setTy((prev) => cursorY - (cursorY - prev) * ratio);
+      setTx((prev) => {
+        const base = originX + prev;
+        return cursorX - (cursorX - base) * ratio - originX;
+      });
+      setTy((prev) => {
+        const base = originY + prev;
+        return cursorY - (cursorY - base) * ratio - originY;
+      });
       setScale(nextScale);
     };
     node.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       node.removeEventListener('wheel', handleWheel);
     };
-  }, [clampScale, scale, setScale]);
+  }, [clampScale, originX, originY, scale, setScale]);
 
   const boxes = useMemo<OverlayBox[]>(() => {
     const result: OverlayBox[] = [];
@@ -397,17 +445,28 @@ export default function ReceiptCanvas({
       >
         {imageError === null ? (
           <div
-            className="relative"
+            className="relative shrink-0"
             style={{
-              transform: `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`,
+              // Fit the whole scan inside the stage at 100%: cap both axes so a
+              // landscape photo on a portrait pane is contained, not cropped or
+              // marooned at the top of a tall empty stage. The centring offset is
+              // folded into the transform (not flex) so cursor-anchored zoom keeps
+              // pointing at the same pixel of the scan.
+              width: fit === null ? undefined : `${fit.width}px`,
+              height: fit === null ? undefined : `${fit.height}px`,
+              transform: `translate3d(${originX + tx}px, ${originY + ty}px, 0) scale(${scale})`,
               transformOrigin: '0 0',
               transition: 'none',
             }}
           >
             {imageUrl === null ? (
-              <div className="h-64 w-full animate-pulse bg-charcoal-raised" />
+              <div className="h-64 w-[min(100%,28rem)] animate-pulse bg-charcoal-raised" />
             ) : (
-              <ReceiptImage src={imageUrl} alt="Scanned receipt for review" />
+              <ReceiptImage
+                src={imageUrl}
+                alt="Scanned receipt for review"
+                onNaturalSize={handleNaturalSize}
+              />
             )}
             <svg
               className="pointer-events-none absolute inset-0 h-full w-full"
@@ -468,16 +527,24 @@ export default function ReceiptCanvas({
 const ReceiptImage = memo(function ReceiptImage({
   src,
   alt,
+  onNaturalSize,
 }: {
   src: string;
   alt: string;
+  onNaturalSize: (w: number, h: number) => void;
 }): JSX.Element {
   return (
     <img
       src={src}
       alt={alt}
       draggable={false}
-      className="block h-auto w-full select-none bg-surface shadow-[0_1px_3px_rgba(23,26,24,0.28)]"
+      onLoad={(event) => {
+        const node = event.currentTarget;
+        if (node.naturalWidth > 0 && node.naturalHeight > 0) {
+          onNaturalSize(node.naturalWidth, node.naturalHeight);
+        }
+      }}
+      className="block h-full w-full select-none bg-surface object-contain shadow-[0_1px_3px_rgba(23,26,24,0.28)]"
     />
   );
 });
