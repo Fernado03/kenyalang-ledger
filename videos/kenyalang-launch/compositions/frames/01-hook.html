@@ -1,0 +1,164 @@
+<template>
+<style>
+  @font-face {
+    font-family: "EB Garamond";
+    src: url("assets/fonts/eb-garamond-latin-500-normal.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: block;
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    src: url("assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: block;
+  }
+
+  #root {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    container-type: size;
+    overflow: hidden;
+    background: transparent;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .clip { position: absolute; inset: 0; }
+  .f01-ground { background: #F6F1E7; }
+
+  /* headline column — left 46%, never crosses the photograph */
+  .f01-type {
+    position: absolute;
+    left: 6.5cqw;
+    top: 46cqh;
+    width: 46cqw;
+  }
+
+  .f01-rule {
+    height: 1px;
+    background: #D9D2C3;
+    transform-origin: left center;
+  }
+
+  .f01-label {
+    margin-top: 1.35cqw;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 500;
+    font-size: 15px;
+    line-height: 1;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #147A6C;
+  }
+
+  .f01-head {
+    margin-top: 2.4cqw;
+    font-family: "EB Garamond", Georgia, serif;
+    font-weight: 500;
+    font-size: 5.2cqw;
+    line-height: 1.08;
+    letter-spacing: 0;
+    color: #171A18;
+    overflow: visible;
+  }
+
+  .f01-line { white-space: nowrap; }
+
+  /* the receipt: 62cqw wide, left third of the visible mass, right side cropped */
+  .f01-photo {
+    position: absolute;
+    left: 58.67cqw;
+    top: 15.55cqh;
+    width: 62cqw;
+    box-sizing: border-box;
+    border: 1px solid #B9B0A0;
+    background: #FBF8F1;
+  }
+
+  .f01-photo img {
+    display: block;
+    width: 100%;
+    height: auto;
+    filter: saturate(0.4);
+  }
+</style>
+
+<div data-hf-id="hf-ubp4"
+  id="root"
+  data-composition-id="01-hook"
+  data-start="0"
+  data-duration="4.2"
+  data-width="1920"
+  data-height="1080"
+>
+  <div data-hf-id="hf-r9ik" id="f01-ground" class="clip f01-ground" data-start="0" data-duration="4.2" data-track-index="0"></div>
+
+  <div data-hf-id="hf-thro" id="f01-photo" class="clip" data-start="0" data-duration="4.2" data-track-index="1" data-layout-allow-overflow>
+    <div data-hf-id="hf-xdjg" class="f01-photo">
+      <img data-hf-id="hf-sua6" src="assets/receipt-hero.png" alt="" />
+    </div>
+  </div>
+
+  <div data-hf-id="hf-w6gu" id="f01-type" class="clip" data-start="0" data-duration="4.2" data-track-index="2">
+    <div data-hf-id="hf-2swg" class="f01-type">
+      <div data-hf-id="hf-r92q" class="f01-rule"></div>
+      <div data-hf-id="hf-0ujx" class="f01-label">A MONTH OF RECEIPTS</div>
+      <div data-hf-id="hf-nflq" class="f01-head">
+        <div data-hf-id="hf-s95u" class="f01-line f01-l1">A shoebox of receipts.</div>
+        <div data-hf-id="hf-4ve1" class="f01-line f01-l2">A month of typing.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var tl = gsap.timeline({ paused: true });
+
+    // 0.0–0.6 — the hairline is already drawn; it extends into place.
+    tl.fromTo(
+      ".f01-rule",
+      { scaleX: 0.82 },
+      { scaleX: 1, duration: 0.55, ease: "power2.inOut" },
+      0
+    );
+
+    // 0.0–1.1 — mono label is present on the cut and rises into register.
+    tl.fromTo(
+      ".f01-label",
+      { opacity: 0.55, y: 8 },
+      { opacity: 1, y: 0, duration: 0.75, ease: "power2.out" },
+      0
+    );
+
+    // 0.25–0.95 — line one, one block, no per-word stagger.
+    tl.fromTo(
+      ".f01-l1",
+      { opacity: 0, y: 14 },
+      { opacity: 1, y: 0, duration: 0.7, ease: "power2.out" },
+      0.25
+    );
+
+    // 1.15–1.75 — line two, offset 0.15s.
+    tl.fromTo(
+      ".f01-l2",
+      { opacity: 0, y: 14 },
+      { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" },
+      1.15
+    );
+
+    // 0.55–1.45 — the photograph settles onto the page.
+    tl.fromTo(
+      ".f01-photo",
+      { opacity: 0, y: 26 },
+      { opacity: 0.92, y: 0, duration: 0.9, ease: "power2.out" },
+      0.55
+    );
+
+    tl.seek(0);
+    window.__timelines["01-hook"] = tl;
+  })();
+</script>
+</template>

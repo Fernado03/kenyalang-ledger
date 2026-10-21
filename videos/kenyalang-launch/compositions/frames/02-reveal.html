@@ -1,0 +1,128 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "EB Garamond";
+      src: url("assets/fonts/eb-garamond-latin-500-normal.woff2") format("woff2");
+      font-weight: 500;
+      font-style: normal;
+      font-display: block;
+    }
+    @font-face {
+      font-family: "Inter";
+      src: url("assets/fonts/inter-latin-400-normal.woff2") format("woff2");
+      font-weight: 400;
+      font-style: normal;
+      font-display: block;
+    }
+
+    #root {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      container-type: size;
+      background: transparent;
+    }
+
+    .fr02-stage {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .fr02-lockup {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .fr02-mark {
+      display: block;
+      width: 5.2cqw;
+      height: 5.2cqw;
+      transform-origin: 50% 50%;
+    }
+
+    .fr02-word {
+      margin: 1.5cqw 0 0;
+      font-family: "EB Garamond", serif;
+      font-weight: 500;
+      font-size: 7cqw;
+      line-height: 1.04;
+      color: #171A18;
+    }
+
+    .fr02-rule {
+      width: 44cqw;
+      height: 1px;
+      background: #D9D2C3;
+      transform-origin: 50% 50%;
+    }
+
+    .fr02-rule-a {
+      margin-top: 1.6cqw;
+    }
+
+    .fr02-def {
+      margin: 1.5cqw 0 0;
+      max-width: 52cqw;
+      font-family: "Inter", sans-serif;
+      font-weight: 400;
+      font-size: 1.35cqw;
+      line-height: 1.5;
+      color: #4A4F4A;
+      text-align: center;
+    }
+
+    .fr02-rule-b {
+      margin-top: 1.5cqw;
+    }
+  </style>
+
+  <div data-hf-id="hf-wb93" id="root" data-composition-id="02-reveal" data-start="0" data-duration="5.7" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-h9hq" id="f02-ground" class="clip" data-start="0" data-duration="5.7" data-track-index="0" style="position: absolute; inset: 0; background: #F6F1E7;"></div>
+
+    <div data-hf-id="hf-2x1f" class="fr02-stage">
+      <div data-hf-id="hf-n56h" class="fr02-lockup">
+        <img data-hf-id="hf-cr8v" class="fr02-mark" src="assets/hornbill.svg" alt="" />
+        <div data-hf-id="hf-7sfa" class="fr02-word">Kenyalang Ledger</div>
+        <div data-hf-id="hf-60ve" class="fr02-rule fr02-rule-a"></div>
+        <p data-hf-id="hf-acn4" class="fr02-def">A receipt workspace for small Malaysian businesses.</p>
+        <div data-hf-id="hf-22rd" class="fr02-rule fr02-rule-b"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var tl = gsap.timeline({ paused: true });
+
+      // The cut lands on the lockup already set: the mark scales, the
+      // wordmark slides. Nothing fades up from zero, so no blank cut frame.
+      tl.fromTo(".fr02-mark", { scale: 0.94 },
+        { scale: 1, duration: 0.7, ease: "power2.out" }, 0);
+
+      tl.fromTo(".fr02-word", { y: 10 },
+        { y: 0, duration: 0.8, ease: "power2.out" }, 0);
+
+      // 1.4–2.2 hairline draws from centre
+      tl.fromTo(".fr02-rule-a", { scaleX: 0 },
+        { scaleX: 1, duration: 0.8, ease: "power2.inOut" }, 1.4);
+
+      // 1.8–2.5 definition line
+      tl.fromTo(".fr02-def", { y: 8, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.7, ease: "power2.out" }, 1.8);
+
+      // 2.7–3.6 second hairline brackets the lockup
+      tl.fromTo(".fr02-rule-b", { scaleX: 0 },
+        { scaleX: 1, duration: 0.9, ease: "power2.inOut" }, 2.7);
+
+      // 3.6–5.7 the only continuous motion: an imperceptible breathe
+      tl.to(".fr02-mark", { scale: 1.008, duration: 2.1, ease: "sine.inOut" }, 3.6);
+
+      window.__timelines["02-reveal"] = tl;
+      tl.seek(0);
+    })();
+  </script>
+</template>

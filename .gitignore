@@ -96,3 +96,22 @@ models.json
 pytest-*.txt
 *-final.txt
 gate*.txt
+
+# HyperFrames launch-video workspace.
+# Committed: authored docs (BRIEF/SCRIPT/STORYBOARD/frame.md), compositions/,
+# index.html, assets/, and the rendered MP4 + contact sheet.
+# Everything the toolchain generates or caches is ignored.
+videos/*/.hyperframes/
+videos/*/.thumbnails/
+videos/*/.media/
+videos/*/.tmp-audit/
+videos/*/.waveform-cache/
+videos/*/.hf-check/
+videos/*/capture/
+videos/*/node_modules/
+videos/*/renders/view/
+videos/*/renders/.*.hf-transaction-*/
+videos/*/audio_*.json
+.tmp-shots/
+.tmp-site/
+.serena/
