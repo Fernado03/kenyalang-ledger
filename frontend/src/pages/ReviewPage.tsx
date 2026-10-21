@@ -120,6 +120,8 @@ export default function ReviewPage(): JSX.Element {
   const receiptsError = useReceiptStore((state) => state.receiptsError);
   const saveState = useReceiptStore((state) => state.saveState);
   const saveError = useReceiptStore((state) => state.saveError);
+  const currentClientId = useReceiptStore((state) => state.currentClientId);
+  const setCurrentClientId = useReceiptStore((state) => state.setCurrentClientId);
   const loadReceipt = useReceiptStore((state) => state.loadReceipt);
   const setDraftField = useReceiptStore((state) => state.setDraftField);
   const addDraftLine = useReceiptStore((state) => state.addDraftLine);
@@ -215,12 +217,22 @@ export default function ReviewPage(): JSX.Element {
     }
   }, [clientId, receiptId]);
 
+  // A deep link must adopt the workspace from the URL: the store reads the
+  // receipt from `currentClientId`, so without this a linked receipt 404s.
+  useEffect(() => {
+    if (clientId === undefined || clientId === '') return;
+    if (currentClientId !== clientId) {
+      void setCurrentClientId(clientId);
+    }
+  }, [clientId, currentClientId, setCurrentClientId]);
+
   // Load the receipt; the store resets the draft and its baseline from server truth.
   useEffect(() => {
     let active = true;
     if (clientId === undefined || clientId === '' || receiptId === undefined || receiptId === '') {
       return;
     }
+    if (currentClientId !== clientId) return;
     loadReceipt(receiptId)
       .then(() => {
         if (active) {
@@ -233,7 +245,7 @@ export default function ReviewPage(): JSX.Element {
     return () => {
       active = false;
     };
-  }, [clientId, receiptId, loadReceipt, refreshAudit]);
+  }, [clientId, currentClientId, receiptId, loadReceipt, refreshAudit]);
 
   // The confirmation strip takes focus when it opens, so Escape lands on it.
   useEffect(() => {

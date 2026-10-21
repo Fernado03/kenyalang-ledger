@@ -214,15 +214,16 @@ falls back to the `File error` stamp rather than exposing a raw enum.
 inbox.` Actions: `Add client` (primary, `plus` icon) when the form is closed, `Close` (ghost)
 when it is open.
 
-**Layout.** At `sm`+, a ruled table: Client name, Registration, SST, Unreviewed, Verified,
+**Layout.** At `md`+, a ruled table: Client name, Registration, SST, Unreviewed, Verified,
 Action. The industry category is folded into the name cell as a muted subline — there is no
 separate column. Registration and SST are mono and print an em dash when absent. Counts are
 right-aligned mono. Each row is 52px and ends in an `Open` link-button (chevron icon, 44px hit
-area). Below `sm`, the same data renders as a stacked list: name plus industry, a two-column
+area). Below `md`, the same data renders as a stacked list: name plus industry, a two-column
 definition list (Registration, SST, Unreviewed, Verified), and a full-width `Open` button. The
-whole row is not clickable; the explicit control is the target.
+whole row is not clickable; the explicit control is the target. The table's min-content is
+≈622px, so `sm` (640px minus shell padding) cannot hold it.
 
-**States.** Loading shows three skeleton table rows (and three stacked skeletons below `sm`). An
+**States.** Loading shows three skeleton table rows (and three stacked skeletons below `md`). An
 error shows a `role="alert"` strip with `Retry`. Empty, with the form closed, shows
 `Add your first client`, `Create a client workspace to start uploading receipts.`, and an
 `Add your first client` primary button; with the form open, the form itself. When clients exist
@@ -258,17 +259,18 @@ Each is a 40px button with `aria-pressed`; the active tab gets a 2px `brand-900`
 semibold text. The group is labelled `Status filter` and scrolls horizontally at 320px.
 
 **Table.** One DOM for both breakpoints. The `<table>` keeps explicit `table`/`rowgroup`/`row`/
-`cell` ARIA roles and switches from `block` to `table` at `sm`:
+`cell` ARIA roles and switches from `block` to `table` at `md` (below `md` the seven columns
+do not fit and would overflow the page):
 
-* **`sm`+ columns:** Preview (44px column holding the 32px thumbnail), Supplier, Date (96px),
+* **`md`+ columns:** Preview (44px column holding the 32px thumbnail), Supplier, Date (96px),
   Items (64px), Grand total (right, 128px), Status (128px), Action (96px). Headers are sticky at
   `top-14 lg:top-0` on `canvas`.
-* **Below `sm`:** each row becomes a three-column grid — `32px | minmax(0,1fr) | auto` — with
+* **Below `md`:** each row becomes a three-column grid — `32px | minmax(0,1fr) | auto` — with
   the thumbnail spanning two rows; supplier and flags, date, total, stamp, and a full-width
-  `Open` button follow. The item-count cell is hidden below `sm`.
+  `Open` button follow. The item-count cell is hidden below `md`.
 * **Rows:** `surface` hover; a 2px left border in `warning-border` for needs-review rows and in
   `mismatch-border` for error rows. Cells use 10px vertical padding around a 22px stamp, so
-  `sm` rows are ≈44px. Mobile stacked rows use 12px vertical padding.
+  `md` rows are ≈44px. Mobile stacked rows use 12px vertical padding.
 * **Thumbnail:** 32×32 (`h-8 w-8`), 1px radius and border, `object-cover`. It is fetched lazily
   through an `IntersectionObserver` as an authenticated blob and revoked on unmount. Alt text is
   the filename; while absent, a `role="img"` placeholder is labelled `No preview for {filename}`.
@@ -281,7 +283,7 @@ semibold text. The group is labelled `Status filter` and scrolls horizontally at
   underscores-to-spaces.
 * **Money/date:** date via `formatDate` (`-` when absent); total split into a small currency
   prefix (`RM`) in muted label type and a mono amount.
-* **Action:** `Open` (44px tall, full-width below `sm`) navigates to the review route and is
+* **Action:** `Open` (44px tall, full-width below `md`) navigates to the review route and is
   disabled for processing rows. The whole row is also clickable with a pointer (and shows a
   pointer cursor) unless the receipt is processing; thumbnail and action cells stop propagation.
   There is no bulk selection.
@@ -490,7 +492,8 @@ a labelled (`Month`) `month` input, defaulting to the current month, that drives
 
 **Stat strip.** A `<dl>` bounded by top and bottom rules, with 1px `border`-coloured gaps and
 1/2/4 columns. Four `canvas` cells: `Spend this month` (mono money), `Receipts reviewed`,
-`Needs review`, `Total receipts`. Labels are mono uppercase; values are mono at `title`, rising
+`Needs review`, `Total receipts` (`total_count`, every status — not the sum of the other two).
+Labels are mono uppercase; values are mono at `title`, rising
 to `display` at `sm`. A caption below reads
 `Spend covers the selected month; receipt counts cover the whole workspace.`
 
@@ -732,6 +735,7 @@ export type DraftLineField = 'description' | 'quantity' | 'unit_price' | 'line_t
 export interface ClientSummary extends Client {
   unreviewed_count: number;
   verified_count: number;
+  total_count: number;
 }
 
 export interface TopSupplier {

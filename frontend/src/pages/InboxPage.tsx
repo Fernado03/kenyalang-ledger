@@ -333,8 +333,8 @@ export default function InboxPage(): JSX.Element {
             hint="JPG, PNG, HEIC or PDF, up to 50 files per batch."
           />
         ) : (
-          <table className="data-table block sm:table" role="table" aria-label="Receipt inbox">
-            <thead className="hidden sm:table-header-group" role="rowgroup">
+          <table className="data-table block md:table" role="table" aria-label="Receipt inbox">
+            <thead className="hidden md:table-header-group" role="rowgroup">
               <tr role="row">
                 <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-11 border-b border-border bg-canvas py-2 pl-0 pr-2">
                   <span className="sr-only">Preview</span>
@@ -359,7 +359,7 @@ export default function InboxPage(): JSX.Element {
                 </th>
               </tr>
             </thead>
-            <tbody className="block sm:table-row-group" role="rowgroup">
+            <tbody className="block md:table-row-group" role="rowgroup">
               {receipts.map((receipt) => {
                 const needsReview = receipt.status === 'STATUS_NEEDS_REVIEW';
                 const processing = PROCESSING_STATUSES.includes(receipt.status);
@@ -377,7 +377,7 @@ export default function InboxPage(): JSX.Element {
                     onClick={() => {
                       if (!processing) openReview(receipt.id);
                     }}
-                    className={`grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-border py-3 transition-colors duration-100 hover:bg-surface sm:table-row sm:border-b-0 sm:py-0 ${
+                    className={`grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-border py-3 transition-colors duration-100 hover:bg-surface md:table-row md:border-b-0 md:py-0 ${
                       processing ? '' : 'cursor-pointer'
                     } ${
                       needsReview
@@ -389,12 +389,12 @@ export default function InboxPage(): JSX.Element {
                   >
                     <td
                       role="cell"
-                      className="row-span-2 self-start border-b-0 px-0 py-0 align-middle sm:row-span-1 sm:table-cell sm:border-b sm:pl-0 sm:pr-2"
+                      className="row-span-2 self-start border-b-0 px-0 py-0 align-middle md:row-span-1 md:table-cell md:border-b md:pl-0 md:pr-2"
                       onClick={(event) => event.stopPropagation()}
                     >
                       <ReceiptThumb clientId={clientId} receipt={receipt} />
                     </td>
-                    <td role="cell" className="col-span-2 min-w-0 border-b-0 px-0 py-0 align-middle sm:col-span-1 sm:table-cell sm:max-w-0 sm:border-b sm:px-2">
+                    <td role="cell" className="col-span-2 min-w-0 border-b-0 px-0 py-0 align-middle md:col-span-1 md:table-cell md:max-w-0 md:border-b md:px-2">
                       <span className="block truncate text-ui font-semibold text-text-primary">
                         {receipt.merchant_name ?? receipt.filename}
                       </span>
@@ -407,21 +407,21 @@ export default function InboxPage(): JSX.Element {
                         </span>
                       )}
                     </td>
-                    <td role="cell" className="border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary sm:table-cell sm:border-b sm:px-2 sm:text-ui">
+                    <td role="cell" className="border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary md:table-cell md:border-b md:px-2 md:text-ui">
                       {formatDate(receipt.invoice_date)}
                     </td>
-                    <td role="cell" className="hidden border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary sm:table-cell sm:border-b sm:px-2 sm:text-ui">
+                    <td role="cell" className="hidden border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary md:table-cell md:border-b md:px-2 md:text-ui">
                       {receipt.line_item_count}
                     </td>
-                    <td role="cell" className="border-b-0 px-0 py-0 text-right align-middle sm:table-cell sm:border-b sm:px-2">
+                    <td role="cell" className="border-b-0 px-0 py-0 text-right align-middle md:table-cell md:border-b md:px-2">
                       {money.currency !== null && (
                         <span className="mr-1 text-label text-text-muted">{money.currency}</span>
                       )}
-                      <span className="font-mono-numbers text-body text-text-primary sm:text-ui">
+                      <span className="font-mono-numbers text-body text-text-primary md:text-ui">
                         {money.amount}
                       </span>
                     </td>
-                    <td role="cell" className="col-span-3 border-b-0 px-0 py-0 align-middle sm:col-span-1 sm:table-cell sm:border-b sm:px-2">
+                    <td role="cell" className="col-span-3 border-b-0 px-0 py-0 align-middle md:col-span-1 md:table-cell md:border-b md:px-2">
                       <StatusPill
                         status={receipt.status}
                         flags={receipt.validation_flags}
@@ -430,14 +430,14 @@ export default function InboxPage(): JSX.Element {
                     </td>
                     <td
                       role="cell"
-                      className="col-span-3 border-b-0 px-0 py-0 align-middle sm:col-span-1 sm:table-cell sm:border-b sm:px-2"
+                      className="col-span-3 border-b-0 px-0 py-0 align-middle md:col-span-1 md:table-cell md:border-b md:px-2"
                       onClick={(event) => event.stopPropagation()}
                     >
                       <button
                         type="button"
                         disabled={processing}
                         onClick={() => openReview(receipt.id)}
-                        className="inline-flex min-h-11 w-full items-center justify-center gap-1 border border-border-strong bg-surface px-3 text-ui font-semibold text-text-primary transition-colors duration-100 hover:bg-surface-subtle disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-subtle disabled:text-text-muted sm:w-24"
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-1 border border-border-strong bg-surface px-3 text-ui font-semibold text-text-primary transition-colors duration-100 hover:bg-surface-subtle disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-subtle disabled:text-text-muted md:w-24"
                       >
                         Open
                         <Icon name="chevron-right" size={14} />

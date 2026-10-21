@@ -215,6 +215,8 @@ def test_list_clients_counts_receipts_by_review_state(client: TestClient) -> Non
     assert items[0]["unreviewed_count"] == 1
     # AUTO_VERIFIED + VERIFIED + EXPORTED — exporting follows verification.
     assert items[0]["verified_count"] == 3
+    # Every status counts, so the dashboard total is not just reviewed + needs review.
+    assert items[0]["total_count"] == 5
 
 
 def test_list_clients_counts_do_not_leak_across_workspaces(

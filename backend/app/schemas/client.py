@@ -48,6 +48,8 @@ class ClientSummary(ClientRead):
 
     unreviewed_count: int = 0
     verified_count: int = 0
+    # Every receipt, whatever its status: the dashboard's "Total receipts".
+    total_count: int = 0
 
 
 class ClientListResponse(BaseModel):

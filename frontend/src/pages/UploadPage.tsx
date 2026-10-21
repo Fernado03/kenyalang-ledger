@@ -75,7 +75,7 @@ export default function UploadPage() {
             </Link>
           </div>
         ) : (
-          <main className="mt-8 max-w-[560px] space-y-5">
+          <div className="mt-8 max-w-[560px] space-y-5">
             <div className="space-y-3">
               <label
                 className={`${CAPTURE_BUTTON_CLASS} ${
@@ -154,7 +154,7 @@ export default function UploadPage() {
                 ))}
               </ul>
             ) : null}
-          </main>
+          </div>
         )}
       </div>
     </AppShell>

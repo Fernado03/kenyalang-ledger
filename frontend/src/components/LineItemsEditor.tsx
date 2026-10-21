@@ -141,7 +141,9 @@ export default function LineItemsEditor({
             <th className={NUMERIC_HEADER_CELL}>Qty</th>
             <th className={NUMERIC_HEADER_CELL}>Unit (RM)</th>
             <th className={NUMERIC_HEADER_CELL}>Total (RM)</th>
-            <th className="w-11 border-b border-border px-1 py-2" aria-label="Delete line" />
+            <th className="w-11 border-b border-border px-1 py-2">
+              <span className="sr-only">Delete line</span>
+            </th>
           </tr>
         </thead>
         <tbody>

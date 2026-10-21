@@ -87,6 +87,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export interface ClientSummary extends Client {
   unreviewed_count: number;
   verified_count: number;
+  total_count: number;
 }
 
 /** One dashboard supplier aggregate. */

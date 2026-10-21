@@ -73,7 +73,7 @@ export default function ClientsPage() {
   if (loading) {
     body = (
       <>
-        <div className="hidden sm:block">
+        <div className="hidden md:block">
           <table className="data-table" aria-label="Client workspaces" aria-busy="true">
             <thead>
               <tr>
@@ -92,7 +92,7 @@ export default function ClientsPage() {
             </tbody>
           </table>
         </div>
-        <div className="sm:hidden" aria-busy="true">
+        <div className="md:hidden" aria-busy="true">
           {[0, 1, 2].map((index) => (
             <div className="border-b border-border py-4" key={index}>
               <span className="skeleton block h-4 w-1/2" />
@@ -125,7 +125,7 @@ export default function ClientsPage() {
   } else {
     body = (
       <>
-        <div className="hidden sm:block">
+        <div className="hidden md:block">
           <table className="data-table" aria-label="Client workspaces">
             <thead>
               <tr>
@@ -172,7 +172,7 @@ export default function ClientsPage() {
           </table>
         </div>
 
-        <ul className="divide-y divide-border sm:hidden" aria-label="Client workspaces">
+        <ul className="divide-y divide-border md:hidden" aria-label="Client workspaces">
           {summaries.map((client) => (
             <li key={client.id} className="py-4">
               <p className="text-body font-semibold text-text-primary">

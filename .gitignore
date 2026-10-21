@@ -87,6 +87,12 @@ Thumbs.db
 # Graphify generated graph output
 graphify-out/
 
+# Playwright E2E artifacts and the throwaway fixture database/blobs
+frontend/test-results/
+frontend/playwright-report/
+backend/kenyalang-e2e.db
+backend/storage-e2e/
+
 # Local scratch files that must never be committed
 omp-session-*.html
 receipt_crop.jpg

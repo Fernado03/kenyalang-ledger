@@ -74,8 +74,7 @@ export default function DashboardPage() {
 
   const reviewed = client === null ? '—' : String(client.verified_count ?? 0);
   const needsReview = client === null ? '—' : String(client.unreviewed_count ?? 0);
-  const totalReceipts =
-    client === null ? '—' : String((client.verified_count ?? 0) + (client.unreviewed_count ?? 0));
+  const totalReceipts = client === null ? '—' : String(client.total_count ?? 0);
 
   return (
     <AppShell clientId={clientId}>

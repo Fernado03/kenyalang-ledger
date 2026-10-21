@@ -103,19 +103,21 @@ def list_clients(db: DbSession, accountant_id: AccountantId) -> ClientListRespon
         ),
         0,
     )
+    total = func.count(Receipt.id)
     rows = db.execute(
-        select(Receipt.client_id, unreviewed, verified)
+        select(Receipt.client_id, unreviewed, verified, total)
         .where(Receipt.client_id.in_([c.id for c in clients]))
         .group_by(Receipt.client_id)
     ).all()
-    counts = {row[0]: (int(row[1]), int(row[2])) for row in rows}
+    counts = {row[0]: (int(row[1]), int(row[2]), int(row[3])) for row in rows}
 
     return ClientListResponse(
         items=[
             ClientSummary(
                 **ClientRead.model_validate(c).model_dump(),
-                unreviewed_count=counts.get(c.id, (0, 0))[0],
-                verified_count=counts.get(c.id, (0, 0))[1],
+                unreviewed_count=counts.get(c.id, (0, 0, 0))[0],
+                verified_count=counts.get(c.id, (0, 0, 0))[1],
+                total_count=counts.get(c.id, (0, 0, 0))[2],
             )
             for c in clients
         ]

@@ -586,5 +586,5 @@ renders its own `AppShell` chrome.
 | **OCR engine** | EasyOCR (PyTorch) | 1.7+ | English + Malay, normalized polygon boxes, cached reader. |
 | **LLM interface** | `instructor` + OpenAI SDK | 1.7+ / 1.60+ | `Mode.MD_JSON` + schema in the user turn, Pydantic validation retries, 15 s timeout. |
 | **Async processing** | FastAPI `BackgroundTasks` | — | In-process, no broker or worker. |
-| **Testing** | pytest / Vitest + Testing Library | 8.2+ / 5.0 + 16.3 | 229 backend tests, 34 frontend tests. |
+| **Testing** | pytest / Vitest + Testing Library | 8.2+ / 5.0 + 16.3 | 229 backend tests, 37 frontend tests. |
 | **Containerization** | Docker + Docker Compose | — | Postgres 15 + Python 3.11-slim API with a storage volume. |

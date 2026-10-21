@@ -309,8 +309,10 @@ receipt that belongs to another accountant.
 **`GET /api/clients`** - workspaces owned by the session accountant, newest first, with receipt
 counts. `unreviewed_count` counts `STATUS_NEEDS_REVIEW`; `verified_count` counts
 `STATUS_AUTO_VERIFIED`, `STATUS_VERIFIED` plus `STATUS_EXPORTED` (an exported receipt is still a
-verified one, and dropping it made a fully processed workspace look unreviewed). Rejected and
-failed receipts are counted by neither.
+verified one, and dropping it made a fully processed workspace look unreviewed). `total_count`
+counts every receipt whatever its status, so the dashboard's `Total receipts` stat is not
+silently `verified_count + unreviewed_count`. Rejected and failed receipts are counted by
+neither of the two review counts.
 
 ```json
 {
@@ -326,7 +328,8 @@ failed receipts are counted by neither.
       "created_at": "2026-09-01T10:00:00Z",
       "updated_at": "2026-09-28T10:12:00Z",
       "unreviewed_count": 3,
-      "verified_count": 12
+      "verified_count": 12,
+      "total_count": 19
     }
   ]
 }

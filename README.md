@@ -72,7 +72,7 @@ service on a public network.
 | **CV & OCR** | OpenCV (headless), EasyOCR, Pillow, Pillow-HEIF, PyMuPDF | HEIC through `pillow-heif`, PDF page 1 rendered at 200 DPI |
 | **LLM extraction** | OpenAI SDK against any OpenAI-compatible base URL | Default model `gpt-4o-mini`, overridable with `KENYALANG_LLM_MODEL` |
 | **Persistence** | PostgreSQL 15 or SQLite | Portable column types (`GUID`, `JSONBType`, `UTCDateTime`) |
-| **Testing** | pytest, Vitest, Testing Library, ruff, ESLint | 229 backend tests, 34 frontend tests |
+| **Testing** | pytest, Vitest, Testing Library, ruff, ESLint | 229 backend tests, 37 frontend tests |
 | **Containerization** | Docker, Docker Compose | Non-root backend image; PostgreSQL 15 + API Compose stack |
 
 ---
@@ -340,9 +340,28 @@ npm run lint
 npm run build   # tsc -b && vite build
 ```
 
-34 Vitest tests cover money and date formatting, math auditing, keyboard shortcut resolution,
+37 Vitest tests cover money and date formatting, math auditing, keyboard shortcut resolution,
 and the status pill. Testing Library runs in jsdom with globals disabled, so tests import
 `describe`/`it`/`expect` from `vitest` explicitly.
+
+### End-to-end
+
+```bash
+cd frontend
+npx playwright install chromium   # once
+npm run test:e2e
+```
+
+Playwright drives the real browser against a throwaway stack it starts itself: `backend/seed_e2e.py`
+rebuilds `backend/kenyalang-e2e.db` and `backend/storage-e2e/`, then uvicorn serves that database on
+`:8010` and Vite serves the frontend on `:5183` with the API proxy pointed at it. The demo database
+is never touched. With `reuseExistingServer: false`, every run (including a single spec) starts from
+a fresh seed, so the specs that mutate receipts cannot pollute each other. The suite covers the
+accountant gate, client workspaces, inbox filtering and stamps, the review console, exports,
+dashboard, upload limits, review deep links, and the UI standards (reflow sweep, focus, reduced
+motion, WCAG AA contrast, axe WCAG 2.2 AA, security headers). `09-evidence.spec.ts` is excluded from the gate because it writes
+platform-dependent PNGs; regenerate the screenshots in `docs/e2e-evidence/` on demand with
+`npm run test:e2e:evidence` and see that directory's README for the audit findings.
 
 ---
 
