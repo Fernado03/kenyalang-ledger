@@ -94,9 +94,10 @@ backend/kenyalang-e2e.db
 backend/storage-e2e/
 
 # Local scratch files that must never be committed
+.taste-skill/
+backend/kenyalang.db.bak
 omp-session-*.html
 receipt_crop.jpg
-# Ad-hoc gate logs and provider probes kept in the repo root
 chat.json
 models.json
 pytest-*.txt
