@@ -83,7 +83,15 @@ fails if this regresses; "manual" means it was inspected during this audit but h
 
 ### Known exposure, not fixed
 
-`react-router` 6.30.x carries GHSA-wrjc-x8rr-h8h6 (open redirect via backslash in `Link` /
-`useNavigate`). The published fix is a major bump to 7.18.4. This app never routes to a
-user-controlled destination — every `navigate()` target is a template built from UUIDs and fixed
-segments — so the exposure is a documented demo risk, not a blocker. Revisit after the demo.
+`react-router` 6.30.x carries two moderate advisories; the published fix for both is a major bump
+to 7.18.4.
+
+GHSA-wrjc-x8rr-h8h6 (open redirect via backslash in `Link` / `useNavigate`) does apply to this
+SPA. It is low risk here only because no destination is attacker-controlled: every `Link` `to` and
+every `navigate()` target is a template built from server-issued client/receipt ids and fixed
+segments. Passing a raw query parameter into either would make it exploitable.
+
+GHSA-337j-9hxr-rhxg (`deserializeErrors` during SSR hydration) cannot be reached: the app is
+client-only (`createBrowserRouter`, no `hydrateRoot`, no `StaticRouter`).
+
+Both are a documented demo risk, not a blocker. Upgrade after the demo.

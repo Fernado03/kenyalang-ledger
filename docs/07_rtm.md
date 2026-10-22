@@ -85,8 +85,8 @@ These are scope decisions, recorded so they are not mistaken for regressions.
 
 | Suite | Files | Tests | Command |
 |---|---|---|---|
-| Backend | 17 files in `backend/tests/` | **229** | `cd backend && python -m pytest` |
-| Frontend | 4 files in `frontend/src/` | **34** | `cd frontend && npm test` |
+| Backend | **17** files in `backend/tests/` | **236** | `cd backend && python -m pytest` |
+| Frontend | 4 files in `frontend/src/` | **37** | `cd frontend && npm test` |
 | Lint | — | — | `ruff check app tests`; `npm run lint` |
 | Build | — | — | `npm run build` (`tsc -b && vite build`) |
 

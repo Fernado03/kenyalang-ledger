@@ -72,7 +72,7 @@ service on a public network.
 | **CV & OCR** | OpenCV (headless), EasyOCR, Pillow, Pillow-HEIF, PyMuPDF | HEIC through `pillow-heif`, PDF page 1 rendered at 200 DPI |
 | **LLM extraction** | OpenAI SDK against any OpenAI-compatible base URL | Default model `gpt-4o-mini`, overridable with `KENYALANG_LLM_MODEL` |
 | **Persistence** | PostgreSQL 15 or SQLite | Portable column types (`GUID`, `JSONBType`, `UTCDateTime`) |
-| **Testing** | pytest, Vitest, Testing Library, ruff, ESLint | 229 backend tests, 37 frontend tests |
+| **Testing** | pytest, Vitest, Testing Library, ruff, ESLint | 236 backend tests, 37 frontend tests |
 | **Containerization** | Docker, Docker Compose | Non-root backend image; PostgreSQL 15 + API Compose stack |
 
 ---
@@ -90,7 +90,7 @@ kenyalang-ledger/
 │   │   ├── schemas/        # Pydantic v2 request/response contracts
 │   │   ├── services/       # reconciler, classifier, export engine
 │   │   └── main.py         # app factory, lifespan, CORS, router mounting
-│   ├── tests/              # 229 pytest tests
+│   ├── tests/              # 236 pytest tests
 │   ├── sql/                # pgcrypto extension for the Compose database
 │   ├── Dockerfile
 │   ├── pyproject.toml      # package metadata and pytest config
@@ -326,7 +326,7 @@ python -m pytest
 ruff check app tests
 ```
 
-The suite runs 229 tests over auth, tenancy, health, uploads, receipt updates, exports,
+The suite runs 236 tests over auth, tenancy, health, uploads, receipt updates, exports,
 dashboard, pipeline formats, and end-to-end export flows. It uses SQLite and a temporary
 storage root, so no Docker or network access is required. Tests that would need EasyOCR
 weights skip with an explicit reason.
