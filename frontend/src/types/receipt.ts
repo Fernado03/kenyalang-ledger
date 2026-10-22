@@ -49,6 +49,7 @@ export interface ReceiptListResponse {
   limit: number;
   offset: number;
   items: ReceiptListItem[];
+  status_counts: Record<string, number>;
 }
 
 /** Per-field provenance: confidence plus (optional) normalized bbox. */

@@ -186,6 +186,9 @@ class ReceiptListResponse(BaseModel):
     limit: int
     offset: int
     items: list[ReceiptListItem]
+    # Every filter bucket for this client, ignoring the active filter, so the
+    # inbox tabs can show counts without five more round-trips.
+    status_counts: dict[str, int]
 
 
 class ReceiptDetailLineItem(BaseModel):

@@ -104,9 +104,11 @@ export default function ClientsPage() {
       </>
     )
   } else if (clients.length === 0) {
+    // A failed fetch must not read as an empty account: no create invitation.
+    // A form the user already opened stays, so typed input is not discarded.
     body = formOpen ? (
       formPanel
-    ) : (
+    ) : receiptsError !== null ? null : (
       <div className="border-t-2 border-brand-900 py-10">
         <h2 className="section-title">Add your first client</h2>
         <p className="mt-2 max-w-md text-body text-text-secondary">
@@ -230,7 +232,7 @@ export default function ClientsPage() {
     <AppShell clientId={currentClientId ?? undefined}>
       <div className="page-shell">
         <PageHeader
-          eyebrow="WORKSPACE INDEX"
+          eyebrow="Workspaces"
           title="Clients"
           meta={
             loading

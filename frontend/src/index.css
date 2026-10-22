@@ -68,12 +68,14 @@
     @apply mx-auto w-full max-w-shell px-5 py-7 sm:px-8 lg:px-10 lg:py-10;
   }
 
+  /* Sentence-case labels: the console reads as a ledger document, not a
+     dashboard chrome kit. Uppercase micro-tracking is banned here. */
   .eyebrow {
-    @apply font-mono text-micro font-medium uppercase tracking-[0.14em] text-text-muted;
+    @apply text-label text-text-muted;
   }
 
   .section-label {
-    @apply font-mono text-micro font-medium uppercase tracking-[0.12em] text-text-muted;
+    @apply text-label text-text-muted;
   }
 
   .section-title {
@@ -81,7 +83,7 @@
   }
 
   .field-label {
-    @apply block font-mono text-micro font-medium uppercase tracking-[0.12em] text-text-muted;
+    @apply block text-label text-text-muted;
   }
 
   .field-input {
@@ -141,7 +143,7 @@
   }
 
   .data-table th {
-    @apply border-b border-border px-3 py-2 text-left font-mono text-micro font-medium uppercase tracking-[0.1em] text-text-muted;
+    @apply border-b border-border px-3 py-2 text-left text-label font-medium text-text-muted;
   }
 
   .data-table td {

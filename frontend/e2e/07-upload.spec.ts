@@ -61,7 +61,7 @@ test.describe('Upload capture surface', () => {
     })
 
     await expect(page.getByText('1 file accepted.')).toBeVisible()
-    const accepted = page.getByRole('status').locator('xpath=following-sibling::ul[1]')
+    const accepted = page.getByRole('list', { name: 'Accepted this batch' })
     await expect(accepted.getByRole('listitem')).toHaveCount(1)
     await expect(accepted).toContainText('clean-review.jpg')
     await expect(accepted).toContainText('Needs review')

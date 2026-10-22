@@ -80,7 +80,7 @@ export default function DashboardPage() {
     <AppShell clientId={clientId}>
       <div className="page-shell space-y-7">
         <PageHeader
-          eyebrow={`WORKSPACE · ${client?.registration_number ?? 'CLIENTS'}`}
+          eyebrow={client?.registration_number ? `Workspace ${client.registration_number}` : 'Workspace'}
           title="Dashboard"
           meta={
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -121,31 +121,45 @@ export default function DashboardPage() {
 
         {loading ? (
           <LoadingSkeleton rows={4} />
-        ) : summary === null ? (
+        ) : error !== null && summary === null ? null : summary === null ? (
           <EmptyState
             title="No dashboard data"
             hint="Verified receipts for this month will appear here."
           />
         ) : (
           <>
-            <dl className="grid grid-cols-1 gap-px border-y border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                { label: 'Spend this month', value: formatMoneyDisplay(summary.total_spend) },
-                { label: 'Receipts reviewed', value: reviewed },
-                { label: 'Needs review', value: needsReview },
-                { label: 'Total receipts', value: totalReceipts },
-              ].map((stat) => (
-                <div key={stat.label} className="bg-canvas px-4 py-4 sm:px-5 sm:py-5">
-                  <dt className="section-label">{stat.label}</dt>
-                  <dd className="mt-1.5 break-words font-mono-numbers text-title text-text-primary sm:text-display">
-                    {stat.value}
+            <section aria-labelledby="spend-heading">
+              <h2 id="spend-heading" className="section-label">
+                Spend this month
+              </h2>
+              <p className="mt-2 font-mono-numbers text-display-lg text-text-primary">
+                {formatMoneyDisplay(summary.total_spend)}
+              </p>
+              <dl className="mt-6 grid grid-cols-1 gap-px border-y border-border bg-border sm:grid-cols-3">
+                <div className="bg-canvas px-4 py-3">
+                  <dt className="section-label">Receipts reviewed</dt>
+                  <dd className="mt-1 font-mono-numbers text-title text-text-primary">{reviewed}</dd>
+                </div>
+                <div className="bg-canvas px-4 py-3">
+                  <dt className="section-label">Needs review</dt>
+                  <dd className="mt-1 font-mono-numbers text-title">
+                    <Link
+                      to={`/clients/${clientId}/inbox`}
+                      className="text-text-primary underline decoration-border underline-offset-4 hover:decoration-current"
+                    >
+                      {needsReview}
+                    </Link>
                   </dd>
                 </div>
-              ))}
-            </dl>
-            <p className="-mt-4 text-label text-text-muted">
-              Spend covers the selected month; receipt counts cover the whole workspace.
-            </p>
+                <div className="bg-canvas px-4 py-3">
+                  <dt className="section-label">Total receipts</dt>
+                  <dd className="mt-1 font-mono-numbers text-title text-text-primary">{totalReceipts}</dd>
+                </div>
+              </dl>
+              <p className="mt-3 text-label text-text-muted">
+                Spend covers the selected month; receipt counts cover the whole workspace.
+              </p>
+            </section>
 
             <section>
               <h2 className="section-title">Top suppliers</h2>
@@ -188,6 +202,11 @@ export default function DashboardPage() {
               <p className="mt-1 text-label text-text-muted">
                 Pre-tax line totals; document tax is excluded.
               </p>
+              {summary.category_breakdown.every((row) => Number(row.total_spend) <= 0) ? (
+                <p className="mt-2 text-ui text-text-secondary">
+                  No categorised spend for this month.
+                </p>
+              ) : (
               <div className="mt-3 overflow-x-auto">
                 <table className="data-table" aria-label="Spend by category">
                   <thead>
@@ -197,17 +216,22 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.category_breakdown.map((row) => (
-                      <tr key={row.category}>
-                        <td className="font-semibold text-text-primary">{row.category}</td>
-                        <td className="text-right font-mono-numbers">
-                          {formatMoneyDisplay(row.total_spend)}
-                        </td>
-                      </tr>
-                    ))}
+                    {/* Only categories that actually spent this month: a wall
+                        of RM 0.00 rows buries the number that matters. */}
+                    {summary.category_breakdown
+                      .filter((row) => Number(row.total_spend) > 0)
+                      .map((row) => (
+                        <tr key={row.category}>
+                          <td className="font-semibold text-text-primary">{row.category}</td>
+                          <td className="text-right font-mono-numbers">
+                            {formatMoneyDisplay(row.total_spend)}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
+              )}
             </section>
           </>
         )}

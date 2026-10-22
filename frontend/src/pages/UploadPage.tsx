@@ -46,7 +46,7 @@ export default function UploadPage() {
     <AppShell clientId={currentClientId ?? undefined}>
       <div className="page-shell">
         <PageHeader
-          eyebrow="CAPTURE"
+          eyebrow="Capture"
           title="Upload receipts"
           meta={
             client?.business_name ??
@@ -75,85 +75,139 @@ export default function UploadPage() {
             </Link>
           </div>
         ) : (
-          <div className="mt-8 max-w-[560px] space-y-5">
-            <div className="space-y-3">
-              <label
-                className={`${CAPTURE_BUTTON_CLASS} ${
-                  uploadState === 'uploading' ? 'pointer-events-none opacity-40' : 'hover:bg-brand-700'
-                }`}
-              >
-                <Icon name="camera" size={24} />
-                Take photo
-                <input
-                  key={`camera-${inputKey}`}
-                  id={cameraId}
-                  type="file"
-                  accept={FILE_INPUT_ACCEPT}
-                  capture="environment"
-                  className="sr-only"
-                  disabled={uploadState === 'uploading'}
-                  onChange={(event) => handleFiles(event.target.files)}
-                />
-              </label>
-              <label
-                className={`${PICK_BUTTON_CLASS} ${
-                  uploadState === 'uploading' ? 'pointer-events-none opacity-40' : 'hover:bg-surface-subtle'
-                }`}
-              >
-                <Icon name="upload" size={18} />
-                Choose files
-                <input
-                  key={`files-${inputKey}`}
-                  id={filesId}
-                  type="file"
-                  multiple
-                  accept={FILE_INPUT_ACCEPT}
-                  className="sr-only"
-                  disabled={uploadState === 'uploading'}
-                  onChange={(event) => handleFiles(event.target.files)}
-                />
-              </label>
+          <div className="mt-8 grid gap-x-10 gap-y-8 lg:grid-cols-12 lg:items-start">
+            <div className="space-y-5 lg:col-span-5">
+              <div className="space-y-3">
+                <label
+                  className={`${CAPTURE_BUTTON_CLASS} ${
+                    uploadState === 'uploading' ? 'pointer-events-none opacity-40' : 'hover:bg-brand-700'
+                  }`}
+                >
+                  <Icon name="camera" size={24} />
+                  Take photo
+                  <input
+                    key={`camera-${inputKey}`}
+                    id={cameraId}
+                    type="file"
+                    accept={FILE_INPUT_ACCEPT}
+                    capture="environment"
+                    className="sr-only"
+                    disabled={uploadState === 'uploading'}
+                    onChange={(event) => handleFiles(event.target.files)}
+                  />
+                </label>
+                <label
+                  className={`${PICK_BUTTON_CLASS} ${
+                    uploadState === 'uploading' ? 'pointer-events-none opacity-40' : 'hover:bg-surface-subtle'
+                  }`}
+                >
+                  <Icon name="upload" size={18} />
+                  Choose files
+                  <input
+                    key={`files-${inputKey}`}
+                    id={filesId}
+                    type="file"
+                    multiple
+                    accept={FILE_INPUT_ACCEPT}
+                    className="sr-only"
+                    disabled={uploadState === 'uploading'}
+                    onChange={(event) => handleFiles(event.target.files)}
+                  />
+                </label>
+              </div>
+
+              <p className="font-mono text-micro text-text-muted">
+                JPEG, PNG, HEIC, PDF · 50 files per batch · 15 MiB each · 50 MiB per batch
+              </p>
+              <p className="text-label text-text-muted">Processing continues in the background.</p>
+
+              <div aria-live="polite" role="status" className="min-h-5 font-mono text-label">
+                {uploadState === 'uploading' ? (
+                  <span className="text-text-secondary">Uploading…</span>
+                ) : null}
+                {uploadState === 'done' && uploadResult !== null ? (
+                  <span className="text-verified-text">
+                    {uploadResult.uploaded.length} file
+                    {uploadResult.uploaded.length === 1 ? '' : 's'} accepted.
+                  </span>
+                ) : null}
+                {uploadState === 'error' && uploadResult?.failed ? (
+                  <span className="text-mismatch-text">{uploadResult.failed}</span>
+                ) : null}
+              </div>
             </div>
 
-            <p className="font-mono text-micro text-text-muted">
-              JPEG, PNG, HEIC, PDF · 50 files per batch · 15 MiB each · 50 MiB per batch
-            </p>
-            <p className="text-label text-text-muted">Processing continues in the background.</p>
-
-            <div aria-live="polite" role="status" className="min-h-5 font-mono text-label">
-              {uploadState === 'uploading' ? (
-                <span className="text-text-secondary">Uploading…</span>
-              ) : null}
-              {uploadState === 'done' && uploadResult !== null ? (
-                <span className="text-verified-text">
-                  {uploadResult.uploaded.length} file
-                  {uploadResult.uploaded.length === 1 ? '' : 's'} accepted.
-                </span>
-              ) : null}
-              {uploadState === 'error' && uploadResult?.failed ? (
-                <span className="text-mismatch-text">{uploadResult.failed}</span>
-              ) : null}
-            </div>
-
-            {uploadResult !== null && uploadResult.uploaded.length > 0 ? (
-              <ul className="divide-y divide-border border-y border-border">
-                {uploadResult.uploaded.map((item) => (
-                  <li key={item.id} className="flex items-center justify-between gap-3 py-3">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-ui text-text-primary">
-                        {item.filename}
-                      </span>
-                      {item.error ? (
-                        <span className="mt-1 block text-label text-mismatch-text">
-                          {item.error}
+            <div className="lg:col-span-6 lg:col-start-7">
+              {uploadResult !== null && uploadResult.uploaded.length > 0 ? (
+                <>
+                  <h2 className="text-body font-semibold text-text-primary">
+                    Accepted this batch
+                  </h2>
+                  <ul
+                    aria-label="Accepted this batch"
+                    className="mt-3 divide-y divide-border border-y border-border"
+                  >
+                    {uploadResult.uploaded.map((item) => (
+                      <li key={item.id} className="flex items-center justify-between gap-3 py-3">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-ui text-text-primary">
+                            {item.filename}
+                          </span>
+                          {item.error ? (
+                            <span className="mt-1 block text-label text-mismatch-text">
+                              {item.error}
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
-                    </span>
-                    <StatusPill status={item.status} flags={[]} processingError={item.error ?? null} />
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+                        <StatusPill
+                          status={item.status}
+                          flags={[]}
+                          processingError={item.error ?? null}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-body font-semibold text-text-primary">
+                    After the upload
+                  </h2>
+                  <ol className="mt-3 space-y-3 border-t border-border pt-4">
+                    <li className="grid grid-cols-[7rem_1fr] gap-3">
+                      <span className="font-mono text-label text-text-muted">Queued</span>
+                      <span className="text-label text-text-secondary">
+                        The file is stored against this workspace and waits for a worker.
+                      </span>
+                    </li>
+                    <li className="grid grid-cols-[7rem_1fr] gap-3">
+                      <span className="font-mono text-label text-text-muted">OCR</span>
+                      <span className="text-label text-text-secondary">
+                        Text and line items are read from the image or PDF.
+                      </span>
+                    </li>
+                    <li className="grid grid-cols-[7rem_1fr] gap-3">
+                      <span className="font-mono text-label text-text-muted">Extraction</span>
+                      <span className="text-label text-text-secondary">
+                        Supplier, dates and totals are filled into a draft receipt.
+                      </span>
+                    </li>
+                    <li className="grid grid-cols-[7rem_1fr] gap-3">
+                      <span className="font-mono text-label text-text-muted">Math check</span>
+                      <span className="text-label text-text-secondary">
+                        Line items are reconciled against the printed grand total.
+                      </span>
+                    </li>
+                    <li className="grid grid-cols-[7rem_1fr] gap-3">
+                      <span className="font-mono text-label text-text-muted">Review</span>
+                      <span className="text-label text-text-secondary">
+                        Clean receipts verify themselves; the rest wait in the inbox for you.
+                      </span>
+                    </li>
+                  </ol>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -1,9 +1,10 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import {
   Navigate,
   Outlet,
   RouterProvider,
   createBrowserRouter,
+  useLocation,
 } from 'react-router-dom'
 import AccountantGate from './components/AccountantGate'
 
@@ -34,6 +35,20 @@ function RouteFallback() {
 
 /** Authenticated chrome shared by every route: gate, skip link, lazy boundary. */
 function RootLayout() {
+  const { pathname } = useLocation()
+  const mainRef = useRef<HTMLElement>(null)
+  const firstRender = useRef(true)
+
+  // After a route change focus must leave <body>, so keyboard and screen-reader
+  // users land inside the new page rather than at the top of the document.
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    mainRef.current?.focus()
+  }, [pathname])
+
   return (
     <div className="min-h-dvh bg-canvas text-text-primary">
       <AccountantGate>
@@ -43,7 +58,7 @@ function RootLayout() {
         >
           Skip to content
         </a>
-        <main id="main-content" tabIndex={-1}>
+        <main id="main-content" ref={mainRef} tabIndex={-1}>
           <Suspense fallback={<RouteFallback />}>
             <Outlet />
           </Suspense>

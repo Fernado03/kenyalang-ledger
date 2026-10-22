@@ -13,10 +13,10 @@ interface NavItem {
 }
 
 const railItemClass = (active: boolean) =>
-  `flex h-14 w-full flex-col items-center justify-center gap-1 border-l-2 text-micro font-medium uppercase tracking-[0.04em] transition-colors duration-100 ${
+  `flex h-14 w-full flex-col items-center justify-center gap-1 text-micro font-medium transition-colors duration-100 ${
     active
-      ? 'border-brand-900 bg-surface text-text-primary'
-      : 'border-transparent text-text-muted hover:bg-surface hover:text-text-primary'
+      ? 'bg-surface text-text-primary'
+      : 'text-text-muted hover:bg-surface hover:text-text-primary'
   }`
 
 const tabItemClass = (active: boolean) =>
@@ -26,22 +26,11 @@ const tabItemClass = (active: boolean) =>
 
 const disabledClass = 'pointer-events-none opacity-35'
 
-function NavGlyph({
-  item,
-  active,
-  indicator = false,
-}: {
-  item: NavItem
-  active: boolean
-  indicator?: boolean
-}) {
+function NavGlyph({ item }: { item: NavItem }) {
   return (
     <>
       <Icon name={item.icon} size={20} />
       <span>{item.label}</span>
-      {indicator && active ? (
-        <span className="absolute inset-x-3 top-0 h-0.5 bg-brand-900" aria-hidden="true" />
-      ) : null}
     </>
   )
 }
@@ -125,7 +114,7 @@ export default function AppShell({
                 aria-current={isItemActive(item) ? 'page' : undefined}
                 className={railItemClass(isItemActive(item))}
               >
-                <NavGlyph item={item} active={isItemActive(item)} />
+                <NavGlyph item={item} />
               </Link>
             ),
           )}
@@ -195,7 +184,7 @@ export default function AppShell({
                 aria-current={isItemActive(item) ? 'page' : undefined}
                 className={tabItemClass(isItemActive(item))}
               >
-                <NavGlyph item={item} active={isItemActive(item)} indicator />
+                <NavGlyph item={item} />
               </Link>
             ),
           )}

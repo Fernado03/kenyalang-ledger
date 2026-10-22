@@ -48,7 +48,7 @@ test.describe('Review console', () => {
     await page.goto(review(RECEIPT.reject))
     await page.getByRole('button', { name: /^Reject/ }).click()
 
-    const dialog = page.getByRole('alertdialog', { name: 'Confirm rejection' })
+    const dialog = page.getByRole('group', { name: 'Reject this receipt? This cannot be undone.' })
     await expect(dialog).toBeVisible()
     await expect(dialog).toContainText('Reject this receipt? This cannot be undone.')
 
@@ -59,7 +59,10 @@ test.describe('Review console', () => {
     await expect(page.getByRole('button', { name: /^Reject/ })).toBeFocused()
 
     await page.getByRole('button', { name: /^Reject/ }).click()
-    await page.getByRole('alertdialog', { name: 'Confirm rejection' }).getByRole('button', { name: 'Reject' }).click()
+    await page
+      .getByRole('group', { name: 'Reject this receipt? This cannot be undone.' })
+      .getByRole('button', { name: 'Reject' })
+      .click()
 
     await expect(page).not.toHaveURL(new RegExp(RECEIPT.reject))
     expect((await receiptState(page, RECEIPT.reject)).status).toBe('STATUS_REJECTED')

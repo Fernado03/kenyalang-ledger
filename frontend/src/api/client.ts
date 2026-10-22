@@ -38,6 +38,20 @@ function parseDetail(payload: unknown): string {
     const body = payload as ApiErrorBody;
     const detail = body.detail;
     if (typeof detail === 'string') return detail;
+    // FastAPI 422 details are arrays of validator objects. Rendering them raw
+    // shows internals like `uuid_parsing` to the accountant.
+    if (Array.isArray(detail)) {
+      const fields = detail
+        .map((item) =>
+          item !== null && typeof item === 'object' && Array.isArray((item as { loc?: unknown }).loc)
+            ? (item as { loc: unknown[] }).loc.filter((part) => part !== 'body').join('.')
+            : '',
+        )
+        .filter((field) => field !== '');
+      return fields.length > 0
+        ? `Check these fields: ${[...new Set(fields)].join(', ')}.`
+        : 'The request was rejected. Check the values and try again.';
+    }
     if (detail && typeof detail === 'object') {
       return JSON.stringify(detail);
     }

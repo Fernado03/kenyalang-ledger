@@ -11,7 +11,7 @@ test.describe('Spend dashboard', () => {
   })
 
   test('defaults to the current month and renders all four stats', async ({ page }) => {
-    await expect(page.getByLabel('Month')).toHaveValue(localMonth())
+    await expect(page.getByRole('textbox', { name: 'Month' })).toHaveValue(localMonth())
 
     for (const label of ['Spend this month', 'Receipts reviewed', 'Needs review', 'Total receipts']) {
       await expect(page.getByText(label, { exact: true })).toBeVisible()
@@ -22,7 +22,7 @@ test.describe('Spend dashboard', () => {
   })
 
   test('a fixed month reports exact spend, suppliers, and category split', async ({ page }) => {
-    await page.getByLabel('Month').fill(FIXED_MONTH)
+    await page.getByRole('textbox', { name: 'Month' }).fill(FIXED_MONTH)
 
     // March fixtures: 180.00 verified + 95.00 exported.
     await expect(page.getByText('RM 275.00')).toBeVisible()
@@ -44,7 +44,7 @@ test.describe('Spend dashboard', () => {
   test('a month with no verified receipts reports zero spend instead of vanishing', async ({
     page,
   }) => {
-    await page.getByLabel('Month').fill('2026-01')
+    await page.getByRole('textbox', { name: 'Month' }).fill('2026-01')
 
     // Empty months still render the stat grid; only the supplier list empties out.
     await expect(page.getByText('Spend this month', { exact: true }).locator('..')).toContainText(
@@ -55,7 +55,7 @@ test.describe('Spend dashboard', () => {
   })
 
   test('receipt counts are workspace-wide while spend is month-scoped', async ({ page }) => {
-    await page.getByLabel('Month').fill('2026-01')
+    await page.getByRole('textbox', { name: 'Month' }).fill('2026-01')
 
     const reviewed = page.getByText('Receipts reviewed', { exact: true }).locator('..')
     const needsReview = page.getByText('Needs review', { exact: true }).locator('..')

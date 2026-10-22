@@ -117,9 +117,13 @@ export default function ReviewPage(): JSX.Element {
   const draft = useReceiptStore((state) => state.draft);
   const receipts = useReceiptStore((state) => state.receipts);
   const receiptLoading = useReceiptStore((state) => state.receiptLoading);
+  const receiptError = useReceiptStore((state) => state.receiptError);
   const receiptsError = useReceiptStore((state) => state.receiptsError);
   const saveState = useReceiptStore((state) => state.saveState);
   const saveError = useReceiptStore((state) => state.saveError);
+  const flash = useReceiptStore((state) => state.flash);
+  const flashFor = useReceiptStore((state) => state.flashFor);
+  const dismissFlash = useReceiptStore((state) => state.dismissFlash);
   const currentClientId = useReceiptStore((state) => state.currentClientId);
   const setCurrentClientId = useReceiptStore((state) => state.setCurrentClientId);
   const loadReceipt = useReceiptStore((state) => state.loadReceipt);
@@ -135,7 +139,6 @@ export default function ReviewPage(): JSX.Element {
   const [activeField, setActiveField] = useState<string | null>(null);
   const clearActiveField = useCallback(() => setActiveField(null), []);
   const [focusedLineKey, setFocusedLineKey] = useState<string | null>(null);
-  const [flash, setFlash] = useState(false);
   const [confirmingReject, setConfirmingReject] = useState(false);
   const [auditState, setAuditState] = useState<{
     receiptId: string | null;
@@ -282,18 +285,16 @@ export default function ReviewPage(): JSX.Element {
     if (!flash) {
       return undefined;
     }
-    const timer = window.setTimeout(() => setFlash(false), 1200);
+    const timer = window.setTimeout(() => dismissFlash(), 1200);
     return () => window.clearTimeout(timer);
-  }, [flash]);
+  }, [flash, dismissFlash]);
 
   const saveAndNext = useCallback(async (): Promise<void> => {
     if (clientId === undefined || receiptId === undefined || !audit.valid) {
       return;
     }
     try {
-      await saveReceipt();
-      dirtyRef.current = false;
-      setFlash(true);
+      await saveReceipt(receiptId);
       const next = receipts.find((item) => item.status === 'STATUS_NEEDS_REVIEW' && item.id !== receiptId);
       navigate(next !== undefined ? `/clients/${clientId}/review/${next.id}` : `/clients/${clientId}/inbox`);
     } catch {
@@ -400,7 +401,10 @@ export default function ReviewPage(): JSX.Element {
     saveAndNext,
   ]);
 
-  if (receiptLoading) {
+  if (
+    receiptLoading ||
+    (activeReceipt !== null && receiptId !== undefined && activeReceipt.id !== receiptId)
+  ) {
     return (
       <AppShell clientId={clientId}>
         <div className="grid lg:h-dvh lg:grid-cols-[46fr_54fr]" role="status" aria-busy="true">
@@ -417,11 +421,14 @@ export default function ReviewPage(): JSX.Element {
   }
 
   if (activeReceipt === null) {
-    const message = receiptsError ?? 'Receipt not found or it may belong to another client.';
+    const message =
+      receiptError ??
+      receiptsError ??
+      'Receipt not found or it may belong to another client.';
     return (
       <AppShell clientId={clientId}>
         <div className="grid min-h-[60dvh] place-items-center px-5 py-12">
-          <div className="w-full max-w-md border-l-2 border-mismatch-text pl-4">
+          <div className="w-full max-w-md">
             <p className="section-label flex items-center gap-1.5 text-mismatch-text">
               <Icon name="alert" size={14} />
               Receipt unavailable
@@ -492,7 +499,7 @@ export default function ReviewPage(): JSX.Element {
                     {saveError}
                   </p>
                 ) : null}
-                {saveState === 'saved' && flash ? (
+                {saveState === 'saved' && flash && flashFor === receiptId ? (
                   <span className="stamp border-verified-border bg-verified-bg text-verified-text">
                     <Icon name="check" size={12} />
                     VERIFIED
@@ -538,11 +545,15 @@ export default function ReviewPage(): JSX.Element {
             <div
               ref={rejectStripRef}
               tabIndex={-1}
-              role="alertdialog"
-              aria-label="Confirm rejection"
+              role="group"
+              aria-labelledby="reject-strip-heading"
               className="flex flex-wrap items-center justify-between gap-3 border-b border-mismatch-border bg-mismatch-bg px-5 py-3 lg:px-8"
             >
-              <p className="flex items-center gap-2 text-ui font-semibold text-mismatch-text">
+              <p
+                id="reject-strip-heading"
+                role="alert"
+                className="flex items-center gap-2 text-ui font-semibold text-mismatch-text"
+              >
                 <Icon name="alert" size={16} />
                 Reject this receipt? This cannot be undone.
               </p>
@@ -567,8 +578,7 @@ export default function ReviewPage(): JSX.Element {
           ) : null}
 
           <section className={SECTION_CLASS}>
-            <div className="mb-3 flex items-baseline gap-3">
-              <span className="section-label">01</span>
+            <div className="mb-3">
               <h2 className="section-title">Supplier &amp; date</h2>
             </div>
             <div className="grid grid-cols-1 gap-x-5 gap-y-4 sm:grid-cols-2">
@@ -618,8 +628,7 @@ export default function ReviewPage(): JSX.Element {
           </section>
 
           <section className={SECTION_CLASS}>
-            <div className="mb-3 flex items-baseline gap-3">
-              <span className="section-label">02</span>
+            <div className="mb-3">
               <h2 className="section-title">Line items</h2>
             </div>
             <LineItemsEditor
@@ -640,8 +649,7 @@ export default function ReviewPage(): JSX.Element {
           </section>
 
           <section className="px-5 py-6 lg:px-8 lg:py-5">
-            <div className="mb-3 flex items-baseline gap-3">
-              <span className="section-label">03</span>
+            <div className="mb-3">
               <h2 className="section-title">Totals &amp; audit</h2>
             </div>
 

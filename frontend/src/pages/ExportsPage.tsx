@@ -125,8 +125,8 @@ export default function ExportsPage(): JSX.Element {
         <PageHeader
           eyebrow={
             client?.registration_number
-              ? `WORKSPACE · ${client.registration_number}`
-              : 'WORKSPACE'
+              ? `Workspace ${client.registration_number}`
+              : 'Workspace'
           }
           title="Exports"
           meta={

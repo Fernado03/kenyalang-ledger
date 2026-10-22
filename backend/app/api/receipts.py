@@ -739,11 +739,27 @@ def list_client_receipts(
         .scalars()
         .all()
     )
+    # One grouped count feeds every tab; the active filter must not narrow it.
+    by_status = dict(
+        db.execute(
+            select(Receipt.status, func.count())
+            .where(Receipt.client_id == client_id)
+            .group_by(Receipt.status)
+        ).all()
+    )
+    status_counts = {
+        name: sum(by_status.get(member, 0) for member in members)
+        if members is not None
+        else sum(by_status.values())
+        for name, members in INBOX_STATUS_FILTERS.items()
+    }
+
     return ReceiptListResponse(
         total=total,
         limit=limit,
         offset=offset,
         items=[_build_list_item(client_id, receipt) for receipt in rows],
+        status_counts=status_counts,
     )
 
 

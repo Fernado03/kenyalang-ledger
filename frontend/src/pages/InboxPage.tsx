@@ -171,6 +171,7 @@ export default function InboxPage(): JSX.Element {
   const currentClientId = useReceiptStore((state) => state.currentClientId);
   const receipts = useReceiptStore((state) => state.receipts);
   const receiptsTotal = useReceiptStore((state) => state.receiptsTotal);
+  const statusCounts = useReceiptStore((state) => state.statusCounts);
   const receiptsOffset = useReceiptStore((state) => state.receiptsOffset);
   const statusFilter = useReceiptStore((state) => state.statusFilter);
   const receiptsLoading = useReceiptStore((state) => state.receiptsLoading);
@@ -233,7 +234,7 @@ export default function InboxPage(): JSX.Element {
     <AppShell clientId={clientId}>
       <div className="page-shell space-y-7">
         <PageHeader
-          eyebrow={`WORKSPACE · ${client?.registration_number ?? client?.business_name ?? 'CLIENT'}`}
+          eyebrow={client?.registration_number ? `Workspace ${client.registration_number}` : 'Workspace'}
           title="Inbox"
           meta={
             <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -311,6 +312,11 @@ export default function InboxPage(): JSX.Element {
                 }`}
               >
                 {tab.label}
+                {statusCounts[tab.value] !== undefined && statusCounts[tab.value] > 0 && (
+                  <span className="ml-1.5 font-mono-numbers text-label text-text-muted">
+                    {statusCounts[tab.value]}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -325,14 +331,15 @@ export default function InboxPage(): JSX.Element {
           />
         )}
 
-        {receiptsLoading && receipts.length === 0 ? (
+        {/* A transport failure must not read as an empty inbox; stale rows stay. */}
+        {receiptsError === null && receiptsLoading && receipts.length === 0 ? (
           <LoadingSkeleton rows={5} />
-        ) : receipts.length === 0 ? (
+        ) : receiptsError === null && receipts.length === 0 ? (
           <EmptyState
             title="No receipts yet — drop a batch above."
             hint="JPG, PNG, HEIC or PDF, up to 50 files per batch."
           />
-        ) : (
+        ) : receipts.length === 0 ? null : (
           <table className="data-table block md:table" role="table" aria-label="Receipt inbox">
             <thead className="hidden md:table-header-group" role="rowgroup">
               <tr role="row">
@@ -345,7 +352,7 @@ export default function InboxPage(): JSX.Element {
                 <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-24 border-b border-border bg-canvas px-2 py-2">
                   Date
                 </th>
-                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-16 border-b border-border bg-canvas px-2 py-2">
+                <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-16 border-b border-border bg-canvas px-2 py-2 text-right">
                   Items
                 </th>
                 <th scope="col" role="columnheader" className="sticky top-14 z-10 lg:top-0 w-32 border-b border-border bg-canvas px-2 py-2 text-right">
@@ -361,13 +368,7 @@ export default function InboxPage(): JSX.Element {
             </thead>
             <tbody className="block md:table-row-group" role="rowgroup">
               {receipts.map((receipt) => {
-                const needsReview = receipt.status === 'STATUS_NEEDS_REVIEW';
                 const processing = PROCESSING_STATUSES.includes(receipt.status);
-                const failed =
-                  receipt.status === 'ERR_UNREADABLE' ||
-                  receipt.status === 'ERR_TIMEOUT' ||
-                  receipt.status === 'ERR_FILE_CORRUPT' ||
-                  receipt.status === 'ERR_EXTRACTION';
                 const details = flagDetails(receipt.validation_flags);
                 const money = moneyParts(receipt.grand_total);
                 return (
@@ -379,12 +380,6 @@ export default function InboxPage(): JSX.Element {
                     }}
                     className={`grid grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-border py-3 transition-colors duration-100 hover:bg-surface md:table-row md:border-b-0 md:py-0 ${
                       processing ? '' : 'cursor-pointer'
-                    } ${
-                      needsReview
-                        ? 'border-l-2 border-l-warning-border'
-                        : failed
-                          ? 'border-l-2 border-l-mismatch-border'
-                          : ''
                     }`}
                   >
                     <td
@@ -396,8 +391,15 @@ export default function InboxPage(): JSX.Element {
                     </td>
                     <td role="cell" className="col-span-2 min-w-0 border-b-0 px-0 py-0 align-middle md:col-span-1 md:table-cell md:max-w-0 md:border-b md:px-2">
                       <span className="block truncate text-ui font-semibold text-text-primary">
-                        {receipt.merchant_name ?? receipt.filename}
+                        {receipt.merchant_name ?? '—'}
                       </span>
+                      {receipt.merchant_name === null && (
+                        // A file with no extracted supplier is identified by its
+                        // name, but the name is not a supplier: keep it subdued.
+                        <span className="mt-0.5 block truncate text-label text-text-muted">
+                          {receipt.filename}
+                        </span>
+                      )}
                       {details.length > 0 && (
                         <span
                           className="mt-0.5 block truncate text-label text-warning-text"

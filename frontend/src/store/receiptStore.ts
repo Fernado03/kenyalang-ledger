@@ -213,6 +213,8 @@ export interface ReceiptStoreState {
   clients: Client[];
   receipts: ReceiptListItem[];
   receiptsTotal: number;
+  /** Counts per inbox filter bucket, fetched with the list. */
+  statusCounts: Record<string, number>;
   receiptsOffset: number;
   statusFilter: ReceiptListStatus;
   activeReceipt: ReceiptDetail | null;
@@ -222,8 +224,13 @@ export interface ReceiptStoreState {
   receiptsLoading: boolean;
   receiptsError: string | null;
   receiptLoading: boolean;
+  /** Why the last receipt load failed; cleared when a load starts or succeeds. */
+  receiptError: string | null;
   saveState: 'idle' | 'saving' | 'saved' | 'error';
   saveError: string | null;
+  /** One-shot "saved" stamp, paired with `flashFor` so it never paints over the next receipt. */
+  flash: boolean;
+  flashFor: string | null;
   uploadState: 'idle' | 'uploading' | 'done' | 'error';
   uploadResult: { uploaded: ReceiptUploadResult[]; failed: string | null } | null;
 
@@ -238,8 +245,10 @@ export interface ReceiptStoreState {
   addDraftLine: () => void;
   updateDraftLine: (key: string, field: DraftLineField, value: string) => void;
   removeDraftLine: (key: string) => void;
-  saveReceipt: () => Promise<ReceiptDetail>;
+  /** Optional expected id: a save whose open receipt differs is refused without writing. */
+  saveReceipt: (receiptId?: string) => Promise<ReceiptDetail>;
   rejectReceipt: () => Promise<ReceiptDetail>;
+  dismissFlash: () => void;
   uploadFiles: (files: File[]) => Promise<void>;
 }
 
@@ -248,13 +257,21 @@ async function fetchReceipts(
   clientId: string,
   status: ReceiptListStatus,
   offset: number,
-): Promise<{ items: ReceiptListItem[]; total: number }> {
+): Promise<{
+  items: ReceiptListItem[];
+  total: number;
+  status_counts: Record<string, number>;
+}> {
   const response = await listReceipts(clientId, {
     status,
     limit: DEFAULT_LIST_LIMIT,
     offset,
   });
-  return { items: response.items, total: response.total };
+  return {
+    items: response.items,
+    total: response.total,
+    status_counts: response.status_counts,
+  };
 }
 
 /** Failure text for the inbox error slot: ApiError detail or a plain message. */
@@ -265,12 +282,13 @@ function receiptsFailure(error: unknown): string {
 /** Applies a fetched inbox page to the store. */
 function applyReceiptsPage(
   set: (partial: Partial<ReceiptStoreState>) => void,
-  page: { items: ReceiptListItem[]; total: number },
+  page: { items: ReceiptListItem[]; total: number; status_counts: Record<string, number> },
   offset: number,
 ): void {
   set({
     receipts: page.items,
     receiptsTotal: page.total,
+    statusCounts: page.status_counts,
     receiptsOffset: offset,
     receiptsLoading: false,
   });
@@ -290,6 +308,7 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
   clients: [],
   receipts: [],
   receiptsTotal: 0,
+  statusCounts: {},
   receiptsOffset: 0,
   statusFilter: 'ALL',
   activeReceipt: null,
@@ -298,8 +317,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
   receiptsLoading: false,
   receiptsError: null,
   receiptLoading: false,
+  receiptError: null,
   saveState: 'idle',
   saveError: null,
+  flash: false,
+  flashFor: null,
   uploadState: 'idle',
   uploadResult: null,
 
@@ -315,6 +337,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       draftBaseline: null,
       receiptsLoading: true,
       receiptsError: null,
+      receiptError: null,
+      saveState: 'idle',
+      saveError: null,
+      flash: false,
+      flashFor: null,
     });
     try {
       applyReceiptsPage(set, await fetchReceipts(id, get().statusFilter, 0), 0);
@@ -328,7 +355,8 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
     try {
       loaded = await listClients();
     } catch (error) {
-      set({ clients: [], receiptsError: receiptsFailure(error) });
+      // Keep the last known list: a failed refresh must not look like an empty account.
+      set({ receiptsError: receiptsFailure(error) });
       return;
     }
 
@@ -336,7 +364,7 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
     if (current === null && loaded.length > 0) {
       const adopted = loaded[0].id;
       persistClientId(adopted);
-      set({ clients: loaded, currentClientId: adopted, receiptsLoading: true });
+      set({ clients: loaded, currentClientId: adopted, receiptsLoading: true, receiptsError: null });
       try {
         applyReceiptsPage(set, await fetchReceipts(adopted, get().statusFilter, 0), 0);
       } catch (error) {
@@ -350,7 +378,7 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       return;
     }
 
-    set({ clients: loaded });
+    set({ clients: loaded, receiptsError: null });
   },
 
   createClient: async (payload: ClientCreate) => {
@@ -366,6 +394,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         activeReceipt: null,
         draft: null,
         draftBaseline: null,
+        receiptError: null,
+        saveState: 'idle',
+        saveError: null,
+        flash: false,
+        flashFor: null,
       });
     }
     return created;
@@ -399,9 +432,20 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
   loadReceipt: async (receiptId: string) => {
     const clientId = get().currentClientId;
     if (clientId === null) {
+      set({
+        activeReceipt: null,
+        draft: null,
+        draftBaseline: null,
+        receiptLoading: false,
+        receiptError: 'No client is selected',
+        saveState: 'idle',
+        saveError: null,
+        flash: false,
+        flashFor: null,
+      });
       return;
     }
-    set({ receiptLoading: true });
+    set({ receiptLoading: true, receiptError: null });
     try {
       const detail = await getReceipt(clientId, receiptId);
       const base = draftFromReceipt(detail);
@@ -418,10 +462,27 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         draft,
         draftBaseline: base,
         receiptLoading: false,
+        receiptError: null,
+        saveState: 'idle',
+        saveError: null,
+        flash: false,
+        flashFor: null,
       });
     } catch (error) {
-      set({ receiptLoading: false });
-      throw error instanceof ApiError ? error : new Error(errorMessage(error));
+      // Never leave receipt A's fields under receipt B's URL.
+      const message = receiptsFailure(error);
+      set({
+        activeReceipt: null,
+        draft: null,
+        draftBaseline: null,
+        receiptLoading: false,
+        receiptError: message,
+        saveState: 'idle',
+        saveError: null,
+        flash: false,
+        flashFor: null,
+      });
+      throw error instanceof ApiError ? error : new Error(message);
     }
   },
 
@@ -504,15 +565,21 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
     persistDraftFor(get().activeReceipt?.id ?? "", updated);
   },
 
-  saveReceipt: async () => {
+  saveReceipt: async (receiptId?: string) => {
     const { currentClientId, activeReceipt, draft } = get();
+    // A stale caller (URL moved on, receipt closed) writes nothing and never enters 'saving'.
     if (currentClientId === null || activeReceipt === null || draft === null) {
       const message = 'No receipt is open for saving';
-      set({ saveState: 'error', saveError: message });
+      set({ saveState: 'error', saveError: message, flash: false, flashFor: null });
+      throw new Error(message);
+    }
+    if (receiptId !== undefined && activeReceipt.id !== receiptId) {
+      const message = 'The open receipt changed before saving';
+      set({ saveState: 'error', saveError: message, flash: false, flashFor: null });
       throw new Error(message);
     }
 
-    set({ saveState: 'saving', saveError: null });
+    set({ saveState: 'saving', saveError: null, flash: false, flashFor: null });
     try {
       await updateReceipt(currentClientId, activeReceipt.id, updateRequestFromDraft(draft));
       clearPersistedDraft(activeReceipt.id);
@@ -524,6 +591,8 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         draftBaseline: fresh,
         saveState: 'saved',
         saveError: null,
+        flash: true,
+        flashFor: detail.id,
       });
       await get().loadClientReceipts(currentClientId);
       return detail;
@@ -542,7 +611,7 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       throw new Error(message);
     }
 
-    set({ saveState: 'saving', saveError: null });
+    set({ saveState: 'saving', saveError: null, flash: false, flashFor: null });
     try {
       await rejectReceiptRequest(currentClientId, activeReceipt.id);
       clearPersistedDraft(activeReceipt.id);
@@ -554,6 +623,8 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         draftBaseline: fresh,
         saveState: 'saved',
         saveError: null,
+        flash: false,
+        flashFor: null,
       });
       await get().loadClientReceipts(currentClientId);
       return detail;
@@ -562,6 +633,10 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       set({ saveState: 'error', saveError: message });
       throw error instanceof ApiError ? error : new Error(message);
     }
+  },
+
+  dismissFlash: () => {
+    set({ flash: false, flashFor: null });
   },
 
   uploadFiles: async (files: File[]) => {
