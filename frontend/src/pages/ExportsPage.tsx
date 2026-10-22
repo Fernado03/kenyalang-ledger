@@ -320,7 +320,7 @@ export default function ExportsPage(): JSX.Element {
                     <Icon name="chevron-right" size={14} />
                     Schema notes
                   </summary>
-                  <ul className="mt-2 space-y-1 border-l-2 border-border pl-3 font-mono text-micro leading-5 text-text-secondary">
+                  <ul className="mt-2 space-y-1 border-l-2 border-border pl-3 text-label leading-5 text-text-secondary">
                     <li>UBL 2.1 CommonBasic and CommonAggregate namespaces</li>
                     <li>PartyIdentification carries the merchant BRN and SST registration number</li>
                     <li>InvoiceLine tax allocated from the document tax total</li>

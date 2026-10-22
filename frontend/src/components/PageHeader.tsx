@@ -12,8 +12,9 @@ interface PageHeaderProps {
 interface PageMetaProps {
   /** Workspace or account name. Rendered in `text-primary`. */
   name?: string
-  /** Muted secondary detail, rendered at `text-label`. */
+  /** Muted secondary detail. Pass `mono` for numeric detail that must align in a column. */
   note?: ReactNode
+  mono?: boolean
   /** Optional route back into the parent surface. */
   back?: { to: string; label: string }
 }
@@ -23,7 +24,7 @@ interface PageMetaProps {
  * its own, which drifted into three name colours, two alignments and a
  * separator that appeared on some pages but not others.
  */
-export function PageMeta({ name, note, back }: PageMetaProps) {
+export function PageMeta({ name, note, mono = false, back }: PageMetaProps) {
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {name !== undefined ? <span className="text-text-primary">{name}</span> : null}
@@ -32,9 +33,13 @@ export function PageMeta({ name, note, back }: PageMetaProps) {
           ·
         </span>
       ) : null}
-      {note !== undefined ? <span className="text-label text-text-muted">{note}</span> : null}
+      {note !== undefined ? (
+        <span className={mono ? 'font-mono-numbers text-text-muted' : 'text-text-muted'}>
+          {note}
+        </span>
+      ) : null}
       {back !== undefined ? (
-        <Link to={back.to} className="link-quiet text-label">
+        <Link to={back.to} className="link-quiet">
           <Icon name="arrow-left" size={14} />
           {back.label}
         </Link>

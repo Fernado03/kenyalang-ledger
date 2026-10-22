@@ -239,7 +239,7 @@ export default function ClientsPage() {
                   ? 'Loading client workspaces.'
                   : summaries.length === 0
                     ? 'No client workspaces yet.'
-                    : `${workspaceLabel} · Select a client to open its receipt inbox.`
+                    : workspaceLabel
               }
             />
           }

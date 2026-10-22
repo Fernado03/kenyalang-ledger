@@ -240,12 +240,11 @@ export default function InboxPage(): JSX.Element {
             <PageMeta
               name={client?.business_name ?? 'Client workspace'}
               note={
-                receiptsTotal > 0 ? (
-                  <span className="font-mono-numbers">
-                    receipts {pageStart}–{pageEnd} of {receiptsTotal}
-                  </span>
-                ) : undefined
+                receiptsTotal > 0
+                  ? `receipts ${pageStart}–${pageEnd} of ${receiptsTotal}`
+                  : undefined
               }
+              mono
               back={{ to: '/clients', label: 'Clients' }}
             />
           }

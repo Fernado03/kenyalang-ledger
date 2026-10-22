@@ -116,10 +116,15 @@ uppercase mono treatment at `0.08em`. Body copy is sans at 14px. Nothing renders
   right-aligned action group that wraps under the title on narrow screens. At `lg` the header is
   a 12-column grid with the title spanning 7 and actions spanning 5.
 * **`PageMeta`** — the one masthead meta row, used by every console page so the name, the
-  secondary detail and the back link never drift apart. `name` is `text-primary`; `note` is
-  `label` in `text-muted`, separated from the name by a `·`; `back` renders as a quiet
-  `arrow-left` link after the note. Pages with no name (Clients) pass `note` alone. The back
-  link belongs here, never in `actions`, which is reserved for the page's own primary task.
+  secondary detail and the back link never drift apart. `name` is `text-primary` and `note`
+  is `text-muted`, both inheriting the header's `body` size, so the row is one 21px line on
+  every page and the masthead rule lands at the same height whether or not a name is present.
+  The `·` separator only appears when both are given. Pages with no name (Clients) pass
+  `note` alone. `mono` puts the note's numerals in the tabular mono face for a paginated
+  range; it is a flag on the note rather than a nested `<span>`, because a nested element
+  inside a flex item adds a second line box and pushes the masthead rule 1px lower.
+  The back link belongs here, never in `actions`, which is reserved for the page's own
+  primary task.
 
 ### Application shell (`AppShell.tsx`)
 
