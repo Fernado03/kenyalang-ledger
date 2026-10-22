@@ -19,7 +19,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.api.receipts import process_receipt_background as real_process_receipt_background
+from app.api.receipts import (
+    process_receipt_background as real_process_receipt_background,
+)
 from app.core.auth import ACCOUNTANT_HEADER
 from app.core.database import SessionLocal
 from app.models.receipt import Receipt, ReceiptStatus

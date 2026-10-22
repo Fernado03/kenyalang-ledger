@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class ClientBase(BaseModel):
     business_name: str = Field(..., min_length=1, max_length=255)
-    registration_number: Optional[str] = Field(None, max_length=64)  # SSM / BRN
-    sst_number: Optional[str] = Field(None, max_length=64)  # SST registration no.
-    industry_category: Optional[str] = Field(None, max_length=64)
+    registration_number: str | None = Field(None, max_length=64)  # SSM / BRN
+    sst_number: str | None = Field(None, max_length=64)  # SST registration no.
+    industry_category: str | None = Field(None, max_length=64)
 
 
 class ClientCreate(ClientBase):
@@ -23,11 +22,11 @@ class ClientCreate(ClientBase):
 class ClientUpdate(BaseModel):
     """``PUT /api/clients/{client_id}`` body — every field optional."""
 
-    business_name: Optional[str] = Field(None, min_length=1, max_length=255)
-    registration_number: Optional[str] = Field(None, max_length=64)
-    sst_number: Optional[str] = Field(None, max_length=64)
-    industry_category: Optional[str] = Field(None, max_length=64)
-    is_active: Optional[bool] = None
+    business_name: str | None = Field(None, min_length=1, max_length=255)
+    registration_number: str | None = Field(None, max_length=64)
+    sst_number: str | None = Field(None, max_length=64)
+    industry_category: str | None = Field(None, max_length=64)
+    is_active: bool | None = None
 
 
 class ClientRead(ClientBase):

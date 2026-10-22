@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from app.models.receipt import ReceiptStatus
 
-
 ACCOUNTANT_BODY = {
     "business_name": "Kopitiam Uncle Lim",
     "registration_number": "202001012345",

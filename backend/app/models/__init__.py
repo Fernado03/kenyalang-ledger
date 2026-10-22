@@ -17,9 +17,9 @@ from app.models.receipt_line_item import ReceiptLineItem
 __all__ = [
     "Client",
     "Receipt",
-    "ReceiptStatus",
     "ReceiptAuditLog",
     "ReceiptLineItem",
+    "ReceiptStatus",
     "init_db",
 ]
 

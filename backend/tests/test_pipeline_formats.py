@@ -25,7 +25,6 @@ from app.pipeline.preprocessor import (
     preprocess_receipt,
 )
 
-
 # --------------------------------------------------------------------------- #
 # Pixel-budget guard
 # --------------------------------------------------------------------------- #
@@ -120,7 +119,7 @@ def test_decode_heic_returns_expected_shape() -> None:
     buffer = io.BytesIO()
     try:
         image.save(buffer, format="HEIF")
-    except Exception as exc:  # encoder plugin missing from the wheel
+    except Exception as exc:  # noqa: BLE001 - encoder plugin missing from the wheel
         pytest.skip(f"pillow-heif encoder unavailable: {exc}")
 
     decoded = decode_heic(buffer.getvalue())

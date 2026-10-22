@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base, GUID, UTCDateTime, utcnow, uuid_pk
+from app.core.database import GUID, Base, UTCDateTime, utcnow, uuid_pk
 
 if TYPE_CHECKING:
     from app.models.receipt import Receipt
@@ -32,7 +32,7 @@ class ReceiptAuditLog(Base):
         UTCDateTime(), nullable=False, default=utcnow
     )
 
-    receipt: Mapped["Receipt"] = relationship(back_populates="audit_logs")
+    receipt: Mapped[Receipt] = relationship(back_populates="audit_logs")
 
     __table_args__ = (Index("idx_audit_logs_receipt", "receipt_id"),)
 

@@ -11,6 +11,7 @@ Downloads are pure reads. Only the explicit mark action advances a receipt from
 
 from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -30,6 +31,9 @@ from app.services.export_engine import (
 
 router = APIRouter(prefix="/clients/{client_id}/exports", tags=["exports"])
 
+DbSession = Annotated[Session, Depends(get_db)]
+AccountantId = Annotated[UUID, Depends(get_current_accountant_id)]
+
 MONTH_QUERY = Query(
     None,
     description="Billing month in YYYY-MM format (e.g. 2026-09)",
@@ -48,9 +52,9 @@ def _file_suffix(month: str | None) -> str:
 @router.get("/accounting-csv")
 def export_accounting_csv(
     client_id: UUID,
+    accountant_id: AccountantId,
+    db: DbSession,
     month: str | None = MONTH_QUERY,
-    accountant_id: UUID = Depends(get_current_accountant_id),
-    db: Session = Depends(get_db),
 ) -> Response:
     """Export AutoCount / SQL Account purchase journal batch CSV (docs/06 §6.4.1)."""
     get_active_owned_client(db, client_id, accountant_id)
@@ -71,9 +75,9 @@ def export_accounting_csv(
 @router.get("/myinvois-json")
 def export_myinvois_json(
     client_id: UUID,
+    accountant_id: AccountantId,
+    db: DbSession,
     month: str | None = MONTH_QUERY,
-    accountant_id: UUID = Depends(get_current_accountant_id),
-    db: Session = Depends(get_db),
 ) -> JSONResponse:
     """Export the draft MyInvois v1.1-shaped JSON envelope (docs/06 §6.4.2)."""
     get_active_owned_client(db, client_id, accountant_id)
@@ -92,9 +96,9 @@ def export_myinvois_json(
 @router.post("/mark", response_model=MarkExportsResponse)
 def mark_exports(
     client_id: UUID,
+    accountant_id: AccountantId,
+    db: DbSession,
     month: str | None = MONTH_QUERY,
-    accountant_id: UUID = Depends(get_current_accountant_id),
-    db: Session = Depends(get_db),
 ) -> MarkExportsResponse:
     """Mark verified receipts in the period as exported; repeat calls are no-ops."""
     get_active_owned_client(db, client_id, accountant_id)

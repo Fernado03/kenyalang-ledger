@@ -11,9 +11,9 @@ from sqlalchemy import ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import (
+    GUID,
     Base,
     Confidence,
-    GUID,
     JSONBType,
     Money,
     Quantity,
@@ -62,7 +62,7 @@ class ReceiptLineItem(Base):
         UTCDateTime(), nullable=False, default=utcnow
     )
 
-    receipt: Mapped["Receipt"] = relationship(back_populates="line_items")
+    receipt: Mapped[Receipt] = relationship(back_populates="line_items")
 
     __table_args__ = (Index("idx_line_items_receipt", "receipt_id", "line_index"),)
 

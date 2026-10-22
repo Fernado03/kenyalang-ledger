@@ -60,8 +60,6 @@ from app.pipeline.extractor import (
 )
 from app.pipeline.ocr_engine import OCRToken, process_receipt_image, tokens_to_dicts
 from app.pipeline.preprocessor import ImageDecodeError
-from app.services.classifier import classify_expense
-from app.services.reconciler import MATH_TOLERANCE, AuditResult, ReconcilerService
 from app.schemas.receipt import (
     ParsedReceiptSchema,
     ReceiptAuditRead,
@@ -72,11 +70,13 @@ from app.schemas.receipt import (
     ReceiptListItem,
     ReceiptListResponse,
     ReceiptOcrToken,
-    ReceiptUploadItem,
-    ReceiptUploadResponse,
     ReceiptUpdateRequest,
     ReceiptUpdateResponse,
+    ReceiptUploadItem,
+    ReceiptUploadResponse,
 )
+from app.services.classifier import classify_expense
+from app.services.reconciler import MATH_TOLERANCE, AuditResult, ReconcilerService
 
 logger = logging.getLogger(__name__)
 

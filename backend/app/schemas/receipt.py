@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -18,14 +17,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.receipt import ReceiptStatus
 
 
-def _finite_money(value: Optional[Decimal]) -> Optional[Decimal]:
+def _finite_money(value: Decimal | None) -> Decimal | None:
     """Reject NaN/Infinity at the LLM trust boundary (docs/05_trd.md §5.4)."""
     if value is not None and not value.is_finite():
         raise ValueError("monetary value must be finite")
     return value
 
 
-def _validate_bbox(bbox: Optional[list[float]]) -> Optional[list[float]]:
+def _validate_bbox(bbox: list[float] | None) -> list[float] | None:
     """``[x_min, y_min, x_max, y_max]``: four ordered, normalized corners."""
     if bbox is None:
         return None
@@ -52,7 +51,7 @@ class LineItemSchema(BaseModel):
     line_total: Decimal = Decimal("0.00")
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     # [x_min, y_min, x_max, y_max] normalized to 0.0-1.0 (docs/05_trd.md §5.2.2)
-    bbox: Optional[list[float]] = None
+    bbox: list[float] | None = None
 
     _validate_bbox = field_validator("bbox")(_validate_bbox)
     _finite_money = field_validator("quantity", "unit_price", "line_total")(
@@ -63,28 +62,28 @@ class LineItemSchema(BaseModel):
 class ExtractedReceiptData(BaseModel):
     """Structured extraction schema passed directly to the LLM (§6.2)."""
 
-    merchant_name: Optional[str] = Field(
+    merchant_name: str | None = Field(
         None, description="Trade name of supplier/shop"
     )
-    merchant_brn: Optional[str] = Field(
+    merchant_brn: str | None = Field(
         None, description="Malaysian Business Registration Number"
     )
-    merchant_sst: Optional[str] = Field(
+    merchant_sst: str | None = Field(
         None, description="SST registration number if visible"
     )
-    invoice_date: Optional[date] = Field(
+    invoice_date: date | None = Field(
         None, description="Transaction date on the receipt"
     )
-    invoice_number: Optional[str] = Field(
+    invoice_number: str | None = Field(
         None, description="Receipt or Invoice sequence number"
     )
-    subtotal: Optional[Decimal] = Field(None, description="Subtotal before tax")
-    tax_amount: Optional[Decimal] = Field(
+    subtotal: Decimal | None = Field(None, description="Subtotal before tax")
+    tax_amount: Decimal | None = Field(
         Decimal("0.00"), description="Total SST or service tax"
     )
     # Nullable so a missing total reaches the audit instead of aborting extraction;
     # the reconciler flags it INVALID_GRAND_TOTAL (docs/05_trd.md §5.4).
-    grand_total: Optional[Decimal] = Field(
+    grand_total: Decimal | None = Field(
         None, description="Final payable amount in MYR"
     )
     line_items: list[LineItemSchema] = Field(default_factory=list)
@@ -105,7 +104,7 @@ class ExtractedField(BaseModel):
     name: str
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     # [x_min, y_min, x_max, y_max] normalized to 0.0-1.0 (docs/05_trd.md §5.2.2)
-    bbox: Optional[list[float]] = None
+    bbox: list[float] | None = None
 
     _validate_bbox = field_validator("bbox")(_validate_bbox)
 
@@ -148,7 +147,7 @@ class ReceiptField(BaseModel):
     name: str
     confidence: float
     # [x_min, y_min, x_max, y_max] normalized to 0.0-1.0, or null when unsupported.
-    bbox: Optional[list[float]] = None
+    bbox: list[float] | None = None
 
 
 class ReceiptOcrToken(BaseModel):
@@ -167,15 +166,15 @@ class ReceiptListItem(BaseModel):
 
     id: UUID
     filename: str
-    merchant_name: Optional[str]
-    invoice_date: Optional[date]
-    subtotal: Optional[Decimal]
-    tax_amount: Optional[Decimal]
-    grand_total: Optional[Decimal]
+    merchant_name: str | None
+    invoice_date: date | None
+    subtotal: Decimal | None
+    tax_amount: Decimal | None
+    grand_total: Decimal | None
     status: ReceiptStatus
     validation_flags: list[str]
-    overall_confidence: Optional[float]
-    math_discrepancy: Optional[Decimal]
+    overall_confidence: float | None
+    math_discrepancy: Decimal | None
     line_item_count: int
     image_url: str
 
@@ -203,7 +202,7 @@ class ReceiptDetailLineItem(BaseModel):
     expense_category: str = "OTHER"
     confidence: float
     # [x_min, y_min, x_max, y_max] normalized to 0.0-1.0, or null when unsupported.
-    bbox: Optional[list[float]] = None
+    bbox: list[float] | None = None
 
 
 class ReceiptDetailResponse(BaseModel):
@@ -215,25 +214,25 @@ class ReceiptDetailResponse(BaseModel):
     client_id: UUID
     filename: str
     status: ReceiptStatus
-    processing_error: Optional[str]
+    processing_error: str | None
     image_url: str
-    merchant_name: Optional[str]
-    merchant_brn: Optional[str]
-    merchant_sst: Optional[str]
-    invoice_date: Optional[date]
-    invoice_number: Optional[str]
-    subtotal: Optional[Decimal]
-    tax_amount: Optional[Decimal]
-    grand_total: Optional[Decimal]
-    math_discrepancy: Optional[Decimal]
-    overall_confidence: Optional[float]
+    merchant_name: str | None
+    merchant_brn: str | None
+    merchant_sst: str | None
+    invoice_date: date | None
+    invoice_number: str | None
+    subtotal: Decimal | None
+    tax_amount: Decimal | None
+    grand_total: Decimal | None
+    math_discrepancy: Decimal | None
+    overall_confidence: float | None
     validation_flags: list[str]
     fields: list[ReceiptField]
     line_items: list[ReceiptDetailLineItem]
     ocr_tokens: list[ReceiptOcrToken]
     created_at: datetime
     updated_at: datetime
-    verified_at: Optional[datetime]
+    verified_at: datetime | None
 
 
 class ReceiptUpdateLineItem(BaseModel):
@@ -259,15 +258,15 @@ class ReceiptUpdateRequest(BaseModel):
     legitimate state for a receipt the accountant re-keyed by hand.
     """
 
-    merchant_name: Optional[str] = None
-    merchant_brn: Optional[str] = None
-    merchant_sst: Optional[str] = None
-    invoice_date: Optional[date] = None
-    invoice_number: Optional[str] = None
-    subtotal: Optional[Decimal] = None
-    tax_amount: Optional[Decimal] = None
-    grand_total: Optional[Decimal] = None
-    line_items: Optional[list[ReceiptUpdateLineItem]] = None
+    merchant_name: str | None = None
+    merchant_brn: str | None = None
+    merchant_sst: str | None = None
+    invoice_date: date | None = None
+    invoice_number: str | None = None
+    subtotal: Decimal | None = None
+    tax_amount: Decimal | None = None
+    grand_total: Decimal | None = None
+    line_items: list[ReceiptUpdateLineItem] | None = None
 
     _finite_money = field_validator("subtotal", "tax_amount", "grand_total")(
         _finite_money
@@ -282,8 +281,8 @@ class ReceiptUpdateResponse(BaseModel):
     id: UUID
     status: ReceiptStatus
     updated_at: datetime
-    verified_by: Optional[UUID]
-    math_discrepancy: Optional[Decimal]
+    verified_by: UUID | None
+    math_discrepancy: Decimal | None
 
 
 class ReceiptAuditRead(BaseModel):
@@ -294,8 +293,8 @@ class ReceiptAuditRead(BaseModel):
     id: UUID
     user_id: UUID
     field_name: str
-    old_value: Optional[str]
-    new_value: Optional[str]
+    old_value: str | None
+    new_value: str | None
     created_at: datetime
 
 

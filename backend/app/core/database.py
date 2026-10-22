@@ -14,10 +14,11 @@ import os
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, Numeric, create_engine, event
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 from sqlalchemy.types import JSON, TypeDecorator, Uuid
@@ -43,7 +44,7 @@ class JSONBType(TypeDecorator):
     impl = JSON
     cache_ok = True
 
-    def load_dialect_impl(self, dialect):  # noqa: ANN001, ANN201
+    def load_dialect_impl(self, dialect):
         if dialect.name == "postgresql":
             return dialect.type_descriptor(JSONB())
         return dialect.type_descriptor(JSON())
@@ -55,7 +56,7 @@ class GUID(TypeDecorator):
     impl = Uuid
     cache_ok = True
 
-    def load_dialect_impl(self, dialect):  # noqa: ANN001, ANN201
+    def load_dialect_impl(self, dialect):
         if dialect.name == "postgresql":
             return dialect.type_descriptor(PGUUID(as_uuid=True))
         return dialect.type_descriptor(Uuid(as_uuid=True))
@@ -67,16 +68,16 @@ class UTCDateTime(TypeDecorator):
     impl = DateTime
     cache_ok = True
 
-    def load_dialect_impl(self, dialect):  # noqa: ANN001, ANN201
+    def load_dialect_impl(self, dialect):
         if dialect.name == "postgresql":
             return dialect.type_descriptor(DateTime(timezone=True))
         return dialect.type_descriptor(DateTime())
 
-    def process_result_value(self, value, dialect):  # noqa: ANN001, ANN201
+    def process_result_value(self, value, dialect):
         # SQLite has no TIMESTAMPTZ and drops the offset on write, so restore UTC
         # on read: the DDL promises TIMESTAMPTZ and the API contract emits "Z".
         if value is not None and dialect.name != "postgresql" and value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
 
@@ -102,7 +103,7 @@ def create_db_engine(url: str | None = None) -> Engine:
         @event.listens_for(engine, "connect")
         def _enable_sqlite_foreign_keys(
             dbapi_connection, _record
-        ):  # noqa: ANN001, ANN202
+        ):
             # SQLite ignores FK constraints unless asked; the tenant CASCADE in §6.1 needs them.
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
@@ -121,7 +122,7 @@ class Base(DeclarativeBase):
 
 def utcnow() -> datetime:
     """Timezone-aware UTC now; default for every ``created_at``/``updated_at`` column."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # Portable column types shared across models.

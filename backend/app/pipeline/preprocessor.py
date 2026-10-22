@@ -177,9 +177,7 @@ def decode_pdf(image_bytes: bytes) -> NDArray[np.uint8]:
         page = document.load_page(0)
         rect = page.rect
         scale = PDF_DPI / 72.0
-        _check_pixels(
-            int(round(rect.width * scale)), int(round(rect.height * scale))
-        )
+        _check_pixels(round(rect.width * scale), round(rect.height * scale))
 
         pixmap = page.get_pixmap(
             matrix=pymupdf.Matrix(scale, scale), alpha=False, colorspace=pymupdf.csRGB
@@ -230,8 +228,8 @@ def resize_if_needed(
         return cv_image
 
     scale = max_dim / float(longest_edge)
-    new_width = max(1, int(round(width * scale)))
-    new_height = max(1, int(round(height * scale)))
+    new_width = max(1, round(width * scale))
+    new_height = max(1, round(height * scale))
 
     # INTER_AREA is the correct kernel for downscaling (averages, avoids aliasing).
     return cv2.resize(cv_image, (new_width, new_height), interpolation=cv2.INTER_AREA)
@@ -274,10 +272,10 @@ def preprocess_receipt(
 
 
 __all__ = [
-    "ImageDecodeError",
     "MAX_DIMENSION",
     "MAX_IMAGE_PIXELS",
     "PDF_DPI",
+    "ImageDecodeError",
     "apply_clahe_contrast",
     "auto_orient_image",
     "decode_heic",

@@ -151,7 +151,7 @@ def _to_cents(value: Decimal | float | None) -> int:
     if value is None:
         return 0
     amount = Decimal(str(value))
-    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return int((amount * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def allocate_tax_cents(

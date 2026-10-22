@@ -46,20 +46,20 @@ def _line(
 
 def _parsed(**overrides) -> ParsedReceiptSchema:
     """A fully consistent receipt: RM 99.50 of lines + RM 5.97 SST = RM 105.47."""
-    base = dict(
-        merchant_name="Kim Guan Hardware",
-        merchant_brn="202001012345",
-        merchant_sst="W10-1808-32000018",
-        invoice_date=TODAY - timedelta(days=7),
-        invoice_number="INV-99120",
-        subtotal=Decimal("99.50"),
-        tax_amount=Decimal("5.97"),
-        grand_total=Decimal("105.47"),
-        line_items=[
+    base = {
+        "merchant_name": "Kim Guan Hardware",
+        "merchant_brn": "202001012345",
+        "merchant_sst": "W10-1808-32000018",
+        "invoice_date": TODAY - timedelta(days=7),
+        "invoice_number": "INV-99120",
+        "subtotal": Decimal("99.50"),
+        "tax_amount": Decimal("5.97"),
+        "grand_total": Decimal("105.47"),
+        "line_items": [
             _line(0, 'PVC Pipe 2"', "14.50"),
             _line(1, "Minyak Hitam 4L", "85.00"),
         ],
-    )
+    }
     base.update(overrides)
     parsed = ParsedReceiptSchema(**base)
     if "fields" not in overrides:

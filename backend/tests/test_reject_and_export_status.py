@@ -6,13 +6,13 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from app.pipeline.ocr_engine import OCRToken
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.database import SessionLocal
 from app.models.receipt import Receipt, ReceiptStatus
 from app.models.receipt_audit_log import ReceiptAuditLog
+from app.pipeline.ocr_engine import OCRToken
 from app.schemas.receipt import (
     ExtractedField,
     LineItemSchema,
@@ -77,7 +77,7 @@ def _parsed(
             LineItemSchema(
                 line_index=0,
                 description="PVC Pipe 2\"",
-                quantity=Decimal("1"),
+                quantity=Decimal(1),
                 unit_price=Decimal(line_total),
                 line_total=Decimal(line_total),
                 confidence=0.95,

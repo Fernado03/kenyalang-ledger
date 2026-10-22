@@ -53,7 +53,7 @@ class OCRToken(BaseModel):
 
 
 @lru_cache(maxsize=1)
-def get_reader(gpu: bool | None = None) -> "easyocr.Reader":
+def get_reader(gpu: bool | None = None) -> easyocr.Reader:
     """Return the process-wide EasyOCR reader for English + Malay."""
     if gpu is None:
         flag = os.getenv(_READER_GPU_FLAG_ENV, "").strip().lower()
@@ -65,7 +65,7 @@ def get_reader(gpu: bool | None = None) -> "easyocr.Reader":
             try:
                 import torch
                 gpu = bool(torch.cuda.is_available())
-            except Exception:
+            except Exception:  # noqa: BLE001 - torch missing or CUDA probe failed
                 gpu = False
     reader = easyocr.Reader(OCR_LANGUAGES, gpu=gpu, verbose=False)
     logger.info("EasyOCR reader ready (languages=%s, gpu=%s)", OCR_LANGUAGES, gpu)
@@ -93,7 +93,7 @@ def normalize_bbox(box: NDArray[np.float32], width: int, height: int) -> list[fl
 
 
 def extract_tokens(
-    cv_image: NDArray[np.uint8], reader: "easyocr.Reader" | None = None
+    cv_image: NDArray[np.uint8], reader: easyocr.Reader | None = None
 ) -> list[OCRToken]:
     """Run EasyOCR over a BGR image and return normalized OCRTokens.
 

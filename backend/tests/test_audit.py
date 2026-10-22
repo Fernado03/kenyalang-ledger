@@ -137,7 +137,7 @@ def _audit_items(client: TestClient, client_id: str, receipt_id: str) -> list[di
 
 def _parse_timestamp(value: str) -> datetime:
     """Parse the API's ISO-8601 timestamp regardless of ``Z``/offset rendering."""
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return datetime.fromisoformat(value)
 
 
 # --------------------------------------------------------------------------- #

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.database import Base, GUID, UTCDateTime, utcnow, uuid_pk
+from app.core.database import GUID, Base, UTCDateTime, utcnow, uuid_pk
 
 if TYPE_CHECKING:
     from app.models.receipt import Receipt
@@ -35,7 +35,7 @@ class Client(Base):
         UTCDateTime(), nullable=False, default=utcnow, onupdate=utcnow
     )
 
-    receipts: Mapped[list["Receipt"]] = relationship(
+    receipts: Mapped[list[Receipt]] = relationship(
         back_populates="client", cascade="all, delete-orphan", passive_deletes=True
     )
 
@@ -45,4 +45,4 @@ class Client(Base):
         return f"<Client {self.id} {self.business_name!r}>"
 
 
-__all__ = ["Client", "INDUSTRY_CATEGORIES"]
+__all__ = ["INDUSTRY_CATEGORIES", "Client"]

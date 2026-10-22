@@ -18,11 +18,12 @@ import json
 import logging
 import os
 import re
+from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
 from functools import lru_cache
-from typing import Final, Iterable, Optional
+from typing import Final
 
 import httpx
 import instructor
@@ -84,7 +85,7 @@ LLM_TIMEOUT_SECONDS: Final = 15.0
 UNSUPPORTED_CONFIDENCE: Final = 0.0
 
 # Values that mean "the receipt does not state this", not "the receipt says zero".
-_ABSENT: Final = (None, "", 0, Decimal("0"), Decimal("0.00"))
+_ABSENT: Final = (None, "", 0, Decimal(0), Decimal("0.00"))
 
 _NUMBER_RE: Final = re.compile(r"\d[\d,]*(?:\.\d+)?")
 # Currency markers are stripped only as standalone tokens: an unanchored "rm"
@@ -156,7 +157,7 @@ def _find_best_slope(tokens: list[OCRToken]) -> float:
 
 
 def group_tokens_into_rows(
-    tokens: Iterable[OCRToken], slope: Optional[float] = None
+    tokens: Iterable[OCRToken], slope: float | None = None
 ) -> list[list[OCRToken]]:
     """Group tokens into visual reading-order rows taking slant into account.
 
@@ -255,7 +256,7 @@ def _is_timeout_error(exc: BaseException) -> bool:
     mentions "timeout" in its message is not.
     """
     seen: set[int] = set()
-    current: Optional[BaseException] = exc
+    current: BaseException | None = exc
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         if isinstance(
@@ -269,8 +270,8 @@ def _is_timeout_error(exc: BaseException) -> bool:
 def extract_receipt_data(
     tokens: list[OCRToken],
     *,
-    client: Optional[instructor.Instructor] = None,
-    model: Optional[str] = None,
+    client: instructor.Instructor | None = None,
+    model: str | None = None,
 ) -> ExtractedReceiptData:
     """Run one structured-extraction completion over the token block (§5.3)."""
     if not tokens:
@@ -304,7 +305,7 @@ def _normalize(text: str) -> str:
     return "".join(lowered.split())
 
 
-def _decimal_or_none(text: str) -> Optional[Decimal]:
+def _decimal_or_none(text: str) -> Decimal | None:
     match = _NUMBER_RE.search(text)
     if match is None:
         return None
@@ -321,12 +322,12 @@ def _token_numbers(token: OCRToken) -> list[Decimal]:
     return [number for number in numbers if number is not None]
 
 
-def _pick(candidates: list[OCRToken]) -> Optional[OCRToken]:
+def _pick(candidates: list[OCRToken]) -> OCRToken | None:
     """The token that best supports a value: most trusted of the matches."""
     return max(candidates, key=lambda token: token.confidence, default=None)
 
 
-def _match_numeric(target: Decimal, tokens: list[OCRToken]) -> Optional[OCRToken]:
+def _match_numeric(target: Decimal, tokens: list[OCRToken]) -> OCRToken | None:
     """A token carrying ``target`` as one of its numbers.
 
     A number only counts as evidence when it is the token's whole value (or one
@@ -352,7 +353,7 @@ def _word_in_token(word: str, token: OCRToken) -> bool:
     return False
 
 
-def _match_text(target: str, tokens: list[OCRToken]) -> Optional[OCRToken]:
+def _match_text(target: str, tokens: list[OCRToken]) -> OCRToken | None:
     needle = _normalize(target)
     if len(needle) < 3:  # too short to be evidence; refuse to guess
         return None
@@ -381,7 +382,7 @@ def _match_text(target: str, tokens: list[OCRToken]) -> Optional[OCRToken]:
     return _pick(partial)
 
 
-def _match_date(value, tokens: list[OCRToken]) -> Optional[OCRToken]:
+def _match_date(value, tokens: list[OCRToken]) -> OCRToken | None:
     renderings = {value.strftime(fmt) for fmt in _DATE_FORMATS}
     renderings.add(value.isoformat())
     for token in sorted(tokens, key=lambda t: t.confidence, reverse=True):
@@ -456,7 +457,7 @@ def _line_item_confidence(item, tokens: list[OCRToken]) -> float:
         return UNSUPPORTED_CONFIDENCE
     return min(description.confidence, amount.confidence)
 
-def _line_item_bbox(item, tokens: list[OCRToken]) -> Optional[list[float]]:
+def _line_item_bbox(item, tokens: list[OCRToken]) -> list[float] | None:
     description = _match_text(item.description, tokens)
     amount = _match_numeric(item.line_total, tokens)
     matched = [t for t in (description, amount) if t is not None]
@@ -472,8 +473,8 @@ def _line_item_bbox(item, tokens: list[OCRToken]) -> Optional[list[float]]:
 def extract_receipt(
     tokens: list[OCRToken],
     *,
-    client: Optional[instructor.Instructor] = None,
-    model: Optional[str] = None,
+    client: instructor.Instructor | None = None,
+    model: str | None = None,
 ) -> ParsedReceiptSchema:
     """Full §5.3 stage: tokens -> validated extraction -> provenance-tagged parse."""
     data = extract_receipt_data(tokens, client=client, model=model)
@@ -481,9 +482,9 @@ def extract_receipt(
 
 
 __all__ = [
+    "SYSTEM_PROMPT",
     "ExtractionError",
     "ExtractionTimeout",
-    "SYSTEM_PROMPT",
     "attach_provenance",
     "extract_receipt",
     "extract_receipt_data",

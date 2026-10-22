@@ -13,7 +13,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.api.clients import API_VERSION, router as clients_router
+from app.api.clients import API_VERSION
+from app.api.clients import router as clients_router
 from app.api.dashboard import router as dashboard_router
 from app.api.exports import router as exports_router
 from app.api.receipts import router as receipts_router
@@ -41,7 +42,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         try:
             init_db()
             break
-        except Exception as exc:  # noqa: BLE001 - retried below, re-raised if final
+        except Exception as exc:
             last_error = exc
             if attempt == INIT_DB_ATTEMPTS:
                 raise

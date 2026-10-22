@@ -94,7 +94,8 @@ def _run_ocr(*args, **kwargs):
     """Call into EasyOCR, skipping the test if weights cannot be obtained."""
     try:
         return process_receipt_image(*args, **kwargs)
-    except Exception as exc:  # no network for weights, torch missing, etc.
+    except Exception as exc:  # noqa: BLE001 - skip when EasyOCR cannot load
+    # no network for weights, torch missing, etc.
         pytest.skip(f"EasyOCR unavailable: {exc}")
 
 
@@ -351,7 +352,8 @@ def test_extract_tokens_accepts_preprocessed_array(receipt_bytes: bytes) -> None
 
     try:
         tokens = extract_tokens(processed)
-    except Exception as exc:  # pragma: no cover - weights unavailable
+    except Exception as exc:  # noqa: BLE001 - weights unavailable
+                         # pragma: no cover
         pytest.skip(f"EasyOCR unavailable: {exc}")
 
     assert len(tokens) >= 5

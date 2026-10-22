@@ -8,13 +8,14 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, Enum as SAEnum, ForeignKey, Index, Integer, String
+from sqlalchemy import Date, ForeignKey, Index, Integer, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import (
+    GUID,
     Base,
     Confidence,
-    GUID,
     JSONBType,
     Money,
     UTCDateTime,
@@ -127,14 +128,14 @@ class Receipt(Base):
         UTCDateTime(), nullable=False, default=utcnow, onupdate=utcnow
     )
 
-    client: Mapped["Client"] = relationship(back_populates="receipts")
-    line_items: Mapped[list["ReceiptLineItem"]] = relationship(
+    client: Mapped[Client] = relationship(back_populates="receipts")
+    line_items: Mapped[list[ReceiptLineItem]] = relationship(
         back_populates="receipt",
         cascade="all, delete-orphan",
         order_by="ReceiptLineItem.line_index",
         passive_deletes=True,
     )
-    audit_logs: Mapped[list["ReceiptAuditLog"]] = relationship(
+    audit_logs: Mapped[list[ReceiptAuditLog]] = relationship(
         back_populates="receipt", cascade="all, delete-orphan", passive_deletes=True
     )
 
@@ -147,4 +148,4 @@ class Receipt(Base):
         return f"<Receipt {self.id} {self.original_filename!r} {self.status.value}>"
 
 
-__all__ = ["Receipt", "ReceiptStatus", "RECEIPT_STATUS_ENUM"]
+__all__ = ["RECEIPT_STATUS_ENUM", "Receipt", "ReceiptStatus"]

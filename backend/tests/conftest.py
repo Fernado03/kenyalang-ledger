@@ -18,12 +18,12 @@ _TMP_DIR = tempfile.mkdtemp(prefix="kenyalang-tests-")
 os.environ["DATABASE_URL"] = f"sqlite:///{Path(_TMP_DIR) / 'test.db'}"
 os.environ["KENYALANG_ENV"] = "test"
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi.testclient import TestClient
 
-from app.core.auth import ACCOUNTANT_HEADER  # noqa: E402
-from app.core.database import Base, engine  # noqa: E402
-from app.main import create_app  # noqa: E402
+from app.core.auth import ACCOUNTANT_HEADER
+from app.core.database import Base, engine
+from app.main import create_app
 
 
 @pytest.fixture(scope="session", autouse=True)
