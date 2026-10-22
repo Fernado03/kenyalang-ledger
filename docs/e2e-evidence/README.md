@@ -11,7 +11,8 @@ seeded fixture database. Regenerate after any UI change; the shots are generated
 
 ## Defects found and fixed
 
-Seven defects surfaced from the audit and are fixed in this branch, each with a regression test.
+Fourteen defects surfaced across the Playwright gate, the design audit and the live browser
+pass. All are fixed in this branch; the ones with a plausible regression carry a test.
 
 1. **Inbox overflowed the page at 640–700px (medium).** The table switched to its seven desktop
    columns at `sm` (640px) but needs ≈671px, so the document scrolled sideways by up to 31px on
@@ -41,6 +42,39 @@ Seven defects surfaced from the audit and are fixed in this branch, each with a 
    tests. Excluded in `vite.config.ts`; `e2e/**` is linted with Node globals instead and
    type-checked by `tsconfig.e2e.json` through `tsc -b`.
 
+8. **A failed receipt load painted the previous receipt's fields (high, from a store review).**
+   `loadReceipt` swallowed the error and left `activeReceipt` set, so opening receipt B after A
+   showed A's values under B's URL, and Save wrote to A. The store now clears the draft, records
+   `receiptError`, resets the saved stamp, and refuses a save whose expected id differs
+   (`receiptStore.ts`, `ReviewPage.tsx`).
+9. **The saved stamp bled onto the next receipt (medium).** `saveState === 'saved'` persisted
+   across navigation, so the VERIFIED stamp overpainted the next NEEDS_REVIEW receipt for 1.2s.
+   Flash state now carries `flashFor` and only paints for the matching receipt id.
+10. **A failed client refresh looked like an empty account (medium).** `loadClients` replaced
+    `clients` with `[]` on error, so the error banner and "Add your first client" rendered
+    together. The previous list is now kept.
+11. **An exported receipt still looked editable (high).** The console rendered live inputs and an
+    enabled Reject for `STATUS_EXPORTED`; only a save attempt surfaced the backend 409. The
+    sections now render inside a disabled `<fieldset>` with a plain explanation, and both
+    mutating toolbar buttons are disabled, and the Ctrl+Enter / Escape / Add-Line / Delete-Line
+    shortcuts are refused in the same guard so they cannot route around the buttons. Regression:
+    `04-review → an exported receipt opens read-only and still 409s a direct write`, which also
+    presses Escape and Ctrl+Enter against the frozen receipt and asserts the backend 409 directly.
+12. **FastAPI 422 details were rendered raw (medium).** A malformed receipt id printed the whole
+    validation array (`uuid_parsing`, `loc`, `ctx`). `parseDetail` now reduces a detail array to
+    a field list, so the console says "Check these fields: path.receipt_id."
+13. **The inbox filter tabs had no counts (medium) and the dashboard buried its own answer
+    (medium).** Tabs now carry per-bucket counts from one grouped count on the receipt list
+    response (`status_counts`, computed over every status so the active filter cannot narrow it).
+    The dashboard promotes month spend to a 56px figure, demotes the three counts, and links
+    "Needs review" into the inbox.
+14. **Design tells removed.** Uppercase mono micro-labels (`.eyebrow`, `.section-label`,
+    `.field-label`, `.data-table th`), the rail's coloured active bar, the mobile tab's brand top
+    rule, the review sections' 01/02/03 numbering, and the four decorative `border-l-2` status
+    bars all went. Zero-spend category rows no longer print `RM 0.00`. A receipt with no merchant
+    shows `—` with the filename demoted to secondary text. The gate no longer prints
+    `Route guard · docs/03 §3.1` at the user, and has one `h1`.
+
 ## Observations, no change made
 
 - **Sign-out is a 40px icon button and inbox filter tabs are 40px tall.** Below the 44px
@@ -56,6 +90,12 @@ Seven defects surfaced from the audit and are fixed in this branch, each with a 
 - **No slop.** No gradients, backdrop blur or text shadows anywhere in the rendered DOM; one
   `h1` per page; `prefers-reduced-motion` collapses transitions to 0.01ms; focus-visible paints
   a 2px ring; every async result is exposed on a `role="status"`/`role="alert"` region.
+- **The Inbox keeps its per-row Open button.** A design audit called it a duplicate of the row
+  `onClick`, but the row handler is not keyboard reachable (no `tabindex`, no key handler), so
+  that button is the only tab path into the review console. Removing it would have been a
+  keyboard regression.
+- **A receipt image that 404s shows "Image request failed (HTTP 404)".** The seeded demo receipt
+  has no stored blob; the fallback is correct and the surface stays usable.
 - **Horizontal reflow is clean** across a 17-width sweep (320, 360, 390, 414, 480, 560, 600, 639,
   640, 660, 700, 720, 768, 900, 1024, 1280, 1440) on all six surfaces; 720px is what 200% browser
   zoom gives on a 1440 desktop. Gated by `08-standards → every surface reflows across the width

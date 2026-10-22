@@ -98,13 +98,11 @@ test.describe('Exports', () => {
     await page.getByRole('group', { name: 'Status filter' }).getByRole('button', { name: 'Exported' }).click()
     await expect(page.getByText(/receipts 1–3 of 3/)).toBeVisible()
 
-    // Exported rows can no longer be reviewed into a different state.
+    // Exported rows open read-only: the console refuses the mutation up front
+    // and the backend refuses it too.
     await page.goto(`/clients/${CLIENT_ID}/review/${RECEIPT.mark}`)
-    await expect(page.getByLabel('Supplier Name')).toBeVisible()
-    await page.getByLabel('Supplier Name').fill('Mutation after export')
-    await page.getByRole('button', { name: /Verify & Next/ }).click()
-    await expect(
-      page.getByText('Receipt has already been exported and can no longer be edited'),
-    ).toBeVisible()
+    await expect(page.getByLabel('Supplier Name')).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Verify & Next/ })).toBeDisabled()
+    await expect(page.getByText(/already been exported, so it can no longer be edited/)).toBeVisible()
   })
 })

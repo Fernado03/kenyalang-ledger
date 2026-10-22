@@ -289,8 +289,12 @@ export default function ReviewPage(): JSX.Element {
     return () => window.clearTimeout(timer);
   }, [flash, dismissFlash]);
 
+  // An exported receipt is terminal: the backend 409s every write, so the
+  // console must not offer edits in the first place.
+  const isLocked = activeReceipt?.status === 'STATUS_EXPORTED';
+
   const saveAndNext = useCallback(async (): Promise<void> => {
-    if (clientId === undefined || receiptId === undefined || !audit.valid) {
+    if (clientId === undefined || receiptId === undefined || !audit.valid || isLocked) {
       return;
     }
     try {
@@ -303,7 +307,7 @@ export default function ReviewPage(): JSX.Element {
   }, [audit.valid, clientId, receiptId, receipts, saveReceipt, navigate]);
 
   const rejectAndNext = useCallback(async (): Promise<void> => {
-    if (clientId === undefined || receiptId === undefined) {
+    if (clientId === undefined || receiptId === undefined || isLocked) {
       return;
     }
     try {
@@ -349,12 +353,12 @@ export default function ReviewPage(): JSX.Element {
       }
       if (action === 'save') {
         event.preventDefault();
-        void saveAndNext();
+        if (!isLocked) void saveAndNext();
         return;
       }
       if (action === 'reject') {
         event.preventDefault();
-        setConfirmingReject(true);
+        if (!isLocked) setConfirmingReject(true);
         return;
       }
       if (action === 'add-line') {
@@ -364,7 +368,7 @@ export default function ReviewPage(): JSX.Element {
       }
       if (action === 'delete-line') {
         event.preventDefault();
-        if (focusedLineKey !== null) {
+        if (!isLocked && focusedLineKey !== null) {
           removeDraftLine(focusedLineKey);
           setFocusedLineKey(null);
         }
@@ -394,6 +398,7 @@ export default function ReviewPage(): JSX.Element {
     blocker,
     confirmingReject,
     focusedLineKey,
+    isLocked,
     onReset,
     onZoomIn,
     onZoomOut,
@@ -505,7 +510,7 @@ export default function ReviewPage(): JSX.Element {
                     VERIFIED
                   </span>
                 ) : null}
-                {!audit.valid ? (
+                {!audit.valid && !isLocked ? (
                   <span className="text-label text-mismatch-text" role="status">
                     Fix {audit.invalidFields[0]} before verifying.
                   </span>
@@ -514,7 +519,7 @@ export default function ReviewPage(): JSX.Element {
                   ref={rejectTriggerRef}
                   type="button"
                   className={ACTION_BUTTON_CLASS}
-                  disabled={saveState === 'saving'}
+                  disabled={saveState === 'saving' || isLocked}
                   onClick={() => setConfirmingReject(true)}
                 >
                   {saveState === 'saving' ? 'Rejecting…' : 'Reject'}
@@ -525,7 +530,7 @@ export default function ReviewPage(): JSX.Element {
                 <button
                   type="button"
                   className={PRIMARY_BUTTON_CLASS}
-                  disabled={saveState === 'saving' || !audit.valid}
+                  disabled={saveState === 'saving' || !audit.valid || isLocked}
                   onClick={() => void saveAndNext()}
                   aria-keyshortcuts="Control+Enter"
                 >
@@ -568,7 +573,7 @@ export default function ReviewPage(): JSX.Element {
                 <button
                   type="button"
                   className={DANGER_BUTTON_CLASS}
-                  disabled={saveState === 'saving'}
+                  disabled={saveState === 'saving' || isLocked}
                   onClick={() => void rejectAndNext()}
                 >
                   {saveState === 'saving' ? 'Rejecting…' : 'Reject'}
@@ -577,6 +582,13 @@ export default function ReviewPage(): JSX.Element {
             </div>
           ) : null}
 
+          <fieldset disabled={isLocked} className="min-w-0 border-0 p-0">
+          <legend className="sr-only">Receipt fields</legend>
+          {isLocked ? (
+            <p className="mx-5 mt-4 border-l-[3px] border-border-strong px-3 py-2 text-ui text-text-secondary lg:mx-8">
+              This receipt has already been exported, so it can no longer be edited.
+            </p>
+          ) : null}
           <section className={SECTION_CLASS}>
             <div className="mb-3">
               <h2 className="section-title">Supplier &amp; date</h2>
@@ -760,6 +772,7 @@ export default function ReviewPage(): JSX.Element {
               )}
             </details>
           </section>
+          </fieldset>
         </div>
 
         <dialog

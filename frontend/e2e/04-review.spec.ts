@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { CLIENT_ID, RECEIPT, auditCount, receiptState, seedSession } from './fixtures'
+import { CLIENT_ID, RECEIPT, apiHeaders, auditCount, receiptState, seedSession } from './fixtures'
 
 const review = (receiptId: string): string => `/clients/${CLIENT_ID}/review/${receiptId}`
 
@@ -106,16 +106,29 @@ test.describe('Review console', () => {
     expect((await receiptState(page, RECEIPT.math)).status).toBe('STATUS_VERIFIED')
   })
 
-  test('an exported receipt refuses edits with the backend 409 detail', async ({ page }) => {
+  test('an exported receipt opens read-only and still 409s a direct write', async ({ page }) => {
     await page.goto(review(RECEIPT.frozen))
     await expect(page.getByRole('heading', { level: 2, name: 'Supplier & date' })).toBeVisible()
 
-    await page.getByLabel('Supplier Name').fill('Should not stick')
-    await page.getByRole('button', { name: /Verify & Next/ }).click()
+    // The console refuses the edit up front rather than letting it fail on save.
+    await expect(page.getByText(/already been exported, so it can no longer be edited/)).toBeVisible()
+    await expect(page.getByLabel('Supplier Name')).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Verify & Next/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /^Reject/ })).toBeDisabled()
 
-    await expect(
-      page.getByText('Receipt has already been exported and can no longer be edited'),
-    ).toBeVisible()
+    // The keyboard shortcuts must not route around the disabled buttons.
+    await page.keyboard.press('Escape')
+    await expect(page.getByText('Reject this receipt? This cannot be undone.')).toHaveCount(0)
+    await page.keyboard.press('Control+Enter')
+    await expect(page.getByText(/already been exported/)).toHaveCount(1)
     await expect(page).toHaveURL(new RegExp(RECEIPT.frozen))
+
+    // The backend guard is the real invariant: a direct write must still 409.
+    const response = await page.request.put(`/api/v1/clients/${CLIENT_ID}/receipts/${RECEIPT.frozen}`, {
+      headers: apiHeaders,
+      data: { merchant_name: 'Should not stick' },
+    })
+    expect(response.status()).toBe(409)
+    expect(await response.text()).toContain('already been exported')
   })
 })
