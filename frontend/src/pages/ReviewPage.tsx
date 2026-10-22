@@ -115,7 +115,6 @@ export default function ReviewPage(): JSX.Element {
 
   const activeReceipt = useReceiptStore((state) => state.activeReceipt);
   const draft = useReceiptStore((state) => state.draft);
-  const receipts = useReceiptStore((state) => state.receipts);
   const receiptLoading = useReceiptStore((state) => state.receiptLoading);
   const receiptError = useReceiptStore((state) => state.receiptError);
   const receiptsError = useReceiptStore((state) => state.receiptsError);
@@ -293,18 +292,40 @@ export default function ReviewPage(): JSX.Element {
   // console must not offer edits in the first place.
   const isLocked = activeReceipt?.status === 'STATUS_EXPORTED';
 
+  // The next flagged receipt after the one just handled. Reading the store at
+  // call time keeps this correct after the save re-fetches the page, and the
+  // index walk means "next" is the row below the current one, not the newest.
+  const nextReceiptId = useCallback((): string | null => {
+    const items = useReceiptStore.getState().receipts;
+    const currentIndex = items.findIndex((item) => item.id === receiptId);
+    const after =
+      currentIndex >= 0
+        ? items
+            .slice(currentIndex + 1)
+            .find((item) => item.status === 'STATUS_NEEDS_REVIEW' && item.id !== receiptId)
+        : undefined;
+    if (after !== undefined) return after.id;
+    const fallback = items.find(
+      (item) => item.status === 'STATUS_NEEDS_REVIEW' && item.id !== receiptId,
+    );
+    return fallback?.id ?? null;
+  }, [receiptId]);
+
   const saveAndNext = useCallback(async (): Promise<void> => {
     if (clientId === undefined || receiptId === undefined || !audit.valid || isLocked) {
       return;
     }
     try {
       await saveReceipt(receiptId);
-      const next = receipts.find((item) => item.status === 'STATUS_NEEDS_REVIEW' && item.id !== receiptId);
-      navigate(next !== undefined ? `/clients/${clientId}/review/${next.id}` : `/clients/${clientId}/inbox`);
+      // The write is committed: the leave guard must not fire on navigation.
+      dirtyRef.current = false;
+      void refreshAudit();
+      const next = nextReceiptId();
+      navigate(next !== null ? `/clients/${clientId}/review/${next}` : `/clients/${clientId}/inbox`);
     } catch {
       // saveState already holds the error message.
     }
-  }, [audit.valid, clientId, isLocked, receiptId, receipts, saveReceipt, navigate]);
+  }, [audit.valid, clientId, isLocked, receiptId, saveReceipt, navigate, refreshAudit, nextReceiptId]);
 
   const rejectAndNext = useCallback(async (): Promise<void> => {
     if (clientId === undefined || receiptId === undefined || isLocked) {
@@ -314,14 +335,13 @@ export default function ReviewPage(): JSX.Element {
       await rejectReceipt();
       setConfirmingReject(false);
       dirtyRef.current = false;
-      const next = receipts.find(
-        (item) => item.status === 'STATUS_NEEDS_REVIEW' && item.id !== receiptId,
-      );
-      navigate(next !== undefined ? `/clients/${clientId}/review/${next.id}` : `/clients/${clientId}/inbox`);
+      void refreshAudit();
+      const next = nextReceiptId();
+      navigate(next !== null ? `/clients/${clientId}/review/${next}` : `/clients/${clientId}/inbox`);
     } catch {
       // saveState already holds the error message.
     }
-  }, [clientId, isLocked, receiptId, receipts, rejectReceipt, navigate]);
+  }, [clientId, isLocked, receiptId, rejectReceipt, navigate, refreshAudit, nextReceiptId]);
 
   // One window listener for the whole workflow; the resolver owns the bindings.
   useEffect(() => {

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Icon, type IconName, BrandMark } from './Icon'
 import { useSessionStore } from '../store/sessionStore'
+import { useReceiptStore } from '../store/receiptStore'
 
 interface NavItem {
   label: string
@@ -48,6 +49,13 @@ export default function AppShell({
 }) {
   const accountantId = useSessionStore((state) => state.accountantId)
   const clearAccountantId = useSessionStore((state) => state.clearAccountantId)
+  const resetWorkspace = useReceiptStore((state) => state.resetWorkspace)
+  // The persisted workspace id belongs to the signed-in accountant; leaving it
+  // behind lets the next one land in a tenant they do not own.
+  const signOut = (): void => {
+    resetWorkspace()
+    clearAccountantId()
+  }
   const { pathname } = useLocation()
   const reviewActive = pathname.includes('/review/')
   const hasWorkspace = clientId !== undefined
@@ -129,7 +137,7 @@ export default function AppShell({
           </span>
           <button
             type="button"
-            onClick={clearAccountantId}
+            onClick={signOut}
             className="flex h-10 w-10 items-center justify-center text-text-muted transition-colors duration-100 hover:bg-surface hover:text-text-primary"
             aria-label="Sign out"
             title="Sign out"
@@ -148,7 +156,7 @@ export default function AppShell({
         </Link>
         <button
           type="button"
-          onClick={clearAccountantId}
+          onClick={signOut}
           className="ml-auto flex h-10 w-10 shrink-0 items-center justify-center text-text-muted transition-colors duration-100 hover:bg-surface-subtle hover:text-text-primary"
           aria-label="Sign out"
           title="Sign out"

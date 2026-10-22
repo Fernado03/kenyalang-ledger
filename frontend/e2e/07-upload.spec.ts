@@ -12,8 +12,8 @@ test.describe('Upload capture surface', () => {
     await page.goto(UPLOAD)
 
     await expect(page.getByRole('heading', { level: 1, name: 'Upload receipts' })).toBeVisible()
-    await expect(page.getByText('Select a client workspace first')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Choose a client' })).toHaveAttribute(
+    await expect(page.getByRole('heading', { level: 2, name: 'No workspace selected' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Go to clients' })).toHaveAttribute(
       'href',
       '/clients',
     )

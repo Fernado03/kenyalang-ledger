@@ -27,12 +27,14 @@ export default function UploadPage() {
   const filesId = useId();
 
   useEffect(() => {
-    if (clients.length === 0) {
-      void loadClients();
-    }
-  }, [clients.length, loadClients]);
+    // Always refresh: a persisted id from a previous session must be validated
+    // against the accountant's actual workspaces, not trusted blindly.
+    void loadClients();
+  }, [loadClients]);
 
   const client = clients.find((item) => item.id === currentClientId) ?? null;
+  const hasSelectedClient =
+    clients.length > 0 && clients.some((item) => item.id === currentClientId);
 
   const handleFiles = (files: FileList | null) => {
     if (files === null || files.length === 0) return;
@@ -54,32 +56,20 @@ export default function UploadPage() {
               note={
                 client?.business_name !== undefined
                   ? undefined
-                  : currentClientId !== null
+                  : hasSelectedClient
                     ? 'Selected client'
                     : 'Choose a workspace to begin'
               }
               back={
-                currentClientId !== null
-                  ? { to: `/clients/${currentClientId}/inbox`, label: 'Inbox' }
+                hasSelectedClient
+                  ? { to: `/clients/${currentClientId ?? ''}/inbox`, label: 'Inbox' }
                   : undefined
               }
             />
           }
         />
 
-        {currentClientId === null ? (
-          <div className="mt-6 max-w-[560px] border-b border-border py-6">
-            <p className="text-ui font-semibold text-text-primary">
-              Select a client workspace first
-            </p>
-            <p className="mt-1 text-body text-text-secondary">
-              Receipts are uploaded into the selected client.
-            </p>
-            <Link to="/clients" className="btn btn-secondary mt-4">
-              Choose a client
-            </Link>
-          </div>
-        ) : (
+        {hasSelectedClient ? (
           <div className="mt-6 grid gap-x-10 gap-y-8 lg:grid-cols-12 lg:items-start">
             <div className="space-y-5 lg:col-span-5">
               <div className="space-y-3">
@@ -213,6 +203,18 @@ export default function UploadPage() {
                 </>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="mt-6 border-t border-border pt-6">
+            <h2 className="section-title">No workspace selected</h2>
+            <p className="mt-2 text-ui text-text-secondary">
+              {clients.length === 0
+                ? 'Create a client before uploading receipts.'
+                : 'Choose a workspace from the client list before uploading.'}
+            </p>
+            <Link className="btn btn-primary mt-4" to="/clients">
+              Go to clients
+            </Link>
           </div>
         )}
       </div>

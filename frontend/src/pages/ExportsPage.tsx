@@ -38,10 +38,9 @@ export default function ExportsPage(): JSX.Element {
 
   useEffect(() => {
     if (!clientId) return;
-    if (clients.length === 0) {
-      void loadClients();
-    }
-  }, [clientId, clients.length, loadClients]);
+    // Aggregates shown elsewhere must be fresh on entry, like the dashboard.
+    void loadClients();
+  }, [clientId, loadClients]);
 
   if (!clientId) {
     return (
@@ -106,7 +105,14 @@ export default function ExportsPage(): JSX.Element {
     setIsMarking(true);
     try {
       const { updated } = await markExported(clientId, selectedMonth || undefined);
-      await loadClientReceipts(clientId);
+      await Promise.all([loadClientReceipts(clientId), loadClients()]);
+      // The store records refresh failures instead of throwing, so a failed
+      // refresh must not be reported as success over stale rows.
+      const { receiptsError, clientsError } = useReceiptStore.getState();
+      if (receiptsError !== null || clientsError !== null) {
+        setError(receiptsError ?? clientsError);
+        return;
+      }
       setSuccessMessage(
         updated === 0
           ? 'No verified receipts to mark as exported.'

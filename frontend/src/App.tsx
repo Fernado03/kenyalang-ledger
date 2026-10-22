@@ -5,6 +5,7 @@ import {
   RouterProvider,
   createBrowserRouter,
   useLocation,
+  useParams,
 } from 'react-router-dom'
 import AccountantGate from './components/AccountantGate'
 
@@ -67,6 +68,10 @@ function RootLayout() {
     </div>
   )
 }
+function ReviewRoute() {
+  const { clientId, receiptId } = useParams<{ clientId: string; receiptId: string }>()
+  return <ReviewPage key={`${clientId ?? ''}:${receiptId ?? ''}`} />
+}
 
 const router = createBrowserRouter([
   {
@@ -76,7 +81,7 @@ const router = createBrowserRouter([
       { path: '/clients/:clientId/inbox', element: <InboxPage /> },
       {
         path: '/clients/:clientId/review/:receiptId',
-        element: <ReviewPage />,
+        element: <ReviewRoute />,
       },
       { path: '/clients/:clientId/exports', element: <ExportsPage /> },
       { path: '/clients/:clientId/dashboard', element: <DashboardPage /> },

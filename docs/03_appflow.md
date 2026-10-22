@@ -185,7 +185,7 @@ The validation engine must execute on every client-side keystroke in `SCR-03`:
 
 1. **The Core Formula:**
 
-$$\Delta = \left| \sum (\text{item.qty} \times \text{item.unit\_price}) + \text{sst\_amount} - \text{grand\_total} \right|$$
+$$\Delta = \left| \sum \text{item.line\_total} + \text{sst\_amount} - \text{grand\_total} \right|$$
 
 2. **Reconciliation States:**
     * **$\Delta \le 0.02$:** Field displays green checkmark `[✓ Math Matches]`.

@@ -152,7 +152,9 @@ export default function LineItemsEditor({
               key={item.key}
               item={item}
               index={index}
-              serverItem={serverLineItems[index]}
+              serverItem={
+                item.source_index === undefined ? undefined : serverLineItems[item.source_index]
+              }
               active={activeKey === item.key}
               onChange={onChange}
               onRemove={onRemove}

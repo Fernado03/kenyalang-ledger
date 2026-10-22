@@ -153,6 +153,8 @@ export interface ReceiptUploadResponse {
 /** An editable line-item row; `key` is local React/edit identity only. */
 export interface DraftLineItem {
   key: string;
+  /** Index of the OCR line this row came from; absent for hand-added rows. */
+  source_index?: number;
   description: string;
   quantity: string;
   unit_price: string;

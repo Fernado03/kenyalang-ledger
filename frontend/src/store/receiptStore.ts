@@ -21,6 +21,7 @@ import type {
   ReceiptListStatus,
   ReceiptUpdateLineItem,
   ReceiptUpdateRequest,
+  ReceiptUpdateResponse,
   ReceiptUploadResult,
 } from '../types/receipt';
 
@@ -64,6 +65,43 @@ const DRAFT_KEY_PREFIX = 'kenyalang.draft.';
 /** Default inbox page size (docs/06_schema_api.md §6.3.1). */
 const DEFAULT_LIST_LIMIT = 50;
 
+/**
+ * Monotonic token for inbox fetches. Each fetch captures `++requestSeq` and only
+ * paints when it is still the newest, so a late response for a previous
+ * workspace or tab can never overwrite the rows currently on screen.
+ */
+let requestSeq = 0;
+
+/**
+ * Monotonic token for client-list fetches. Only the newest `loadClients` may
+ * paint, so a slow refresh cannot replace a newer list.
+ */
+let clientsRequestSeq = 0;
+
+/**
+ * Bumped by `resetWorkspace`. Late client-list or client-creation work started
+ * in the signed-out workspace must not repopulate it or adopt a client.
+ */
+let workspaceEpoch = 0;
+
+/**
+ * Monotonic token for the active receipt view. A detail load, save, reject or
+ * workspace switch bumps it; an async response captured under an older token
+ * must not paint over the receipt that is now on screen.
+ */
+let receiptContextSeq = 0;
+
+/**
+ * The review save currently writing, if any. A duplicate save for the same
+ * receipt awaits this promise — one PUT, one shared result — while a save for a
+ * different receipt is refused instead of queued behind it.
+ */
+let inFlightSave: {
+  receiptId: string;
+  clientId: string;
+  promise: Promise<ReceiptDetail>;
+} | null = null;
+
 /** Message used when a thrown value carries no usable text. */
 const UNKNOWN_ERROR_MESSAGE = 'Unknown error';
 
@@ -92,6 +130,15 @@ function persistClientId(id: string): void {
     window.localStorage.setItem(CURRENT_CLIENT_ID_KEY, id);
   } catch {
     // Private-mode storage failures must not block client selection.
+  }
+}
+
+/** Forgets the persisted client id; storage failures are swallowed. */
+function clearStoredClientId(): void {
+  try {
+    window.localStorage.removeItem(CURRENT_CLIENT_ID_KEY);
+  } catch {
+    // Sign-out must proceed even when storage is unavailable.
   }
 }
 
@@ -161,8 +208,9 @@ function draftFromReceipt(receipt: ReceiptDetail): ReceiptDraft {
     subtotal: receipt.subtotal === null ? '' : String(receipt.subtotal),
     tax_amount: receipt.tax_amount === null ? '' : String(receipt.tax_amount),
     grand_total: receipt.grand_total === null ? '' : String(receipt.grand_total),
-    line_items: receipt.line_items.map((item) => ({
+    line_items: receipt.line_items.map((item, index) => ({
       key: crypto.randomUUID(),
+      source_index: index,
       description: item.description,
       quantity: String(item.quantity),
       unit_price: String(item.unit_price),
@@ -211,11 +259,17 @@ function updateRequestFromDraft(draft: ReceiptDraft): ReceiptUpdateRequest {
 export interface ReceiptStoreState {
   currentClientId: string | null;
   clients: Client[];
+  /** Client list load state, kept separate from the inbox's own flags. */
+  clientsLoading: boolean;
+  /** Why the last client list load failed; never shared with `receiptsError`. */
+  clientsError: string | null;
   receipts: ReceiptListItem[];
   receiptsTotal: number;
   /** Counts per inbox filter bucket, fetched with the list. */
   statusCounts: Record<string, number>;
   receiptsOffset: number;
+  /** Page size the current list came back with, as reported by the server. */
+  receiptsLimit: number;
   statusFilter: ReceiptListStatus;
   activeReceipt: ReceiptDetail | null;
   draft: ReceiptDraft | null;
@@ -235,6 +289,8 @@ export interface ReceiptStoreState {
   uploadResult: { uploaded: ReceiptUploadResult[]; failed: string | null } | null;
 
   setCurrentClientId: (id: string) => Promise<void>;
+  /** Clears the workspace (sign-out): persisted id plus all per-client state. */
+  resetWorkspace: () => void;
   loadClients: () => Promise<void>;
   createClient: (payload: ClientCreate) => Promise<Client>;
   loadClientReceipts: (clientId: string, offset?: number) => Promise<void>;
@@ -260,6 +316,7 @@ async function fetchReceipts(
 ): Promise<{
   items: ReceiptListItem[];
   total: number;
+  limit: number;
   status_counts: Record<string, number>;
 }> {
   const response = await listReceipts(clientId, {
@@ -270,19 +327,25 @@ async function fetchReceipts(
   return {
     items: response.items,
     total: response.total,
+    limit: response.limit,
     status_counts: response.status_counts,
   };
 }
 
-/** Failure text for the inbox error slot: ApiError detail or a plain message. */
-function receiptsFailure(error: unknown): string {
+/** Failure text for the store's error slots: ApiError detail or a plain message. */
+function failureMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : errorMessage(error);
 }
 
 /** Applies a fetched inbox page to the store. */
 function applyReceiptsPage(
   set: (partial: Partial<ReceiptStoreState>) => void,
-  page: { items: ReceiptListItem[]; total: number; status_counts: Record<string, number> },
+  page: {
+    items: ReceiptListItem[];
+    total: number;
+    limit: number;
+    status_counts: Record<string, number>;
+  },
   offset: number,
 ): void {
   set({
@@ -290,6 +353,7 @@ function applyReceiptsPage(
     receiptsTotal: page.total,
     statusCounts: page.status_counts,
     receiptsOffset: offset,
+    receiptsLimit: page.limit,
     receiptsLoading: false,
   });
 }
@@ -306,10 +370,13 @@ function persistDraftFor(receiptId: string, draft: ReceiptDraft): void {
 export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
   currentClientId: readStoredClientId(),
   clients: [],
+  clientsLoading: false,
+  clientsError: null,
   receipts: [],
   receiptsTotal: 0,
   statusCounts: {},
   receiptsOffset: 0,
+  receiptsLimit: DEFAULT_LIST_LIMIT,
   statusFilter: 'ALL',
   activeReceipt: null,
   draft: null,
@@ -327,6 +394,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
 
   setCurrentClientId: async (id: string) => {
     persistClientId(id);
+    // Anything still in flight belongs to the previous workspace.
+    const seq = ++requestSeq;
+    // A detail load or save for the previous workspace must not paint here.
+    receiptContextSeq += 1;
+    const status = get().statusFilter;
     set({
       currentClientId: id,
       receipts: [],
@@ -337,55 +409,107 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       draftBaseline: null,
       receiptsLoading: true,
       receiptsError: null,
+      receiptLoading: false,
       receiptError: null,
       saveState: 'idle',
       saveError: null,
       flash: false,
       flashFor: null,
+      uploadState: 'idle',
+      uploadResult: null,
     });
     try {
-      applyReceiptsPage(set, await fetchReceipts(id, get().statusFilter, 0), 0);
+      const page = await fetchReceipts(id, status, 0);
+      if (seq !== requestSeq) {
+        return;
+      }
+      applyReceiptsPage(set, page, 0);
     } catch (error) {
-      set({ receiptsError: receiptsFailure(error), receiptsLoading: false });
+      if (seq !== requestSeq) {
+        return;
+      }
+      set({ receiptsError: failureMessage(error), receiptsLoading: false });
     }
   },
 
+  resetWorkspace: () => {
+    clearStoredClientId();
+    // Abandon in-flight inbox, client-list and receipt-detail work so a late
+    // response cannot repaint or adopt anything after sign-out.
+    requestSeq += 1;
+    clientsRequestSeq += 1;
+    workspaceEpoch += 1;
+    receiptContextSeq += 1;
+    set({
+      currentClientId: null,
+      clients: [],
+      clientsLoading: false,
+      clientsError: null,
+      receipts: [],
+      receiptsTotal: 0,
+      receiptsOffset: 0,
+      receiptsLimit: DEFAULT_LIST_LIMIT,
+      statusCounts: {},
+      statusFilter: 'ALL',
+      receiptsLoading: false,
+      receiptsError: null,
+      activeReceipt: null,
+      draft: null,
+      draftBaseline: null,
+      receiptLoading: false,
+      receiptError: null,
+      saveState: 'idle',
+      saveError: null,
+      flash: false,
+      flashFor: null,
+      uploadState: 'idle',
+      uploadResult: null,
+    });
+  },
+
   loadClients: async () => {
+    const seq = ++clientsRequestSeq;
+    const epoch = workspaceEpoch;
+    set({ clientsLoading: true, clientsError: null });
     let loaded: Client[];
     try {
       loaded = await listClients();
     } catch (error) {
-      // Keep the last known list: a failed refresh must not look like an empty account.
-      set({ receiptsError: receiptsFailure(error) });
+      if (seq !== clientsRequestSeq || epoch !== workspaceEpoch) {
+        return;
+      }
+      // Keep the last known list: a failed refresh must not look like an empty
+      // account, and the inbox's own error slot is none of this call's business.
+      set({ clientsLoading: false, clientsError: failureMessage(error) });
+      return;
+    }
+    if (seq !== clientsRequestSeq || epoch !== workspaceEpoch) {
       return;
     }
 
     const current = get().currentClientId;
+    set({ clients: loaded, clientsLoading: false });
     if (current === null && loaded.length > 0) {
-      const adopted = loaded[0].id;
-      persistClientId(adopted);
-      set({ clients: loaded, currentClientId: adopted, receiptsLoading: true, receiptsError: null });
-      try {
-        applyReceiptsPage(set, await fetchReceipts(adopted, get().statusFilter, 0), 0);
-      } catch (error) {
-        set({
-          receipts: [],
-          receiptsTotal: 0,
-          receiptsError: receiptsFailure(error),
-          receiptsLoading: false,
-        });
-      }
-      return;
+      // Adopting the first workspace is a workspace switch: let the one action
+      // that owns receipt loading (and its error slot) run it.
+      await get().setCurrentClientId(loaded[0].id);
     }
-
-    set({ clients: loaded, receiptsError: null });
   },
 
   createClient: async (payload: ClientCreate) => {
+    const epoch = workspaceEpoch;
     const created = await createClientRequest(payload);
+    if (epoch !== workspaceEpoch) {
+      // Signed out while the request was in flight: never adopt into the new
+      // (empty) workspace or leak the created client into its list.
+      return created;
+    }
     set({ clients: [...get().clients, created] });
     if (get().currentClientId === null) {
       persistClientId(created.id);
+      // The adoption is a workspace switch: drop any receipt work in flight.
+      requestSeq += 1;
+      receiptContextSeq += 1;
       set({
         currentClientId: created.id,
         receipts: [],
@@ -394,6 +518,9 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         activeReceipt: null,
         draft: null,
         draftBaseline: null,
+        receiptsLoading: false,
+        receiptsError: null,
+        receiptLoading: false,
         receiptError: null,
         saveState: 'idle',
         saveError: null,
@@ -405,31 +532,74 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
   },
 
   loadClientReceipts: async (clientId: string, offset = 0) => {
+    const seq = ++requestSeq;
     set({ receiptsLoading: true, receiptsError: null });
     try {
-      applyReceiptsPage(
-        set,
-        await fetchReceipts(clientId, get().statusFilter, offset),
-        offset,
-      );
+      const page = await fetchReceipts(clientId, get().statusFilter, offset);
+      if (seq !== requestSeq) {
+        return;
+      }
+      if (get().currentClientId !== null && get().currentClientId !== clientId) {
+        // The workspace switched while this page was in flight: those rows
+        // belong to another client and must not paint here. Deep links that
+        // have not adopted a workspace yet (`null`) still render.
+        set({ receiptsLoading: false });
+        return;
+      }
+      applyReceiptsPage(set, page, offset);
     } catch (error) {
+      if (seq !== requestSeq) {
+        return;
+      }
+      if (get().currentClientId !== null && get().currentClientId !== clientId) {
+        set({ receiptsLoading: false });
+        return;
+      }
       // Keep the current page visible; polling retries and the banner reports it.
       set({
         receiptsLoading: false,
-        receiptsError: receiptsFailure(error),
+        receiptsError: failureMessage(error),
       });
     }
   },
 
   setStatusFilter: async (filter: ReceiptListStatus) => {
-    set({ statusFilter: filter, receiptsOffset: 0 });
     const current = get().currentClientId;
-    if (current !== null) {
-      await get().loadClientReceipts(current, 0);
+    if (current === null) {
+      set({ statusFilter: filter, receiptsOffset: 0, receiptsLoading: false });
+      return;
+    }
+    const seq = ++requestSeq;
+    set({
+      statusFilter: filter,
+      receiptsOffset: 0,
+      receiptsLoading: true,
+      receiptsError: null,
+    });
+    try {
+      const page = await fetchReceipts(current, filter, 0);
+      if (seq !== requestSeq) {
+        return;
+      }
+      applyReceiptsPage(set, page, 0);
+    } catch (error) {
+      if (seq !== requestSeq) {
+        return;
+      }
+      // The previous tab's rows belong to a different filter: drop them rather
+      // than label them with the tab that just failed. Counts are per-status and
+      // stay valid, so they survive.
+      set({
+        receipts: [],
+        receiptsTotal: 0,
+        receiptsLoading: false,
+        receiptsError: failureMessage(error),
+      });
     }
   },
 
   loadReceipt: async (receiptId: string) => {
+    const context = ++receiptContextSeq;
     const clientId = get().currentClientId;
     if (clientId === null) {
       set({
@@ -448,6 +618,10 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
     set({ receiptLoading: true, receiptError: null });
     try {
       const detail = await getReceipt(clientId, receiptId);
+      if (context !== receiptContextSeq || get().currentClientId !== clientId) {
+        // A newer load, save, reject or workspace switch owns the view now.
+        return;
+      }
       const base = draftFromReceipt(detail);
       const stored = detail.status === 'STATUS_NEEDS_REVIEW' ? readDraft(receiptId) : null;
       if (stored === null) {
@@ -469,8 +643,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         flashFor: null,
       });
     } catch (error) {
+      if (context !== receiptContextSeq || get().currentClientId !== clientId) {
+        return;
+      }
       // Never leave receipt A's fields under receipt B's URL.
-      const message = receiptsFailure(error);
+      const message = failureMessage(error);
       set({
         activeReceipt: null,
         draft: null,
@@ -573,33 +750,131 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       set({ saveState: 'error', saveError: message, flash: false, flashFor: null });
       throw new Error(message);
     }
-    if (receiptId !== undefined && activeReceipt.id !== receiptId) {
+    const requestedId = receiptId ?? activeReceipt.id;
+    // A duplicate Ctrl+Enter for this receipt joins the write already running;
+    // a save for any other receipt is refused rather than queued behind it.
+    const running = inFlightSave;
+    if (running !== null) {
+      if (running.clientId === currentClientId && running.receiptId === requestedId) {
+        return running.promise;
+      }
+      throw new Error('A save is already in progress for another receipt');
+    }
+
+    if (activeReceipt.id !== requestedId) {
       const message = 'The open receipt changed before saving';
       set({ saveState: 'error', saveError: message, flash: false, flashFor: null });
       throw new Error(message);
     }
 
-    set({ saveState: 'saving', saveError: null, flash: false, flashFor: null });
-    try {
-      await updateReceipt(currentClientId, activeReceipt.id, updateRequestFromDraft(draft));
-      clearPersistedDraft(activeReceipt.id);
-      const detail = await getReceipt(currentClientId, activeReceipt.id);
-      const fresh = draftFromReceipt(detail);
+    const savedClientId = currentClientId;
+    const savedReceipt = activeReceipt;
+    const savedId = activeReceipt.id;
+    const submittedDraft = draft;
+    // This save owns the receipt view until something newer (a load, another
+    // save/reject, or a workspace switch) bumps the token.
+    const context = ++receiptContextSeq;
+
+    const operation = (async (): Promise<ReceiptDetail> => {
+      set({ saveState: 'saving', saveError: null, flash: false, flashFor: null });
+      let ack: ReceiptUpdateResponse;
+      try {
+        ack = await updateReceipt(savedClientId, savedId, updateRequestFromDraft(submittedDraft));
+      } catch (error) {
+        const message = failureMessage(error);
+        if (
+          context === receiptContextSeq &&
+          get().currentClientId === savedClientId &&
+          get().activeReceipt?.id === savedId
+        ) {
+          set({ saveState: 'error', saveError: message });
+        }
+        throw error instanceof ApiError ? error : new Error(message);
+      }
+
+      // The PUT committed: from here a failed confirming read must not report
+      // the save as failed, and the persisted draft has served its purpose.
+      clearPersistedDraft(savedId);
+      // The ack carries only status/discrepancy; `verified_at` and the rest of
+      // ReceiptDetail stay as loaded, never synthesised from `updated_at`.
+      const committed: ReceiptDetail = {
+        ...savedReceipt,
+        status: ack.status,
+        math_discrepancy: ack.math_discrepancy,
+      };
+      if (
+        context !== receiptContextSeq ||
+        get().currentClientId !== savedClientId ||
+        get().activeReceipt !== savedReceipt
+      ) {
+        // The view moved on while the PUT was in flight: the write happened,
+        // but its state belongs to a receipt/workspace no longer on screen.
+        return committed;
+      }
+
+      // Keep edits typed after the PUT started; the store's draft object is
+      // replaced on every keystroke, so a different reference means newer text.
+      const liveDraft = get().draft;
+      const editedAfterPut = liveDraft !== null && liveDraft !== submittedDraft ? liveDraft : null;
+      const paintedDraft = editedAfterPut ?? submittedDraft;
       set({
-        activeReceipt: detail,
-        draft: fresh,
-        draftBaseline: fresh,
+        activeReceipt: committed,
+        draft: paintedDraft,
+        draftBaseline: submittedDraft,
         saveState: 'saved',
         saveError: null,
         flash: true,
-        flashFor: detail.id,
+        flashFor: committed.id,
       });
-      await get().loadClientReceipts(currentClientId);
-      return detail;
-    } catch (error) {
-      const message = receiptsFailure(error);
-      set({ saveState: 'error', saveError: message });
-      throw error instanceof ApiError ? error : new Error(message);
+      if (editedAfterPut !== null) {
+        persistDraftFor(savedId, editedAfterPut);
+      }
+
+      let saved = committed;
+      try {
+        const confirmed = await getReceipt(savedClientId, savedId);
+        if (
+          context !== receiptContextSeq ||
+          get().currentClientId !== savedClientId ||
+          get().activeReceipt !== committed
+        ) {
+          return committed;
+        }
+        const confirmedDraft = draftFromReceipt(confirmed);
+        // Anything typed after the PUT started is still unsaved; the server
+        // response must not silently discard it.
+        const liveAfterConfirm = get().draft;
+        const editedAfterConfirm =
+          liveAfterConfirm !== null && liveAfterConfirm !== submittedDraft ? liveAfterConfirm : null;
+        set({
+          activeReceipt: confirmed,
+          draft: editedAfterConfirm ?? confirmedDraft,
+          draftBaseline: confirmedDraft,
+        });
+        if (editedAfterConfirm !== null) {
+          persistDraftFor(savedId, editedAfterConfirm);
+        }
+        saved = confirmed;
+      } catch {
+        // Keep the committed PUT result rather than inventing detail fields.
+      }
+      if (context === receiptContextSeq && get().currentClientId === savedClientId) {
+        await get().loadClientReceipts(savedClientId, get().receiptsOffset);
+      }
+      return saved;
+    })();
+
+    inFlightSave = {
+      clientId: savedClientId,
+      receiptId: savedId,
+      promise: operation,
+    };
+    try {
+      return await operation;
+    } finally {
+      if (inFlightSave?.promise === operation) {
+        inFlightSave = null;
+      }
     }
   },
 
@@ -610,29 +885,86 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       set({ saveState: 'error', saveError: message });
       throw new Error(message);
     }
+    // Rejecting while this receipt's PUT is still writing would race the save's
+    // status write and its confirmation read: refuse instead of interleaving.
+    const running = inFlightSave;
+    if (running !== null && running.clientId === currentClientId && running.receiptId === activeReceipt.id) {
+      throw new Error('A save is already in progress for this receipt');
+    }
 
+    const rejectedClientId = currentClientId;
+    const rejectedReceipt = activeReceipt;
+    const rejectedId = activeReceipt.id;
+    const context = ++receiptContextSeq;
     set({ saveState: 'saving', saveError: null, flash: false, flashFor: null });
+
+    let ack: ReceiptUpdateResponse;
     try {
-      await rejectReceiptRequest(currentClientId, activeReceipt.id);
-      clearPersistedDraft(activeReceipt.id);
-      const detail = await getReceipt(currentClientId, activeReceipt.id);
-      const fresh = draftFromReceipt(detail);
-      set({
-        activeReceipt: detail,
-        draft: fresh,
-        draftBaseline: fresh,
-        saveState: 'saved',
-        saveError: null,
-        flash: false,
-        flashFor: null,
-      });
-      await get().loadClientReceipts(currentClientId);
-      return detail;
+      ack = await rejectReceiptRequest(rejectedClientId, rejectedId);
     } catch (error) {
-      const message = receiptsFailure(error);
-      set({ saveState: 'error', saveError: message });
+      const message = failureMessage(error);
+      if (
+        context === receiptContextSeq &&
+        get().currentClientId === rejectedClientId &&
+        get().activeReceipt?.id === rejectedId
+      ) {
+        set({ saveState: 'error', saveError: message });
+      }
       throw error instanceof ApiError ? error : new Error(message);
     }
+
+    // The POST committed: the persisted draft is obsolete even if the
+    // confirming read below fails.
+    clearPersistedDraft(rejectedId);
+    const committed: ReceiptDetail = {
+      ...rejectedReceipt,
+      status: ack.status,
+      math_discrepancy: ack.math_discrepancy,
+    };
+    if (
+      context !== receiptContextSeq ||
+      get().currentClientId !== rejectedClientId ||
+      get().activeReceipt !== rejectedReceipt
+    ) {
+      return committed;
+    }
+    set({
+      activeReceipt: committed,
+      saveState: 'saved',
+      saveError: null,
+      flash: false,
+      flashFor: null,
+    });
+
+    let saved = committed;
+    try {
+      const detail = await getReceipt(rejectedClientId, rejectedId);
+      if (
+        context !== receiptContextSeq ||
+        get().currentClientId !== rejectedClientId ||
+        get().activeReceipt !== committed
+      ) {
+        return committed;
+      }
+      const fresh = draftFromReceipt(detail);
+      set({ activeReceipt: detail, draft: fresh, draftBaseline: fresh });
+      saved = detail;
+    } catch {
+      if (
+        context === receiptContextSeq &&
+        get().currentClientId === rejectedClientId &&
+        get().activeReceipt === committed
+      ) {
+        // The rejection succeeded; drop the stale draft even though the
+        // confirming read failed, rather than reporting the reject as failed.
+        const fresh = draftFromReceipt(committed);
+        set({ draft: fresh, draftBaseline: fresh });
+      }
+    }
+    if (context === receiptContextSeq && get().currentClientId === rejectedClientId) {
+      await get().loadClientReceipts(rejectedClientId, get().receiptsOffset);
+    }
+    return saved;
   },
 
   dismissFlash: () => {
@@ -651,11 +983,11 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         uploadState: 'done',
         uploadResult: { uploaded: response.receipts, failed: null },
       });
-      await get().loadClientReceipts(clientId);
+      await get().loadClientReceipts(clientId, get().receiptsOffset);
     } catch (error) {
       set({
         uploadState: 'error',
-        uploadResult: { uploaded: [], failed: `Batch rejected: ${receiptsFailure(error)}` },
+        uploadResult: { uploaded: [], failed: `Batch rejected: ${failureMessage(error)}` },
       });
     }
   },

@@ -39,7 +39,7 @@ export default function ClientsPage() {
   const clients = useReceiptStore((state) => state.clients)
   const loadClients = useReceiptStore((state) => state.loadClients)
   const currentClientId = useReceiptStore((state) => state.currentClientId)
-  const receiptsError = useReceiptStore((state) => state.receiptsError)
+  const clientsError = useReceiptStore((state) => state.clientsError)
 
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
@@ -55,6 +55,18 @@ export default function ClientsPage() {
     }
   }, [loadClients])
 
+  // The store appends the created client without count fields and out of order,
+  // so re-read the server's newest-first list instead of trusting that append.
+  const handleCreated = async (): Promise<void> => {
+    setFormOpen(false)
+    setLoading(true)
+    try {
+      await loadClients()
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // The list response already carries both aggregates, so no per-client calls.
   const summaries = clients as ClientSummary[]
 
@@ -62,7 +74,7 @@ export default function ClientsPage() {
     <div className="border-t-2 border-brand-900 bg-surface px-5 py-5">
       <ClientForm
         onCancel={() => setFormOpen(false)}
-        onCreated={() => setFormOpen(false)}
+        onCreated={() => void handleCreated()}
         submitLabel={summaries.length === 0 ? 'Create client' : undefined}
       />
     </div>
@@ -104,11 +116,12 @@ export default function ClientsPage() {
       </>
     )
   } else if (clients.length === 0) {
-    // A failed fetch must not read as an empty account: no create invitation.
+    // A failed fetch keeps its banner above, but must not hide the only way to
+    // create a workspace: the empty state stays reachable alongside the error.
     // A form the user already opened stays, so typed input is not discarded.
     body = formOpen ? (
       formPanel
-    ) : receiptsError !== null ? null : (
+    ) : (
       <div className="border-t-2 border-brand-900 py-10">
         <h2 className="section-title">Add your first client</h2>
         <p className="mt-2 max-w-md text-body text-text-secondary">
@@ -266,12 +279,12 @@ export default function ClientsPage() {
           }
         />
 
-        {receiptsError !== null ? (
+        {clientsError !== null ? (
           <div
             role="alert"
             className="mt-6 flex flex-wrap items-center justify-between gap-4 border-l-2 border-mismatch-border bg-mismatch-bg px-4 py-3 text-ui text-mismatch-text"
           >
-            <span>{receiptsError}</span>
+            <span>{clientsError}</span>
             <button
               type="button"
               onClick={() => void loadClients()}

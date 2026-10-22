@@ -194,9 +194,14 @@ export default function ReceiptCanvas({
   const [ty, setTy] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [hovered, setHovered] = useState<{ x: number; y: number; text: string } | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const imageKey = `${accountantId ?? ''}:${clientId}:${receiptId}`;
+  const [loadedImage, setLoadedImage] = useState<{ key: string; url: string } | null>(null);
+  const [imageFailure, setImageFailure] = useState<{ key: string; message: string } | null>(null);
+  const [naturalImage, setNaturalImage] = useState<{ key: string; w: number; h: number } | null>(null);
+  const imageUrl = loadedImage?.key === imageKey ? loadedImage.url : null;
+  const imageError = accountantId === null || accountantId === ''
+    ? 'Accountant session unavailable'
+    : imageFailure?.key === imageKey ? imageFailure.message : null;
   const [stage, setStage] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
   // Track the stage box so the scan can be contained inside it at 100%.
@@ -218,21 +223,21 @@ export default function ReceiptCanvas({
   }, []);
 
   const handleNaturalSize = useCallback((w: number, h: number): void => {
-    setNatural({ w, h });
-  }, []);
+    setNaturalImage({ key: imageKey, w, h });
+  }, [imageKey]);
 
   // Contain-fit at 100%: both axes are respected so a landscape scan on a tall
   // pane is centred rather than stranded at the top of an empty stage.
   const fit = useMemo(() => {
-    if (natural === null || stage.w === 0 || stage.h === 0) {
+    if (naturalImage?.key !== imageKey || stage.w === 0 || stage.h === 0) {
       return null;
     }
-    const factor = Math.min(stage.w / natural.w, stage.h / natural.h);
+    const factor = Math.min(stage.w / naturalImage.w, stage.h / naturalImage.h);
     return {
-      width: Math.round(natural.w * factor),
-      height: Math.round(natural.h * factor),
+      width: Math.round(naturalImage.w * factor),
+      height: Math.round(naturalImage.h * factor),
     };
-  }, [natural, stage]);
+  }, [imageKey, naturalImage, stage]);
 
   // Top-left of the fitted scan inside the stage. Zoom scales from this corner,
   // so the resting position must be part of the transform rather than layout.
@@ -244,8 +249,13 @@ export default function ReceiptCanvas({
     let objectUrl: string | null = null;
     let cancelled = false;
     const controller = new AbortController();
-    const headers: HeadersInit =
-      accountantId === null ? {} : { 'X-Accountant-Id': accountantId };
+    // A missing id means no session yet; sending no header would guarantee a 401.
+    if (accountantId === null || accountantId === '') {
+      return () => {
+        controller.abort();
+      };
+    }
+    const headers: HeadersInit = { 'X-Accountant-Id': accountantId };
 
     fetch(receiptImageUrl(clientId, receiptId), { headers, signal: controller.signal })
       .then(async (response) => {
@@ -259,11 +269,14 @@ export default function ReceiptCanvas({
           objectUrl = null;
           return;
         }
-        setImageUrl(objectUrl);
+        setLoadedImage({ key: imageKey, url: objectUrl });
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setImageError(error instanceof Error ? error.message : 'Image unavailable');
+          setImageFailure({
+            key: imageKey,
+            message: error instanceof Error ? error.message : 'Image unavailable',
+          });
         }
       });
 
@@ -273,8 +286,13 @@ export default function ReceiptCanvas({
       if (objectUrl !== null) {
         URL.revokeObjectURL(objectUrl);
       }
+      // Drop this key's state with the URL: revisiting a receipt must not
+      // render a revoked blob URL or a failure left from the previous visit.
+      setLoadedImage((current) => (current?.key === imageKey ? null : current));
+      setImageFailure((current) => (current?.key === imageKey ? null : current));
+      setNaturalImage((current) => (current?.key === imageKey ? null : current));
     };
-  }, [accountantId, clientId, receiptId]);
+  }, [accountantId, clientId, imageKey, receiptId]);
 
   const clampScale = useCallback(
     (value: number): number => Math.min(MAX_SCALE, Math.max(MIN_SCALE, value)),

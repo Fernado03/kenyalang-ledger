@@ -62,20 +62,11 @@ export function auditMath(draft: ReceiptDraft): MathAudit {
     } else {
       lineCents += lineTotal;
     }
-    // qty × unit price is in hundredths-of-cents (qty is a plain count).
-    if (quantity !== null && unitPrice !== null && lineTotal !== null) {
-      const expected = quantity * unitPrice;
-      const difference = expected - lineTotal * 100n;
-      if ((difference < 0n ? -difference : difference) > TOLERANCE_CENTS * 100n) {
-        invalidFields.push(`${label} total ≠ qty × unit price`);
-      }
-    }
   });
 
+  // A blank tax is not an error: the PUT sends null and the API accepts it, so
+  // it contributes zero to the sum (and the SST advisory covers the real case).
   const taxCents = parseMoneyToCents(draft.tax_amount);
-  if (taxCents === null) {
-    invalidFields.push('SST');
-  }
   const totalCents = parseMoneyToCents(draft.grand_total);
   if (totalCents === null) {
     invalidFields.push('Grand Total');

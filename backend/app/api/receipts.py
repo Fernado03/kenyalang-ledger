@@ -118,6 +118,13 @@ PROCESSING_STATUSES: Final = frozenset(
     }
 )
 
+# Terminal pipeline failures. A row in one of these states is dead: the worker
+# will never touch it again, so an upload that matches one must not be treated
+# as a duplicate (that would hand back the dead row and block any retry).
+ERROR_STATUSES: Final = frozenset(
+    member for member in ReceiptStatus if member.is_error
+)
+
 MATH_FLAG_PREFIX: Final = "MATH_MISMATCH_DELTA_"
 
 # docs/05_trd.md §5.6.2: magic bytes decide, never the file extension.
@@ -492,8 +499,14 @@ def upload_receipts(
                         Receipt.client_id == client_id,
                         Receipt.original_filename == safe_name,
                         Receipt.file_size_bytes == len(payload),
+                        # A row that ended in an ERR_* state is dead: the worker
+                        # never returns to it. Matching it here would hand the
+                        # accountant the failure forever and make a retry of the
+                        # same file impossible. PROCESSING_* rows still dedupe,
+                        # because that run is genuinely in flight.
+                        Receipt.status.not_in(ERROR_STATUSES),
                     )
-                    .order_by(Receipt.created_at.desc())
+                    .order_by(Receipt.created_at.desc(), Receipt.id.desc())
                 ).scalars().first()
 
             if existing is not None:
@@ -572,6 +585,21 @@ def _reject_if_exported(receipt: Receipt) -> None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail="Receipt has already been exported and can no longer be edited",
+        )
+
+
+def _reject_if_processing(receipt: Receipt) -> None:
+    """A receipt mid-flight cannot be verified or rejected by hand.
+
+    The worker owns the row until it writes a terminal status. Accepting an
+    edit now would be overwritten when the worker records its outcome (or, if
+    the worker's no-op guard fires, would leave a ``STATUS_VERIFIED`` row with
+    null fields and no audit trail). The accountant retries once processing
+    settles.
+    """
+    if receipt.status in PROCESSING_STATUSES:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail="Receipt is still processing"
         )
 
 
@@ -747,11 +775,18 @@ def list_client_receipts(
             .group_by(Receipt.status)
         ).all()
     )
+    # §6.2 requires a PROCESSING badge over the whole client. It is a count
+    # bucket only: the ``status`` query enum stays fixed by §6.4.4, so this
+    # entry is deliberately absent from INBOX_STATUS_FILTERS.
+    status_buckets = {
+        **INBOX_STATUS_FILTERS,
+        "PROCESSING": tuple(PROCESSING_STATUSES),
+    }
     status_counts = {
         name: sum(by_status.get(member, 0) for member in members)
         if members is not None
         else sum(by_status.values())
-        for name, members in INBOX_STATUS_FILTERS.items()
+        for name, members in status_buckets.items()
     }
 
     return ReceiptListResponse(
@@ -821,7 +856,9 @@ def get_client_receipt_audit(
         db.execute(
             select(ReceiptAuditLog)
             .where(ReceiptAuditLog.receipt_id == receipt.id)
-            .order_by(ReceiptAuditLog.created_at.desc())
+            .order_by(
+                ReceiptAuditLog.created_at.desc(), ReceiptAuditLog.id.desc()
+            )
             .limit(200)
         )
         .scalars()
@@ -854,6 +891,7 @@ def update_client_receipt(
     get_active_owned_client(db, client_id, accountant_id)
     receipt = _receipt_or_404(db, client_id, receipt_id)
     _reject_if_exported(receipt)
+    _reject_if_processing(receipt)
 
     changed: list[tuple[str, str | None, str | None]] = []
     old_status = (
@@ -979,6 +1017,20 @@ def reject_client_receipt(
     get_active_owned_client(db, client_id, accountant_id)
     receipt = _receipt_or_404(db, client_id, receipt_id)
     _reject_if_exported(receipt)
+    _reject_if_processing(receipt)
+
+    # Rejecting an already-rejected receipt is idempotent: re-stamping
+    # verified_by/verified_at would attribute the rejection to whoever pressed
+    # the button last, and a REJECTED -> REJECTED audit row is noise in a trail
+    # that is read as history. Return the row exactly as it stands.
+    if receipt.status == ReceiptStatus.STATUS_REJECTED:
+        return ReceiptUpdateResponse(
+            id=receipt.id,
+            status=receipt.status,
+            updated_at=receipt.updated_at,
+            verified_by=receipt.verified_by,
+            math_discrepancy=_money_text(receipt.math_discrepancy) or "0.00",
+        )
 
     old_status = (
         receipt.status.value

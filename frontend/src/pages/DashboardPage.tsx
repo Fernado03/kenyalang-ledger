@@ -24,15 +24,10 @@ export default function DashboardPage() {
     error: string | null;
   }>({ requestKey: '', summary: null, error: null });
   const clients = useReceiptStore((state) => state.clients);
+  const clientsError = useReceiptStore((state) => state.clientsError);
   const loadClients = useReceiptStore((state) => state.loadClients);
   // The list endpoint carries the aggregates, but the store types clients as Client.
   const client = (clients as ClientSummary[]).find((item) => item.id === clientId) ?? null;
-
-  useEffect(() => {
-    if (clients.length === 0) {
-      void loadClients();
-    }
-  }, [clients.length, loadClients]);
 
   // The response is tagged with the request it answers, so a month change
   // shows the loading state without a setState in the effect body.
@@ -41,25 +36,30 @@ export default function DashboardPage() {
   const summary = loading ? null : result.summary;
   const error = loading ? null : result.error;
 
+  // Counts and spend come from two endpoints, so one effect owns both: the
+  // workspace aggregates are refreshed first, then the summary. Splitting them
+  // let a verify on another page leave new counts beside a pre-verify spend.
   useEffect(() => {
     if (!clientId) return;
     let active = true;
-    void getDashboardSummary(clientId, month || undefined)
-      .then((next) => {
+    void (async () => {
+      await loadClients();
+      try {
+        const next = await getDashboardSummary(clientId, month || undefined);
         if (active) setResult({ requestKey, summary: next, error: null });
-      })
-      .catch((err: unknown) => {
+      } catch (err) {
         if (!active) return;
         setResult({
           requestKey,
           summary: null,
           error: err instanceof Error ? err.message : 'Failed to load dashboard',
         });
-      });
+      }
+    })();
     return () => {
       active = false;
     };
-  }, [clientId, month, requestKey]);
+  }, [clientId, month, requestKey, loadClients]);
 
   if (!clientId) {
     return (
@@ -104,13 +104,17 @@ export default function DashboardPage() {
           }
         />
 
+        {clientsError !== null ? (
+          <ErrorBanner message={clientsError} onRetry={() => void loadClients()} />
+        ) : null}
+
         {error !== null ? (
           <ErrorBanner message={error} onRetry={() => setReloadKey((key) => key + 1)} />
         ) : null}
 
         {loading ? (
           <LoadingSkeleton rows={4} />
-        ) : error !== null && summary === null ? null : summary === null ? (
+        ) : summary === null ? (
           <EmptyState
             title="No dashboard data"
             hint="Verified receipts for this month will appear here."

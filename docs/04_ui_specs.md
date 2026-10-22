@@ -450,8 +450,8 @@ quantity, unit price, line total) and then re-reads the receipt. The response's
 `Selected client`, or `Choose a workspace to begin`; an `Inbox` ghost action appears once a
 workspace is selected.
 
-**No workspace.** A ruled block (max 560px) with `Select a client workspace first`, one line of
-copy, and a `Choose a client` primary button. Nothing is uploaded without a client ID.
+**No workspace.** A ruled block (max 560px) with `No workspace selected`, one line of
+copy, and a `Go to clients` primary button. Nothing is uploaded without a client ID.
 
 **Capture controls.**
 

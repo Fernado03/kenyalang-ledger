@@ -29,8 +29,8 @@ from app.models.receipt import Receipt, ReceiptStatus
 from app.models.receipt_audit_log import ReceiptAuditLog
 from app.services.reconciler import extract_sst_number
 
-MONTH_RE = re.compile(r"^(\d{4})-(0[1-9]|1[0-2])$")
-MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
+MONTH_RE = re.compile(r"^([1-9]\d{3})-(0[1-9]|1[0-2])$")
+MONTH_PATTERN = r"^[1-9]\d{3}-(0[1-9]|1[0-2])$"
 MONTH_ERROR = "month must be YYYY-MM"
 
 # Spreadsheet applications execute a cell whose text starts with one of these
@@ -164,16 +164,26 @@ def allocate_tax_cents(
     Each line receives its proportional floor; leftover cents go one at a time
     to the largest fractional remainders, ties broken by line order. The result
     always sums exactly to ``tax_cents`` when the tax is distributable.
+
+    The divisor is the sum of the line totals, not the header subtotal. Lines
+    that do not reconcile with the header (a partial read, a dropped row) would
+    otherwise leave part of the tax unallocated, because the floors are computed
+    against a base larger than the amount actually being split and the leftover
+    loop hands out at most one cent per line. Dividing by the line base keeps
+    the invariant that the line taxes add up to the header tax.
     """
     count = len(line_totals_cents)
-    if count == 0 or subtotal_cents <= 0 or tax_cents <= 0:
+    line_sum = sum(line_totals_cents)
+    if count == 0 or subtotal_cents <= 0 or tax_cents <= 0 or line_sum <= 0:
         return [0] * count
+
+    basis = line_sum
 
     floors: list[int] = []
     remainders: list[tuple[int, int]] = []
     for index, line_cents in enumerate(line_totals_cents):
         numerator = line_cents * tax_cents
-        floor_cents, remainder = divmod(numerator, subtotal_cents)
+        floor_cents, remainder = divmod(numerator, basis)
         floors.append(floor_cents)
         remainders.append((remainder, index))
 
@@ -437,12 +447,18 @@ def generate_myinvois_json(
             if not party_ids:
                 party_ids.append({"ID": [{"_": "NA", "schemeID": "BRN"}]})
 
+            tax_dec = receipt.tax_amount or Decimal("0.00")
+            # A NULL subtotal means the header was not read; derive the
+            # tax-exclusive figure from the grand total so tax never lands
+            # inside TaxExclusiveAmount/TaxableAmount.
             subtotal_dec = (
                 receipt.subtotal
                 if receipt.subtotal is not None
-                else (receipt.grand_total or Decimal("0.00"))
+                else max(
+                    (receipt.grand_total or Decimal("0.00")) - tax_dec,
+                    Decimal("0.00"),
+                )
             )
-            tax_dec = receipt.tax_amount or Decimal("0.00")
             grand_total_dec = (
                 receipt.grand_total
                 if receipt.grand_total is not None
@@ -580,7 +596,7 @@ def generate_myinvois_json(
                             {"_": subtotal_num, "currencyID": "MYR"}
                         ],
                         "TaxTotal": [
-                            {"TaxAmount": [{"_": 0.0, "currencyID": "MYR"}]}
+                            {"TaxAmount": [{"_": tax_num, "currencyID": "MYR"}]}
                         ],
                         "Item": [{"Description": [{"_": merchant_name}]}],
                         "Price": [

@@ -157,7 +157,18 @@ def update_client(
     accountant_id: AccountantId,
 ) -> ClientRead:
     client = get_owned_client(db, client_id, accountant_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    # ``business_name`` and ``is_active`` are NOT NULL columns. An explicit
+    # ``null`` in the body reaches ``setattr`` as None and only fails at flush
+    # time, surfacing as a 500 on an otherwise valid request. Reject it here as
+    # a client error; the remaining fields are nullable and still accept null.
+    for field in ("business_name", "is_active"):
+        if field in updates and updates[field] is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{field} cannot be null",
+            )
+    for field, value in updates.items():
         setattr(client, field, value)
     db.commit()
     db.refresh(client)

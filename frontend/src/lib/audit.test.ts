@@ -85,15 +85,22 @@ describe('auditMath', () => {
     expect(result.message).toContain('≠ Grand Total');
   });
 
-  it('rejects blank tax rather than assuming zero', () => {
-    const result = auditMath(draft({ tax_amount: '' }));
+  it('treats blank tax as zero and reports SST registration separately', () => {
+    const result = auditMath(
+      draft({
+        merchant_sst: 'W10-1808-32000018',
+        tax_amount: '',
+        grand_total: '10.00',
+      }),
+    );
 
-    expect(result.valid).toBe(false);
-    expect(result.matches).toBe(false);
-    expect(result.invalidFields).toContain('SST');
+    expect(result.valid).toBe(true);
+    expect(result.matches).toBe(true);
+    expect(result.taxCents).toBe(0n);
+    expect(result.missingSstOnRegisteredMerchant).toBe(true);
   });
 
-  it('rejects non-positive quantity and qty × price disagreement', () => {
+  it('rejects non-positive quantity but trusts the printed line total', () => {
     const result = auditMath(
       draft({
         line_items: [
@@ -120,7 +127,7 @@ describe('auditMath', () => {
 
     expect(result.valid).toBe(false);
     expect(result.invalidFields).toContain('Line 1 quantity');
-    expect(result.invalidFields).toContain('Line 2 total ≠ qty × unit price');
+    expect(result.invalidFields).not.toContain('Line 2 total ≠ qty × unit price');
   });
 
   it('detects a zero-tax receipt from an SST-registered merchant', () => {

@@ -21,7 +21,6 @@ const FILTER_TABS: readonly { label: string; value: ReceiptListStatus }[] = [
 ];
 
 const DELTA_PREFIX = 'MATH_MISMATCH_DELTA_';
-const PAGE_SIZE = 50;
 const POLL_INTERVAL_MS = 3_000;
 const PROCESSING_STATUSES: readonly ReceiptStatus[] = [
   'PROCESSING_OCR',
@@ -173,9 +172,11 @@ export default function InboxPage(): JSX.Element {
   const receiptsTotal = useReceiptStore((state) => state.receiptsTotal);
   const statusCounts = useReceiptStore((state) => state.statusCounts);
   const receiptsOffset = useReceiptStore((state) => state.receiptsOffset);
+  const receiptsLimit = useReceiptStore((state) => state.receiptsLimit);
   const statusFilter = useReceiptStore((state) => state.statusFilter);
   const receiptsLoading = useReceiptStore((state) => state.receiptsLoading);
   const receiptsError = useReceiptStore((state) => state.receiptsError);
+  const clientsError = useReceiptStore((state) => state.clientsError);
   const uploadState = useReceiptStore((state) => state.uploadState);
   const uploadResult = useReceiptStore((state) => state.uploadResult);
   const loadClients = useReceiptStore((state) => state.loadClients);
@@ -228,7 +229,7 @@ export default function InboxPage(): JSX.Element {
   const pageStart = receipts.length === 0 ? 0 : receiptsOffset + 1;
   const pageEnd = receiptsOffset + receipts.length;
   const hasPrevious = receiptsOffset > 0;
-  const hasNext = receiptsOffset + PAGE_SIZE < receiptsTotal;
+  const hasNext = receiptsOffset + receiptsLimit < receiptsTotal;
 
   return (
     <AppShell clientId={clientId}>
@@ -312,6 +313,10 @@ export default function InboxPage(): JSX.Element {
             ))}
           </div>
         </div>
+
+        {clientsError !== null && (
+          <ErrorBanner message={clientsError} onRetry={() => void loadClients()} />
+        )}
 
         {receiptsError !== null && (
           <ErrorBanner
@@ -451,7 +456,7 @@ export default function InboxPage(): JSX.Element {
               <button
                 type="button"
                 disabled={!hasPrevious}
-                onClick={() => void loadClientReceipts(clientId, Math.max(0, receiptsOffset - PAGE_SIZE))}
+                onClick={() => void loadClientReceipts(clientId, Math.max(0, receiptsOffset - receiptsLimit))}
                 className="btn btn-secondary btn-sm"
               >
                 Previous
@@ -459,7 +464,7 @@ export default function InboxPage(): JSX.Element {
               <button
                 type="button"
                 disabled={!hasNext}
-                onClick={() => void loadClientReceipts(clientId, receiptsOffset + PAGE_SIZE)}
+                onClick={() => void loadClientReceipts(clientId, receiptsOffset + receiptsLimit)}
                 className="btn btn-secondary btn-sm"
               >
                 Next
