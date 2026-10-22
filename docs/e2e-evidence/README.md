@@ -66,8 +66,7 @@ pass. All are fixed in this branch; the ones with a plausible regression carry a
 13. **The inbox filter tabs had no counts (medium) and the dashboard buried its own answer
     (medium).** Tabs now carry per-bucket counts from one grouped count on the receipt list
     response (`status_counts`, computed over every status so the active filter cannot narrow it).
-    The dashboard promotes month spend to a 56px figure, demotes the three counts, and links
-    "Needs review" into the inbox.
+    The dashboard promotes month spend to a 56px figure and demotes the three counts.
 14. **Design tells removed.** Uppercase mono micro-labels (`.eyebrow`, `.section-label`,
     `.field-label`, `.data-table th`), the rail's coloured active bar, the mobile tab's brand top
     rule, the review sections' 01/02/03 numbering, and the four decorative `border-l-2` status
@@ -76,6 +75,21 @@ pass. All are fixed in this branch; the ones with a plausible regression carry a
     `test_dashboard.py`, and a `RM 0.00` row states "no spend here".) A receipt with no merchant
     shows `—` with the filename demoted to secondary text. The gate no longer prints
     `Route guard · docs/03 §3.1` at the user, and has one `h1`.
+15. **Five pages rolled their own masthead meta row (medium).** Clients rendered a bare string,
+    Inbox wrapped the name in a plain span with `items-baseline`, Dashboard and Exports set the
+    name to `text-primary` beside a `text-label` note, and both of those plus Upload put the
+    back link in the action cluster instead of the meta row. The same information therefore
+    appeared in five colours, two alignments and two placements. `PageMeta` now owns the row:
+    `name` primary, `note` muted, `back` a quiet `arrow-left` link, with the back link barred
+    from `actions`. A `mono` flag styles the note rather than nesting a span, because a nested
+    element inside a flex item adds a line box.
+16. **The masthead rule landed at three heights depending on the page (medium).** Measured at
+    1440: 151px on Clients, 158px everywhere else; the meta row was 14, 21 or 22px tall. The
+    note had been given `text-label` on one page and inherited `text-body` elsewhere, and
+    Inbox's nested mono span grew its row by a pixel. The note now inherits one size, and the
+    mono range is styled on the note itself. All five rules now sit at 158px. The first block
+    below the header was also three values — 32px (Clients, Upload), 24px (Exports), 28px
+    (Inbox, Dashboard) — and is now 24px everywhere.
 
 ## Observations, no change made
 
