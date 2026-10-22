@@ -202,11 +202,6 @@ export default function DashboardPage() {
               <p className="mt-1 text-label text-text-muted">
                 Pre-tax line totals; document tax is excluded.
               </p>
-              {summary.category_breakdown.every((row) => Number(row.total_spend) <= 0) ? (
-                <p className="mt-2 text-ui text-text-secondary">
-                  No categorised spend for this month.
-                </p>
-              ) : (
               <div className="mt-3 overflow-x-auto">
                 <table className="data-table" aria-label="Spend by category">
                   <thead>
@@ -216,22 +211,19 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Only categories that actually spent this month: a wall
-                        of RM 0.00 rows buries the number that matters. */}
-                    {summary.category_breakdown
-                      .filter((row) => Number(row.total_spend) > 0)
-                      .map((row) => (
-                        <tr key={row.category}>
-                          <td className="font-semibold text-text-primary">{row.category}</td>
-                          <td className="text-right font-mono-numbers">
-                            {formatMoneyDisplay(row.total_spend)}
-                          </td>
-                        </tr>
-                      ))}
+                    {/* All five categories in taxonomy order: a zero row states
+                        "no spend here", which is information (docs/04 §Dashboard). */}
+                    {summary.category_breakdown.map((row) => (
+                      <tr key={row.category}>
+                        <td className="font-semibold text-text-primary">{row.category}</td>
+                        <td className="text-right font-mono-numbers">
+                          {formatMoneyDisplay(row.total_spend)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
-              )}
             </section>
           </>
         )}

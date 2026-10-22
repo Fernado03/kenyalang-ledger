@@ -70,7 +70,7 @@ export default {
         ],
       },
       fontSize: {
-        micro: ['10px', '12px'],
+        micro: ['11px', '14px'],
         label: ['11px', '14px'],
         ui: ['13px', '18px'],
         body: ['14px', '21px'],

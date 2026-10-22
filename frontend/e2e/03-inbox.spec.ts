@@ -56,6 +56,13 @@ test.describe('Receipt inbox', () => {
 
     await filter.getByRole('button', { name: 'All' }).click()
     await expect(page.getByText(/receipts 1–11 of 11/)).toBeVisible()
+
+    // Each tab carries its own count, and the counts do not narrow to the active
+    // filter: the accountant can see the work in every bucket from any tab.
+    await expect(filter.getByRole('button', { name: 'All 11' })).toBeVisible()
+    await filter.getByRole('button', { name: 'Needs review' }).click()
+    await expect(page.getByText(/receipts 1–4 of 4/)).toBeVisible()
+    await expect(filter.getByRole('button', { name: 'All 11' })).toBeVisible()
   })
 
   test('a filtered empty result shows the empty state, not a blank table', async ({ page }) => {

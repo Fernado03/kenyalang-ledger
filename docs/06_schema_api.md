@@ -213,7 +213,11 @@ Money fields reject `NaN`/`Infinity`; `bbox` must be four ordered normalized coo
 `ReceiptUploadResponse` is `{batch_id, total_received, receipts:[ReceiptUploadItem]}` where each
 item is `{id, filename, status}`. Review-console schemas add:
 
-- `ReceiptListItem` / `ReceiptListResponse {total, limit, offset, items}`
+- `ReceiptListItem` / `ReceiptListResponse {total, limit, offset, items, status_counts}`.
+  `status_counts` maps every inbox filter (`ALL`, `NEEDS_REVIEW`, `VERIFIED`, `EXPORTED`,
+  `PROCESSING`) to a row count over the whole client, computed by one grouped count so the
+  tabs do not need a request each. It ignores the active `status` filter: asking for one
+  bucket still reports the others. `VERIFIED` sums `AUTO_VERIFIED` and `VERIFIED`.
 - `ReceiptDetailLineItem {id, line_index, description, quantity, unit_price, line_total,
   expense_category, confidence, bbox}`
 - `ReceiptField {name, confidence, bbox}`, `ReceiptOcrToken {text, confidence, bbox, line_num}`

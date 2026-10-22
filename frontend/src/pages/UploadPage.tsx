@@ -63,7 +63,7 @@ export default function UploadPage() {
         />
 
         {currentClientId === null ? (
-          <div className="mt-8 max-w-[560px] border-y border-border py-6">
+          <div className="mt-8 max-w-[560px] border-b border-border py-6">
             <p className="text-ui font-semibold text-text-primary">
               Select a client workspace first
             </p>

@@ -209,6 +209,33 @@ def test_list_status_filter_switches_on_verify(
     assert client.get(base, params={"status": "EXPORTED"}).json()["total"] == 0
 
 
+def test_list_reports_status_counts_for_every_bucket(
+    client: TestClient, stub_pipeline, _storage_root: Path
+) -> None:
+    """``status_counts`` is the inbox tab badge: one grouped count, never filtered.
+
+    ``ALL`` must count every row whatever its status settles at (including the
+    terminal ones the fixed-size buckets cannot hold), and ``VERIFIED`` is the
+    union of the two verified spellings so a marker never reads zero.
+    """
+    stub_pipeline()
+    client_id = _create_client(client)
+    _upload_one(client, client_id)
+    base = f"/api/v1/clients/{client_id}/receipts"
+
+    counts = client.get(base).json()["status_counts"]
+    assert counts["ALL"] == 1
+    assert counts["VERIFIED"] == 1
+    assert counts["NEEDS_REVIEW"] == 0
+    assert counts["EXPORTED"] == 0
+
+    # The active filter must not narrow the counts: asking for one bucket tells
+    # the accountant how much work sits in every other bucket.
+    filtered = client.get(base, params={"status": "NEEDS_REVIEW"}).json()
+    assert filtered["total"] == 0
+    assert filtered["status_counts"] == counts
+
+
 def test_list_limit_and_offset_paginate(
     client: TestClient, stub_pipeline, _storage_root: Path
 ) -> None:

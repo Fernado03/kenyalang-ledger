@@ -11,7 +11,7 @@ seeded fixture database. Regenerate after any UI change; the shots are generated
 
 ## Defects found and fixed
 
-Fourteen defects surfaced across the Playwright gate, the design audit and the live browser
+Sixteen defects surfaced across the Playwright gate, the design audit and the live browser
 pass. All are fixed in this branch; the ones with a plausible regression carry a test.
 
 1. **Inbox overflowed the page at 640–700px (medium).** The table switched to its seven desktop
@@ -71,7 +71,9 @@ pass. All are fixed in this branch; the ones with a plausible regression carry a
 14. **Design tells removed.** Uppercase mono micro-labels (`.eyebrow`, `.section-label`,
     `.field-label`, `.data-table th`), the rail's coloured active bar, the mobile tab's brand top
     rule, the review sections' 01/02/03 numbering, and the four decorative `border-l-2` status
-    bars all went. Zero-spend category rows no longer print `RM 0.00`. A receipt with no merchant
+    bars all went. (Zero-spend category rows were briefly filtered, then restored: all five
+    categories in taxonomy order is a documented contract in `docs/04`, `docs/06` and
+    `test_dashboard.py`, and a `RM 0.00` row states "no spend here".) A receipt with no merchant
     shows `—` with the filename demoted to secondary text. The gate no longer prints
     `Route guard · docs/03 §3.1` at the user, and has one `h1`.
 
@@ -121,17 +123,17 @@ fails if this regresses; "manual" means it was inspected during this audit but h
 | 8 | Legal and compliance | n/a | local accountant tool, no accounts, cookies, marketing email or payments |
 | 9 | Operations | n/a for this scope | `/api/health/live` and `/api/health/ready` exist and are asserted in `01-gate`; deployment concerns belong to the demo host |
 
-### Known exposure, not fixed
+### Dependency advisories
 
-`react-router` 6.30.x carries two moderate advisories; the published fix for both is a major bump
-to 7.18.4.
+`react-router-dom` was bumped from 6.30.x to **7.18.4**, which carries the published fix for both
+advisories that previously applied. `npm audit --omit=dev` now reports **0 vulnerabilities**, and
+the bump needed no source changes: every symbol in use (`Link`, `NavLink`, `useLocation`,
+`useNavigate`, `useParams`, `useBeforeUnload`, `useBlocker`, `createBrowserRouter`,
+`RouterProvider`) keeps its v6 signature. The two advisories, kept here for the record:
 
-GHSA-wrjc-x8rr-h8h6 (open redirect via backslash in `Link` / `useNavigate`) does apply to this
-SPA. It is low risk here only because no destination is attacker-controlled: every `Link` `to` and
-every `navigate()` target is a template built from server-issued client/receipt ids and fixed
-segments. Passing a raw query parameter into either would make it exploitable.
-
-GHSA-337j-9hxr-rhxg (`deserializeErrors` during SSR hydration) cannot be reached: the app is
-client-only (`createBrowserRouter`, no `hydrateRoot`, no `StaticRouter`).
-
-Both are a documented demo risk, not a blocker. Upgrade after the demo.
+- GHSA-wrjc-x8rr-h8h6 (open redirect via backslash in `Link` / `useNavigate`) would have applied
+  to this SPA. It was low risk even on 6.x because no destination is attacker-controlled: every
+  `Link` `to` and every `navigate()` target is a template built from server-issued client/receipt
+  ids and fixed segments.
+- GHSA-337j-9hxr-rhxg (`deserializeErrors` during SSR hydration) was never reachable: the app is
+  client-only (`createBrowserRouter`, no `hydrateRoot`, no `StaticRouter`).

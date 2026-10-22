@@ -70,17 +70,19 @@ Every money amount, date, ID, count, percentage, and column label uses it.
 
 | Token | Size / line | Use |
 |---|---|---|
-| `micro` | 10 / 12 | Stamps, eyebrows, field labels, table headers, rail tab labels |
-| `label` | 11 / 14 | Metadata, small buttons, counts, errors |
+| `micro` | 11 / 14 | Stamps and initials (uppercase document convention) |
+| `label` | 11 / 14 | Eyebrows, section and field labels, table headers, rail labels, metadata, errors |
 | `ui` | 13 / 18 | Controls, table body, UI copy |
 | `body` | 14 / 21 | Prose, page meta, dialog copy |
 | `title` | 20 / 24 | Section titles |
 | `display` | 34 / 38 | Page titles |
-| `display-lg` | 56 / 52 | Declared in the scale; unused by the six screens |
+| `display-lg` | 56 / 52 | The dashboard's month-spend figure, one per screen |
 
 Serif headings are weight 400, never bold: page titles use `display` with `-0.015em` tracking,
-section titles use `title` with `-0.01em`. Eyebrows are 10px uppercase at `0.14em`; section and
-field labels at `0.12em`; stamps at `0.08em`. Body copy is sans at 14px.
+section titles use `title` with `-0.01em`. Eyebrows, section labels, field labels and table
+headers are `label` (11px) in **sentence case**: no uppercase, no letter-spacing, no monospace.
+Only the two genuinely stamped pieces — `StatusPill` and the accountant's initials tile — keep an
+uppercase mono treatment at `0.08em`. Body copy is sans at 14px. Nothing renders below 11px.
 
 ### Shape and surfaces
 
@@ -90,7 +92,7 @@ field labels at `0.12em`; stamps at `0.08em`. Body copy is sans at 14px.
   (`0 24px 80px rgba(23,26,24,.22), 0 2px 8px rgba(23,26,24,.12)`) on native dialogs.
 * `.rule-total` is a 3px double `#8A8274` rule, used above grand totals and export/pagination
   footers.
-* `.data-table` is a full-width collapsed table: 1px cell rules, 10px uppercase mono headers,
+* `.data-table` is a full-width collapsed table: 1px cell rules, 11px sentence-case headers,
   13px secondary body text, 12px horizontal and 8–10px vertical cell padding, and a `surface`
   hover fill.
 * The content measure is `max-w-shell` = 1240px. `.page-shell` supplies
@@ -105,7 +107,7 @@ field labels at `0.12em`; stamps at `0.08em`. Body copy is sans at 14px.
 * **`BrandMark`** — a 32px square tile (4px radius, `brand-900` fill) carrying the paper-tinted
   hornbill mark as a filled path. No image asset or gradient is used.
 * **`PageHeader`** — `eyebrow`, `title`, `meta`, optional `actions`. It renders a bottom rule,
-  a mono uppercase eyebrow, a serif `display` title, a secondary-colour meta block, and a
+  a sentence-case `label` eyebrow, a serif `display` title, a secondary-colour meta block, and a
   right-aligned action group that wraps under the title on narrow screens. At `lg` the header is
   a 12-column grid with the title spanning 7 and actions spanning 5.
 
@@ -113,14 +115,15 @@ field labels at `0.12em`; stamps at `0.08em`. Body copy is sans at 14px.
 
 * **Desktop (`lg`+):** a fixed 72px left icon rail on `surface-subtle` with a right rule.
   The brand link is 64px tall with a bottom rule; each destination is a 56px item with a 20px
-  icon above a 10px uppercase label. Active items get a 2px `brand-900` left border, `surface`
-  fill, and primary text; inactive items are muted. The rail's bottom block holds the
+  icon above an 11px label. Active items get a `surface` fill, primary text and semibold weight,
+  and carry `aria-current="page"`; inactive items are muted. There is no coloured border or bar:
+  the active state is signalled by fill, weight and colour together, never by colour alone. The rail's bottom block holds the
   accountant's initials in a 32px square (first two characters, full UUID in `title`) and a
   40px sign-out icon button labelled `Sign out`.
 * **Mobile (`<lg`):** a sticky 56px top bar with the 26px brand mark, the serif wordmark
   `Kenyalang Ledger`, and a 40px sign-out button. A persistent bottom tab bar repeats the same
-  five destinations at `min-h-14` with 10px labels; the active tab is `brand-900` with a 2px
-  top indicator, and the bar pads for the safe-area inset.
+  five destinations at `min-h-14` with 11px labels; the active tab is semibold in `brand-900`
+  with `aria-current="page"`, and the bar pads for the safe-area inset.
 * **Destinations:** Clients, Inbox, Dashboard, Exports, Upload. Without a selected workspace,
   Inbox, Dashboard, and Exports render as non-interactive `<span aria-disabled="true">` items at
   35% opacity with the tooltip `Select a workspace first`. Clients and Upload are always live.
@@ -231,7 +234,8 @@ and the form is open, it sits above the table. The form is a `surface` block wit
 `brand-900` top rule.
 
 **Client form (`ClientForm.tsx`).** Heading `New client`. Fields: Business name (required),
-Registration number, SST number, Industry category. Labels are mono uppercase; inputs are 44px.
+Registration number, SST number, Industry category. Labels are sentence case at `label`; inputs
+are 44px.
 Validation is native-free (`noValidate`): an empty name produces `Business name is required.`,
 sets `aria-invalid`, and is linked by `aria-describedby`. The submit label is `Add client`
 (`Create client` in the empty state) and swaps to `Saving…` while posting; `Cancel` closes
@@ -239,7 +243,7 @@ without saving. There is no edit variant — clients are create-only in this UI.
 
 ### 2. `SCR-02`: Batch Inbox & Upload Dropzone (`/clients/:clientId/inbox`)
 
-**Header.** Eyebrow `WORKSPACE · {registration_number ?? business_name ?? CLIENT}`; title
+**Header.** Eyebrow `Workspace {registration_number}` (or `Workspace`); title
 `Inbox`; meta shows the business name and, when the workspace has receipts, the mono range
 `receipts {first}–{last} of {total}`. Actions: `Clients` (ghost, `arrow-left`) and `Capture`
 (secondary, `camera`).
@@ -298,7 +302,7 @@ batch above.` with the hint `JPG, PNG, HEIC or PDF, up to 50 files per batch.` A
 never removes existing rows.
 
 **Status stamps (`StatusPill.tsx`).** `.stamp` is a 22px inline-flex box, 1px radius, 1px
-border, 6px horizontal padding, mono 10px uppercase at `0.08em`. Icons are `aria-hidden`; the
+border, 6px horizontal padding, mono 11px uppercase at `0.08em`. Icons are `aria-hidden`; the
 text carries meaning. Variants are chosen in this exact precedence:
 
 | Condition (in order) | Tokens | Text | Tooltip (`title`) |
@@ -345,29 +349,39 @@ message `Fix {first invalid field} before verifying.` (`role="status"`), `Reject
 or while the audit is invalid; labels swap to `Rejecting…` / `Saving…` while a request is in
 flight. The reject control opens an inline band, not a dialog.
 
-**Reject band.** A `mismatch` alert band below the action bar with `role="alertdialog"`,
-`aria-label="Confirm rejection"`, and `tabIndex={-1}`. Focus moves to the band on open. Copy:
+**Reject band.** A `mismatch` band below the action bar, not a dialog: it is an inline
+confirmation inside the page, so it uses `role="group"` with `aria-labelledby` pointing at the
+question, and only the question itself carries `role="alert"` so the danger is announced. Focus
+moves into the band on open (`tabIndex={-1}` on the group). Copy:
 `Reject this receipt? This cannot be undone.` Actions: `Cancel` and `Reject` (danger). `Escape`
 cancels and returns focus to the trigger. Confirming calls the reject route and advances to the
 next receipt.
 
-**Form sections.** Three numbered sections, each with a mono `section-label` (`01`, `02`, `03`)
-and a serif `section-title`:
+**Form sections.** Three sections in reading order, each with a serif `section-title` heading and
+no `section-label` index above it — there are no `01`/`02`/`03` markers:
 
-1. **`01` Supplier & date.** At `sm`+, a two-column grid; Supplier Name spans both columns.
+1. **Supplier & date.** At `sm`+, a two-column grid; Supplier Name spans both columns.
    Fields in order: Supplier Name, Merchant SST, Invoice Date, Invoice Number, Merchant BRN.
-   Labels are mono uppercase; inputs are 44px.
-2. **`02` Line items.** A horizontally scrollable grid (minimum 32rem) with Description, Qty,
+   Labels are sentence case; inputs are 44px.
+2. **Line items.** A horizontally scrollable grid (minimum 32rem) with Description, Qty,
    Unit (RM), Total (RM), and a delete column. Inputs are 34px dense, numeric fields are
    right-aligned mono, and every input has an explicit `aria-label` (`Line 2 description`).
    A server confidence below 0.8 tints the row `warning.bg`, adds a dashed `warning.border`
    underline, and shows an `alert` icon plus the percentage. The focused row is `brand-50`.
    Delete is a 44px icon button (`Remove line 2`); the footer's ghost button reads
    `Add Line (Alt+A)`. A mono `{n} lines` count sits opposite it.
-3. **`03` Totals & audit.** A right-aligned column (`max-w-md`) of labelled totals: Subtotal,
+3. **Totals & audit.** A right-aligned column (`max-w-md`) of labelled totals: Subtotal,
    SST (6%), Grand Total. Inputs are `w-36` (144px), right-aligned mono, with an `aria-hidden`
    `RM` prefix; Grand Total prints at 22px above a `.rule-total` double rule. A summary
    definition list shows Line Items Total, Confidence (or `—`), and `Lines + Tax = Total`.
+
+**Exported receipts are read-only.** `STATUS_EXPORTED` is terminal: the three form sections are
+wrapped in a single disabled `<fieldset>` carrying a plain explanation (`This receipt has already
+been exported, so it can no longer be edited.`), `Verify & Next` and `Reject` are disabled, and the
+`Ctrl+↵` / `Escape` / `Alt+A` / delete-line shortcuts refuse the action in the same guard so the
+keyboard cannot route around the buttons. The backend rejects a direct write with `409`. The
+`Fix <field> before verifying` hint is suppressed while locked: there is nothing the accountant
+could do about it.
 
 **Math banner (`MathBanner.tsx`).** A cardless strip with a 3px left border and a `Math check`
 label, in one `role="status"` / `aria-live="polite"` region. Invalid input: `mismatch` border,
@@ -417,7 +431,7 @@ quantity, unit price, line total) and then re-reads the receipt. The response's
 
 ### 4. `SCR-04`: Authenticated Capture (`/upload`)
 
-**Header.** Eyebrow `CAPTURE`; title `Upload receipts`; meta is the selected client's name,
+**Header.** Eyebrow `Capture`; title `Upload receipts`; meta is the selected client's name,
 `Selected client`, or `Choose a workspace to begin`; an `Inbox` ghost action appears once a
 workspace is selected.
 
@@ -452,7 +466,7 @@ that was not re-queued; the inbox row is the source of truth.
 
 ### 5. `SCR-05`: Export Hub (`/clients/:clientId/exports`)
 
-**Header.** Eyebrow `WORKSPACE · {registration}` (or `WORKSPACE`); title `Exports`; meta is the
+**Header.** Eyebrow `Workspace {registration}` (or `Workspace`); title `Exports`; meta is the
 business name plus an `Inbox` link. Actions: the label `Accounting billing period`, a native
 `month` input, and an `All time` toggle (`aria-pressed`) that clears the month.
 
@@ -485,17 +499,20 @@ current month; `All time` clears it.
 
 ### 6. `SCR-06`: Spend Dashboard (`/clients/:clientId/dashboard`)
 
-**Header.** Eyebrow `WORKSPACE · {registration ?? CLIENTS}`; title `Dashboard`; meta is the
+**Header.** Eyebrow `Workspace {registration}` (or `Workspace`); title `Dashboard`; meta is the
 business name, the note `verified and exported receipts only`, and an `Inbox` link. The action is
 a labelled (`Month`) `month` input, defaulting to the current month, that drives
 `GET …/dashboard/summary?month=YYYY-MM`.
 
-**Stat strip.** A `<dl>` bounded by top and bottom rules, with 1px `border`-coloured gaps and
-1/2/4 columns. Four `canvas` cells: `Spend this month` (mono money), `Receipts reviewed`,
-`Needs review`, `Total receipts` (`total_count`, every status — not the sum of the other two).
-Labels are mono uppercase; values are mono at `title`, rising
-to `display` at `sm`. A caption below reads
-`Spend covers the selected month; receipt counts cover the whole workspace.`
+**Spend figure and counts.** The month's spend is the one dominant number on the screen: an `h2`
+`Spend this month` above a single `display-lg` (56px) mono figure. The three counts sit under it
+as a `<dl>` of 1/3 columns with 1px `border`-coloured gaps: `Receipts reviewed`, `Needs review`,
+`Total receipts` (`total_count`, every status — not the sum of the other two). `Needs review` is
+a link into the inbox, so the number is actionable rather than inert. Labels are sentence case;
+values are mono at `title`. A caption below reads
+`Spend covers the selected month; receipt counts cover the whole workspace.` The four-across
+equal-cell strip this replaced is deliberately gone: it gave the month's spend the same weight
+as a row count, so the screen had no answer to "how much did we spend".
 
 **Tables.** Two ruled tables, no charts or bars:
 `Top suppliers` (`Supplier`, `Receipts`, `Spend`; five rows maximum, empty copy
@@ -524,7 +541,7 @@ file input on `/upload`: because it is `sr-only`, its label shows a `focus-withi
 (`brand-50` on the teal target, `brand-700` on the outlined target). Disabled controls are
 excluded by the browser.
 
-**Labels and errors.** `.field-label` is 10px mono uppercase. `LabelledInput` wires `htmlFor`
+**Labels and errors.** `.field-label` is `label` (11px) in sentence case. `LabelledInput` wires `htmlFor`
 and `id`; totals inputs are wrapped by their `<label>`; line-item inputs carry explicit
 `aria-label`s. Icon-only buttons have `aria-label`s (`Zoom in`, `Remove line 2`, `Sign out`).
 The required field in `ClientForm` and the session-id field in `AccountantGate` set

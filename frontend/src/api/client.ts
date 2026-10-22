@@ -32,7 +32,7 @@ export class ApiError extends Error {
   }
 }
 
-function parseDetail(payload: unknown): string {
+export function parseDetail(payload: unknown): string {
   if (typeof payload === 'string') return payload;
   if (payload && typeof payload === 'object') {
     const body = payload as ApiErrorBody;
@@ -42,11 +42,16 @@ function parseDetail(payload: unknown): string {
     // shows internals like `uuid_parsing` to the accountant.
     if (Array.isArray(detail)) {
       const fields = detail
-        .map((item) =>
-          item !== null && typeof item === 'object' && Array.isArray((item as { loc?: unknown }).loc)
-            ? (item as { loc: unknown[] }).loc.filter((part) => part !== 'body').join('.')
-            : '',
-        )
+        .map((item) => {
+          if (item === null || typeof item !== 'object') return '';
+          const loc = (item as { loc?: unknown }).loc;
+          if (!Array.isArray(loc)) return '';
+          // A bad path or query parameter is not a field the accountant can go
+          // and fix, so those fall through to the generic message instead.
+          const [scope, ...rest] = loc;
+          if (scope !== 'body') return '';
+          return rest.filter((part) => typeof part === 'string' || typeof part === 'number').join('.');
+        })
         .filter((field) => field !== '');
       return fields.length > 0
         ? `Check these fields: ${[...new Set(fields)].join(', ')}.`

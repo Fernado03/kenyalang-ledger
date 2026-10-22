@@ -15,13 +15,13 @@ interface NavItem {
 const railItemClass = (active: boolean) =>
   `flex h-14 w-full flex-col items-center justify-center gap-1 text-micro font-medium transition-colors duration-100 ${
     active
-      ? 'bg-surface text-text-primary'
+      ? 'bg-surface font-semibold text-text-primary'
       : 'text-text-muted hover:bg-surface hover:text-text-primary'
   }`
 
 const tabItemClass = (active: boolean) =>
   `relative flex min-h-14 flex-1 flex-col items-center justify-center gap-1 px-1 text-micro font-medium transition-colors duration-100 ${
-    active ? 'text-brand-900' : 'text-text-muted'
+    active ? 'font-semibold text-brand-900' : 'text-text-muted'
   }`
 
 const disabledClass = 'pointer-events-none opacity-35'

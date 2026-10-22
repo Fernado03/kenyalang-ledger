@@ -123,6 +123,18 @@ test.describe('Review console', () => {
     await expect(page.getByText(/already been exported/)).toHaveCount(1)
     await expect(page).toHaveURL(new RegExp(RECEIPT.frozen))
 
+    // Alt+A would persist a phantom draft line and arm the leave guard. The bug
+    // was the stored draft, so assert the persisted copy as well as the DOM.
+    const draftKey = `kenyalang.draft.${RECEIPT.frozen}`
+    const descriptions = page.getByLabel(/Line \d+ description/)
+    const before = await descriptions.count()
+    const storedBefore = await page.evaluate((key) => localStorage.getItem(key), draftKey)
+
+    await page.keyboard.press('Alt+a')
+
+    await expect(descriptions).toHaveCount(before)
+    expect(await page.evaluate((key) => localStorage.getItem(key), draftKey)).toBe(storedBefore)
+
     // The backend guard is the real invariant: a direct write must still 409.
     const response = await page.request.put(`/api/v1/clients/${CLIENT_ID}/receipts/${RECEIPT.frozen}`, {
       headers: apiHeaders,

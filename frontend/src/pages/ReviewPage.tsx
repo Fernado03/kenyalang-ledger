@@ -304,7 +304,7 @@ export default function ReviewPage(): JSX.Element {
     } catch {
       // saveState already holds the error message.
     }
-  }, [audit.valid, clientId, receiptId, receipts, saveReceipt, navigate]);
+  }, [audit.valid, clientId, isLocked, receiptId, receipts, saveReceipt, navigate]);
 
   const rejectAndNext = useCallback(async (): Promise<void> => {
     if (clientId === undefined || receiptId === undefined || isLocked) {
@@ -321,7 +321,7 @@ export default function ReviewPage(): JSX.Element {
     } catch {
       // saveState already holds the error message.
     }
-  }, [clientId, receiptId, receipts, rejectReceipt, navigate]);
+  }, [clientId, isLocked, receiptId, receipts, rejectReceipt, navigate]);
 
   // One window listener for the whole workflow; the resolver owns the bindings.
   useEffect(() => {
@@ -363,7 +363,9 @@ export default function ReviewPage(): JSX.Element {
       }
       if (action === 'add-line') {
         event.preventDefault();
-        addDraftLine();
+        // Alt+A mutates the draft and persists it, so it must honour the lock
+        // too: a phantom line would arm the leave guard on a frozen receipt.
+        if (!isLocked) addDraftLine();
         return;
       }
       if (action === 'delete-line') {

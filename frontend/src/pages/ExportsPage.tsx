@@ -151,7 +151,7 @@ export default function ExportsPage(): JSX.Element {
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="field-input mt-0 w-auto font-mono-numbers"
+                  className="field-input w-auto font-mono-numbers"
                 />
               </div>
               <button
@@ -159,7 +159,7 @@ export default function ExportsPage(): JSX.Element {
                 onClick={() => setSelectedMonth('')}
                 aria-pressed={selectedMonth === ''}
                 title="Export all verified receipts without month filter"
-                className={`btn btn-secondary btn-sm ${
+                className={`btn btn-secondary ${
                   selectedMonth === '' ? 'border-brand-900 text-brand-900' : ''
                 }`}
               >
@@ -207,51 +207,58 @@ export default function ExportsPage(): JSX.Element {
           </div>
         )}
 
-        <section aria-label="Export dispatch" className="mt-6 border-y border-border">
-          <div className="flex flex-col gap-4 border-b border-border py-4 lg:flex-row lg:items-center lg:justify-between">
-            <p className="text-label text-text-muted">
-              {selectedMonth ? (
-                <>
-                  Filtering verified receipts for{' '}
-                  <span className="font-mono-numbers text-text-secondary">{selectedMonth}</span>
-                </>
-              ) : (
-                'Exporting all verified receipts across all billing dates'
-              )}
-            </p>
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-end">
-              <button
-                type="button"
-                onClick={() => void handleDownloadBoth()}
-                disabled={isExportingBoth || isExportingCsv || isExportingJson}
-                className="btn btn-primary w-full sm:w-auto"
-              >
-                {isExportingBoth ? (
-                  'Generating bundle...'
-                ) : (
+        {/* No top rule: PageHeader already closes with one, and two parallel
+            rules 24px apart read as a misaligned double border. */}
+        <section aria-label="Export dispatch" className="mt-6 border-b border-border">
+          <div className="border-b border-border py-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <p className="text-label text-text-muted">
+                {selectedMonth ? (
                   <>
-                    <Icon name="download" size={16} />
-                    Download both
+                    Filtering verified receipts for{' '}
+                    <span className="font-mono-numbers text-text-secondary">{selectedMonth}</span>
                   </>
+                ) : (
+                  'Exporting all verified receipts across all billing dates'
                 )}
-              </button>
+              </p>
 
-              <div className="flex flex-col gap-1 sm:border-l sm:border-border sm:pl-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
                 <button
                   type="button"
-                  onClick={() => void handleMarkExported()}
-                  disabled={isMarking || isExportingBoth || isExportingCsv || isExportingJson}
-                  className="btn btn-ghost w-full justify-start border-border-strong sm:w-auto"
+                  onClick={() => void handleDownloadBoth()}
+                  disabled={isExportingBoth || isExportingCsv || isExportingJson}
+                  className="btn btn-primary w-full sm:w-auto"
                 >
-                  {isMarking ? 'Marking...' : 'Mark exported'}
+                  {isExportingBoth ? (
+                    'Generating bundle...'
+                  ) : (
+                    <>
+                      <Icon name="download" size={16} />
+                      Download both
+                    </>
+                  )}
                 </button>
-                <p className="max-w-[38ch] text-micro text-text-muted">
-                  Downloads leave receipt statuses unchanged. Marking is a separate, explicit
-                  action.
-                </p>
+
+                <div className="flex flex-col gap-1 sm:border-l sm:border-border sm:pl-4">
+                  <button
+                    type="button"
+                    onClick={() => void handleMarkExported()}
+                    disabled={isMarking || isExportingBoth || isExportingCsv || isExportingJson}
+                    className="btn btn-ghost w-full justify-start border-border-strong sm:w-auto"
+                  >
+                    {isMarking ? 'Marking...' : 'Mark exported'}
+                  </button>
+                </div>
               </div>
             </div>
+            {/* Outside the row: a two-line caption inside made the right cluster
+                76px tall, so items-center pushed the sentence 16px below the
+                buttons. Here it hangs under Marking without moving anything. */}
+            <p className="mt-2 text-micro text-text-muted lg:text-right">
+              Downloads leave receipt statuses unchanged. Marking is a separate, explicit
+              action.
+            </p>
           </div>
 
           {/* Accounting CSV */}

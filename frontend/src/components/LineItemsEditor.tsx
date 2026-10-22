@@ -13,7 +13,7 @@ interface LineItemsEditorProps {
 }
 
 const HEADER_CELL =
-  'border-b border-border px-2 py-2 text-left font-mono text-micro font-medium uppercase tracking-[0.1em] text-text-muted';
+  'border-b border-border px-2 py-2 text-left text-label font-medium text-text-muted';
 
 const NUMERIC_HEADER_CELL = `${HEADER_CELL} text-right`;
 
@@ -65,7 +65,7 @@ function LineRow({
             }`}
           />
           {lowConfidence && serverItem !== undefined && (
-            <span className="inline-flex shrink-0 items-center gap-1 font-mono text-micro font-medium uppercase tracking-[0.08em] text-warning-text">
+            <span className="inline-flex shrink-0 items-center gap-1 text-label font-medium text-warning-text">
               <Icon name="alert" size={12} /> {formatConfidence(serverItem.confidence)}
             </span>
           )}
