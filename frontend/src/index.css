@@ -142,7 +142,12 @@
     @apply w-full border-collapse text-ui;
   }
 
-  .data-table th {
+  /* `:where()` zeroes this selector's specificity, so a `text-right` utility on
+     an individual header wins on source order. Without it the plain
+     `.data-table th` selector (0,1,1) outranks every utility (0,1,0) and
+     silently forces numeric headers back to the left. The author-origin
+     declaration still beats the UA sheet's `th { text-align: center }`. */
+  :where(.data-table th) {
     @apply border-b border-border px-3 py-2 text-left text-label font-medium text-text-muted;
   }
 

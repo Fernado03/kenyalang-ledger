@@ -97,6 +97,13 @@ interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   title?: string
 }
 
+// A flex row centres an icon's box on the line box, which includes descender
+// space, so `chevron-right` reads ~4px low beside text. Lift its ink onto the
+// cap height instead; the offset is proportional so it holds at every size.
+const OPTICAL_LIFT: Partial<Record<IconName, string>> = {
+  'chevron-right': '-translate-y-[28%]',
+}
+
 export function Icon({ name, size = 20, title, className, ...props }: IconProps) {
   return (
     <svg
@@ -111,7 +118,9 @@ export function Icon({ name, size = 20, title, className, ...props }: IconProps)
       focusable="false"
       aria-hidden={title === undefined ? true : undefined}
       role={title === undefined ? undefined : 'img'}
-      className={className}
+      className={[className, OPTICAL_LIFT[name] ?? '']
+        .filter(Boolean)
+        .join(' ')}
       {...props}
     >
       {title !== undefined ? <title>{title}</title> : null}

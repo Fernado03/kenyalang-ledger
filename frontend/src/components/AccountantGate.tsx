@@ -94,7 +94,7 @@ export default function AccountantGate({ children }: { children: ReactNode }) {
             Continue
           </button>
 
-          <p className="mt-4 font-mono text-micro leading-relaxed text-text-muted">
+          <p className="mt-4 text-label leading-relaxed text-text-muted">
             This value is sent as the <code>X-Accountant-Id</code> header on every
             request. It is a forgeable demo identity, not authentication.
           </p>

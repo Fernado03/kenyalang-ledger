@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import { Icon } from '../components/Icon';
-import PageHeader from '../components/PageHeader';
+import PageHeader, { PageMeta } from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import { useReceiptStore } from '../store/receiptStore';
 
@@ -49,21 +49,26 @@ export default function UploadPage() {
           eyebrow="Capture"
           title="Upload receipts"
           meta={
-            client?.business_name ??
-            (currentClientId !== null ? 'Selected client' : 'Choose a workspace to begin')
-          }
-          actions={
-            currentClientId !== null ? (
-              <Link to={`/clients/${currentClientId}/inbox`} className="btn btn-ghost">
-                <Icon name="arrow-left" size={16} />
-                Inbox
-              </Link>
-            ) : undefined
+            <PageMeta
+              name={client?.business_name}
+              note={
+                client?.business_name !== undefined
+                  ? undefined
+                  : currentClientId !== null
+                    ? 'Selected client'
+                    : 'Choose a workspace to begin'
+              }
+              back={
+                currentClientId !== null
+                  ? { to: `/clients/${currentClientId}/inbox`, label: 'Inbox' }
+                  : undefined
+              }
+            />
           }
         />
 
         {currentClientId === null ? (
-          <div className="mt-8 max-w-[560px] border-b border-border py-6">
+          <div className="mt-6 max-w-[560px] border-b border-border py-6">
             <p className="text-ui font-semibold text-text-primary">
               Select a client workspace first
             </p>
@@ -75,7 +80,7 @@ export default function UploadPage() {
             </Link>
           </div>
         ) : (
-          <div className="mt-8 grid gap-x-10 gap-y-8 lg:grid-cols-12 lg:items-start">
+          <div className="mt-6 grid gap-x-10 gap-y-8 lg:grid-cols-12 lg:items-start">
             <div className="space-y-5 lg:col-span-5">
               <div className="space-y-3">
                 <label
@@ -116,12 +121,12 @@ export default function UploadPage() {
                 </label>
               </div>
 
-              <p className="font-mono text-micro text-text-muted">
+              <p className="text-label text-text-muted">
                 JPEG, PNG, HEIC, PDF · 50 files per batch · 15 MiB each · 50 MiB per batch
               </p>
               <p className="text-label text-text-muted">Processing continues in the background.</p>
 
-              <div aria-live="polite" role="status" className="min-h-5 font-mono text-label">
+              <div aria-live="polite" role="status" className="min-h-5 text-label">
                 {uploadState === 'uploading' ? (
                   <span className="text-text-secondary">Uploading…</span>
                 ) : null}
@@ -140,7 +145,7 @@ export default function UploadPage() {
             <div className="lg:col-span-6 lg:col-start-7">
               {uploadResult !== null && uploadResult.uploaded.length > 0 ? (
                 <>
-                  <h2 className="text-body font-semibold text-text-primary">
+                  <h2 className="section-title">
                     Accepted this batch
                   </h2>
                   <ul
@@ -170,36 +175,36 @@ export default function UploadPage() {
                 </>
               ) : (
                 <>
-                  <h2 className="text-body font-semibold text-text-primary">
+                  <h2 className="section-title">
                     After the upload
                   </h2>
                   <ol className="mt-3 space-y-3 border-t border-border pt-4">
                     <li className="grid grid-cols-[7rem_1fr] gap-3">
-                      <span className="font-mono text-label text-text-muted">Queued</span>
+                      <span className="text-label font-medium text-text-primary">Queued</span>
                       <span className="text-label text-text-secondary">
                         The file is stored against this workspace and waits for a worker.
                       </span>
                     </li>
                     <li className="grid grid-cols-[7rem_1fr] gap-3">
-                      <span className="font-mono text-label text-text-muted">OCR</span>
+                      <span className="text-label font-medium text-text-primary">OCR</span>
                       <span className="text-label text-text-secondary">
                         Text and line items are read from the image or PDF.
                       </span>
                     </li>
                     <li className="grid grid-cols-[7rem_1fr] gap-3">
-                      <span className="font-mono text-label text-text-muted">Extraction</span>
+                      <span className="text-label font-medium text-text-primary">Extraction</span>
                       <span className="text-label text-text-secondary">
                         Supplier, dates and totals are filled into a draft receipt.
                       </span>
                     </li>
                     <li className="grid grid-cols-[7rem_1fr] gap-3">
-                      <span className="font-mono text-label text-text-muted">Math check</span>
+                      <span className="text-label font-medium text-text-primary">Math check</span>
                       <span className="text-label text-text-secondary">
                         Line items are reconciled against the printed grand total.
                       </span>
                     </li>
                     <li className="grid grid-cols-[7rem_1fr] gap-3">
-                      <span className="font-mono text-label text-text-muted">Review</span>
+                      <span className="text-label font-medium text-text-primary">Review</span>
                       <span className="text-label text-text-secondary">
                         Clean receipts verify themselves; the rest wait in the inbox for you.
                       </span>

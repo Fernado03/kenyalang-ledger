@@ -4,7 +4,7 @@ import { receiptImageUrl } from '../api/client';
 import AppShell from '../components/AppShell';
 import { EmptyState, ErrorBanner, LoadingSkeleton } from '../components/DataStates';
 import { Icon } from '../components/Icon';
-import PageHeader from '../components/PageHeader';
+import PageHeader, { PageMeta } from '../components/PageHeader';
 import StatusPill from '../components/StatusPill';
 import UploadDropzone from '../components/UploadDropzone';
 import { formatDate, formatMoneyDisplay } from '../lib/format';
@@ -232,36 +232,28 @@ export default function InboxPage(): JSX.Element {
 
   return (
     <AppShell clientId={clientId}>
-      <div className="page-shell space-y-7">
+      <div className="page-shell space-y-6">
         <PageHeader
           eyebrow={client?.registration_number ? `Workspace ${client.registration_number}` : 'Workspace'}
           title="Inbox"
           meta={
-            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span>{client?.business_name ?? 'Client workspace'}</span>
-              {receiptsTotal > 0 && (
-                <>
-                  <span aria-hidden="true" className="text-text-muted">
-                    ·
-                  </span>
-                  <span className="font-mono-numbers text-label text-text-muted">
+            <PageMeta
+              name={client?.business_name ?? 'Client workspace'}
+              note={
+                receiptsTotal > 0 ? (
+                  <span className="font-mono-numbers">
                     receipts {pageStart}–{pageEnd} of {receiptsTotal}
                   </span>
-                </>
-              )}
-            </span>
+                ) : undefined
+              }
+              back={{ to: '/clients', label: 'Clients' }}
+            />
           }
           actions={
-            <>
-              <Link to="/clients" className="link-quiet min-h-11">
-                <Icon name="arrow-left" size={16} />
-                Clients
-              </Link>
-              <Link to="/upload" className="btn btn-secondary">
-                <Icon name="camera" size={18} />
-                Capture
-              </Link>
-            </>
+            <Link to="/upload" className="btn btn-secondary">
+              <Icon name="camera" size={18} />
+              Capture
+            </Link>
           }
         />
 
@@ -412,7 +404,7 @@ export default function InboxPage(): JSX.Element {
                     <td role="cell" className="border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary md:table-cell md:border-b md:px-2 md:text-ui">
                       {formatDate(receipt.invoice_date)}
                     </td>
-                    <td role="cell" className="hidden border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary md:table-cell md:border-b md:px-2 md:text-ui">
+                    <td role="cell" className="hidden border-b-0 px-0 py-0 text-right align-middle font-mono-numbers text-label text-text-secondary md:table-cell md:border-b md:px-2 md:text-ui">
                       {receipt.line_item_count}
                     </td>
                     <td role="cell" className="border-b-0 px-0 py-0 text-right align-middle md:table-cell md:border-b md:px-2">
@@ -442,7 +434,6 @@ export default function InboxPage(): JSX.Element {
                         className="inline-flex min-h-11 w-full items-center justify-center gap-1 border border-border-strong bg-surface px-3 text-ui font-semibold text-text-primary transition-colors duration-100 hover:bg-surface-subtle disabled:cursor-not-allowed disabled:border-border disabled:bg-surface-subtle disabled:text-text-muted md:w-24"
                       >
                         Open
-                        <Icon name="chevron-right" size={14} />
                       </button>
                     </td>
                   </tr>

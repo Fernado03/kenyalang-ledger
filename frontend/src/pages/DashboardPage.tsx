@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { getDashboardSummary } from '../api/client';
 import type { ClientSummary, DashboardSummary } from '../api/client';
 import AppShell from '../components/AppShell';
 import { EmptyState, ErrorBanner, LoadingSkeleton } from '../components/DataStates';
-import { Icon } from '../components/Icon';
-import PageHeader from '../components/PageHeader';
+import PageHeader, { PageMeta } from '../components/PageHeader';
 import { formatMoneyDisplay } from '../lib/format';
 import { useReceiptStore } from '../store/receiptStore';
 
@@ -78,26 +77,16 @@ export default function DashboardPage() {
 
   return (
     <AppShell clientId={clientId}>
-      <div className="page-shell space-y-7">
+      <div className="page-shell space-y-6">
         <PageHeader
           eyebrow={client?.registration_number ? `Workspace ${client.registration_number}` : 'Workspace'}
           title="Dashboard"
           meta={
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="text-text-primary">
-                {client?.business_name ?? 'Client workspace'}
-              </span>
-              <span aria-hidden="true" className="text-text-muted">
-                ·
-              </span>
-              <span className="text-label text-text-muted">
-                verified and exported receipts only
-              </span>
-              <Link to={`/clients/${clientId}/inbox`} className="link-quiet text-label">
-                <Icon name="arrow-left" size={14} />
-                Inbox
-              </Link>
-            </div>
+            <PageMeta
+              name={client?.business_name ?? 'Client workspace'}
+              note="verified and exported receipts only"
+              back={{ to: `/clients/${clientId}/inbox`, label: 'Inbox' }}
+            />
           }
           actions={
             <div>
@@ -109,7 +98,7 @@ export default function DashboardPage() {
                 type="month"
                 value={month}
                 onChange={(event) => setMonth(event.target.value)}
-                className="field-input mt-0 w-auto font-mono-numbers"
+                className="field-input w-auto font-mono-numbers"
               />
             </div>
           }
@@ -129,7 +118,7 @@ export default function DashboardPage() {
         ) : (
           <>
             <section aria-labelledby="spend-heading">
-              <h2 id="spend-heading" className="section-label">
+              <h2 id="spend-heading" className="section-title">
                 Spend this month
               </h2>
               <p className="mt-2 font-mono-numbers text-display-lg text-text-primary">
@@ -142,13 +131,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="bg-canvas px-4 py-3">
                   <dt className="section-label">Needs review</dt>
-                  <dd className="mt-1 font-mono-numbers text-title">
-                    <Link
-                      to={`/clients/${clientId}/inbox`}
-                      className="text-text-primary underline decoration-border underline-offset-4 hover:decoration-current"
-                    >
-                      {needsReview}
-                    </Link>
+                  <dd className="mt-1 font-mono-numbers text-title text-text-primary">
+                    {needsReview}
                   </dd>
                 </div>
                 <div className="bg-canvas px-4 py-3">

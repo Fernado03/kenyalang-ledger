@@ -4,7 +4,7 @@ import type { ClientSummary } from '../api/client'
 import AppShell from '../components/AppShell'
 import ClientForm from '../components/ClientForm'
 import { Icon } from '../components/Icon'
-import PageHeader from '../components/PageHeader'
+import PageHeader, { PageMeta } from '../components/PageHeader'
 import { useReceiptStore } from '../store/receiptStore'
 
 const COUNT_PLACEHOLDER = '-'
@@ -165,7 +165,6 @@ export default function ClientsPage() {
                       className="link-quiet h-11 justify-end px-2"
                     >
                       Open
-                      <Icon name="chevron-right" size={14} />
                     </button>
                   </td>
                 </tr>
@@ -215,7 +214,6 @@ export default function ClientsPage() {
                 className="btn btn-secondary mt-4 w-full"
               >
                 Open
-                <Icon name="chevron-right" size={16} />
               </button>
             </li>
           ))}
@@ -235,11 +233,15 @@ export default function ClientsPage() {
           eyebrow="Workspaces"
           title="Clients"
           meta={
-            loading
-              ? 'Loading client workspaces.'
-              : summaries.length === 0
-                ? 'No client workspaces yet.'
-                : `${workspaceLabel} · Select a client to open its receipt inbox.`
+            <PageMeta
+              note={
+                loading
+                  ? 'Loading client workspaces.'
+                  : summaries.length === 0
+                    ? 'No client workspaces yet.'
+                    : `${workspaceLabel} · Select a client to open its receipt inbox.`
+              }
+            />
           }
           actions={
             formOpen ? (
@@ -251,7 +253,7 @@ export default function ClientsPage() {
                 <Icon name="close" size={16} />
                 Close
               </button>
-            ) : (
+            ) : clients.length > 0 ? (
               <button
                 type="button"
                 onClick={() => setFormOpen(true)}
@@ -260,7 +262,7 @@ export default function ClientsPage() {
                 <Icon name="plus" size={16} />
                 Add client
               </button>
-            )
+            ) : undefined
           }
         />
 
@@ -280,9 +282,9 @@ export default function ClientsPage() {
           </div>
         ) : null}
 
-        {formOpen && clients.length > 0 ? <div className="mt-8">{formPanel}</div> : null}
+        {formOpen && clients.length > 0 ? <div className="mt-6">{formPanel}</div> : null}
 
-        <div className="mt-8">{body}</div>
+        <div className="mt-6">{body}</div>
       </div>
     </AppShell>
   )

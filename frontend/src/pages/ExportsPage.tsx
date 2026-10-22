@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   downloadAccountingCsv,
   downloadBothExports,
@@ -8,7 +8,7 @@ import {
 } from '../api/client';
 import AppShell from '../components/AppShell';
 import { Icon } from '../components/Icon';
-import PageHeader from '../components/PageHeader';
+import PageHeader, { PageMeta } from '../components/PageHeader';
 import { useReceiptStore } from '../store/receiptStore';
 import type { Client } from '../types/client';
 
@@ -130,15 +130,10 @@ export default function ExportsPage(): JSX.Element {
           }
           title="Exports"
           meta={
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="text-text-primary">
-                {client?.business_name ?? 'Client workspace'}
-              </span>
-              <Link to={`/clients/${clientId}/inbox`} className="link-quiet text-label">
-                <Icon name="arrow-left" size={14} />
-                Inbox
-              </Link>
-            </div>
+            <PageMeta
+              name={client?.business_name ?? 'Client workspace'}
+              back={{ to: `/clients/${clientId}/inbox`, label: 'Inbox' }}
+            />
           }
           actions={
             <div className="flex flex-wrap items-end justify-end gap-2">
@@ -172,7 +167,7 @@ export default function ExportsPage(): JSX.Element {
         {error !== null && (
           <div
             role="alert"
-            className="mt-5 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-l-mismatch-text bg-mismatch-bg py-2 pl-3 pr-2"
+            className="mt-6 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-l-mismatch-text bg-mismatch-bg py-2 pl-3 pr-2"
           >
             <p className="flex min-w-0 items-center gap-2 text-ui text-mismatch-text">
               <Icon name="alert" size={16} />
@@ -191,7 +186,7 @@ export default function ExportsPage(): JSX.Element {
         {successMessage !== null && (
           <div
             role="status"
-            className="mt-5 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-l-verified-text bg-verified-bg py-2 pl-3 pr-2"
+            className="mt-6 flex flex-wrap items-center justify-between gap-2 border-l-[3px] border-l-verified-text bg-verified-bg py-2 pl-3 pr-2"
           >
             <p className="flex min-w-0 items-center gap-2 text-ui text-verified-text">
               <Icon name="check" size={16} />

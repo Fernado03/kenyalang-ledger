@@ -94,9 +94,14 @@ uppercase mono treatment at `0.08em`. Body copy is sans at 14px. Nothing renders
   footers.
 * `.data-table` is a full-width collapsed table: 1px cell rules, 11px sentence-case headers,
   13px secondary body text, 12px horizontal and 8–10px vertical cell padding, and a `surface`
-  hover fill.
+  hover fill. Header alignment is left by default and follows the column's `text-right`
+  utility where the body cells are right-aligned; the component selector is written as
+  `:where(.data-table th)` so that utility wins on source order instead of losing to a
+  higher-specificity `.data-table th` rule.
 * The content measure is `max-w-shell` = 1240px. `.page-shell` supplies
   `mx-auto w-full max-w-shell px-5 py-7 sm:px-8 lg:px-10 lg:py-10`; every page starts with it.
+  The first block after `PageHeader` sits `mt-6` (24px) below the header rule on every page —
+  pages that instead put `space-y-*` on `.page-shell` use `space-y-6` so the first gap matches.
 
 ### Shared components
 
@@ -110,6 +115,11 @@ uppercase mono treatment at `0.08em`. Body copy is sans at 14px. Nothing renders
   a sentence-case `label` eyebrow, a serif `display` title, a secondary-colour meta block, and a
   right-aligned action group that wraps under the title on narrow screens. At `lg` the header is
   a 12-column grid with the title spanning 7 and actions spanning 5.
+* **`PageMeta`** — the one masthead meta row, used by every console page so the name, the
+  secondary detail and the back link never drift apart. `name` is `text-primary`; `note` is
+  `label` in `text-muted`, separated from the name by a `·`; `back` renders as a quiet
+  `arrow-left` link after the note. Pages with no name (Clients) pass `note` alone. The back
+  link belongs here, never in `actions`, which is reserved for the page's own primary task.
 
 ### Application shell (`AppShell.tsx`)
 
@@ -507,9 +517,10 @@ a labelled (`Month`) `month` input, defaulting to the current month, that drives
 **Spend figure and counts.** The month's spend is the one dominant number on the screen: an `h2`
 `Spend this month` above a single `display-lg` (56px) mono figure. The three counts sit under it
 as a `<dl>` of 1/3 columns with 1px `border`-coloured gaps: `Receipts reviewed`, `Needs review`,
-`Total receipts` (`total_count`, every status — not the sum of the other two). `Needs review` is
-a link into the inbox, so the number is actionable rather than inert. Labels are sentence case;
-values are mono at `title`. A caption below reads
+`Total receipts` (`total_count`, every status — not the sum of the other two). All three values
+are plain text: making only one of them a link rendered as a stray underlined digit, which read
+as a defect rather than an affordance. Navigation into the inbox lives in the header `Inbox`
+link. Labels are sentence case; values are mono at `title`. A caption below reads
 `Spend covers the selected month; receipt counts cover the whole workspace.` The four-across
 equal-cell strip this replaced is deliberately gone: it gave the month's spend the same weight
 as a row count, so the screen had no answer to "how much did we spend".
