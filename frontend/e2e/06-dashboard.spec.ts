@@ -11,6 +11,8 @@ test.describe('Spend dashboard', () => {
   })
 
   test('defaults to the current month and renders all four stats', async ({ page }) => {
+    // The fixtures carry current-month receipts, so today's month is genuinely
+    // the right place to land; the redirect below covers the stale-books case.
     await expect(page.getByRole('textbox', { name: 'Month' })).toHaveValue(localMonth())
 
     for (const label of ['Spend this month', 'Receipts reviewed', 'Needs review', 'Total receipts']) {
@@ -19,6 +21,25 @@ test.describe('Spend dashboard', () => {
     await expect(
       page.getByText('Spend covers the selected month; receipt counts cover the whole workspace.'),
     ).toBeVisible()
+  })
+
+  test('an empty month says where the data is instead of showing a bare RM 0.00', async ({
+    page,
+  }) => {
+    await page.getByRole('textbox', { name: 'Month' }).fill('2026-01')
+
+    const notice = page.getByRole('status').filter({ hasText: 'No verified spend in January 2026' })
+    await expect(notice).toBeVisible()
+    // The newest month with any receipt -- not the month the user is looking at,
+    // and not a hardcoded guess.
+    await expect(notice).toContainText(`Latest activity is`)
+
+    await notice.getByRole('button', { name: /^Go to / }).click()
+
+    // One click puts the month picker on the month that has the data, and the
+    // notice disappears because the selected month is no longer empty.
+    await expect(page.getByRole('textbox', { name: 'Month' })).not.toHaveValue('2026-01')
+    await expect(page.getByRole('status')).toHaveCount(0)
   })
 
   test('a fixed month reports exact spend, suppliers, and category split', async ({ page }) => {

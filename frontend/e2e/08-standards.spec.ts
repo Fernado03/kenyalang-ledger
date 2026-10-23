@@ -197,6 +197,28 @@ test.describe('Production web standards', () => {
     const tab = page.getByRole('link', { name: 'Clients' }).last()
     const tabBox = await tab.boundingBox()
     expect(tabBox?.height ?? 0).toBeGreaterThanOrEqual(56)
+
+    // Contextual export controls keep a 44px mobile hit area, and a clipped
+    // metadata region must still be reachable with the keyboard.
+    await page.goto(`/clients/${CLIENT_ID}/exports`)
+    const back = page.getByRole('link', { name: 'Inbox', exact: true }).first()
+    const disclosure = page.getByText('Column mapping', { exact: true })
+    const metadata = page.getByRole('group', { name: 'CSV export metadata' })
+    const backBox = await back.boundingBox()
+    const disclosureBox = await disclosure.boundingBox()
+    expect(backBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    expect(disclosureBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    await metadata.focus()
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe(
+      'CSV export metadata',
+    )
+    const scrollerRing = await metadata.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { width: style.outlineWidth, style: style.outlineStyle, offset: style.outlineOffset }
+    })
+    expect(scrollerRing.style).toBe('solid')
+    expect(scrollerRing.width).toBe('2px')
+    expect(scrollerRing.offset).toBe('2px')
   })
 
   test('reduced motion collapses transitions and animations', async ({ page }) => {

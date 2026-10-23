@@ -44,6 +44,21 @@ test.describe('Review console', () => {
     await expect(page.getByText('Unsaved changes')).toHaveCount(0)
   })
 
+  test('a printed rounding line reconciles an otherwise correct receipt', async ({ page }) => {
+    await page.goto(review(RECEIPT.clean))
+
+    // 83.00 of lines + 5.20 tax = 88.20 as printed.
+    await expect(page.getByText(/Line items total RM 83\.00 \+ Tax RM 5\.20 = Grand Total RM 88\.20/)).toBeVisible()
+
+    // A till that rounds 88.20 down to 88.16 prints "ROUNDING -0.04"; without a
+    // field for it the console reported a RM 0.04 error the user could not fix.
+    await page.getByLabel(/^Rounding/).fill('-0.04')
+    await page.getByLabel(/^Grand Total/).fill('88.16')
+
+    await expect(page.getByText(/Line items total RM 83\.00 \+ Tax RM 5\.20 − Rounding RM 0\.04 = Grand Total RM 88\.16/)).toBeVisible()
+    await expect(page.getByRole('button', { name: /Verify & Next/ })).toBeEnabled()
+  })
+
   test('rejects only after confirmation and records the terminal status', async ({ page }) => {
     await page.goto(review(RECEIPT.reject))
     await page.getByRole('button', { name: /^Reject/ }).click()
@@ -92,9 +107,9 @@ test.describe('Review console', () => {
   })
 
   test('Ctrl+Enter saves without leaving the keyboard flow', async ({ page }) => {
-    await page.goto(review(RECEIPT.math))
-    // A mismatch is a legitimate manual-verify case: save is still allowed.
-    await expect(page.getByText(/Math Mismatch/)).toBeVisible()
+    // `save` rather than `clean`: the upload spec re-captures clean-review.jpg and
+    // asserts it is still awaiting review, so this spec must not settle it.
+    await page.goto(review(RECEIPT.save))
     await expect(page.getByRole('button', { name: /Verify & Next/ })).toBeEnabled()
 
     await page.getByLabel('Supplier Name').click()
@@ -102,6 +117,45 @@ test.describe('Review console', () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Control+Enter')
 
+    await expect(page).not.toHaveURL(new RegExp(RECEIPT.save))
+    expect((await receiptState(page, RECEIPT.save)).status).toBe('STATUS_VERIFIED')
+  })
+
+  test('an unexplained mismatch needs an explicit override, by mouse or key', async ({ page }) => {
+    await page.goto(review(RECEIPT.math))
+    // A mismatch is a legitimate manual-verify case, but not a silent one: the
+    // primary action becomes an override and the override has to be confirmed.
+    await expect(page.getByText(/Math Mismatch/)).toBeVisible()
+    const override = page.getByRole('button', { name: 'Verify anyway' })
+    await expect(override).toBeEnabled()
+
+    await override.click()
+    // The question is the alert; the actions live on the group that owns it.
+    const band = page.getByRole('group', { name: /Verify with RM 5\.00 unexplained\?/ })
+    await expect(page.getByRole('alert')).toContainText('Verify with RM 5.00 unexplained?')
+    await expect(band).toContainText('The audit trail records that you overrode it.')
+    // Opening the band must not have saved anything.
+    expect((await receiptState(page, RECEIPT.math)).status).toBe('STATUS_NEEDS_REVIEW')
+
+    await band.getByRole('button', { name: 'Cancel' }).click()
+    await expect(band).toHaveCount(0)
+
+    // The keyboard takes the same gate: Ctrl+Enter opens the band, not the save.
+    await page.keyboard.press('Control+Enter')
+    await expect(page.getByRole('alert')).toContainText('Verify with RM 5.00 unexplained?')
+    expect((await receiptState(page, RECEIPT.math)).status).toBe('STATUS_NEEDS_REVIEW')
+
+    // Escape dismisses the override without arming the reject band.
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    await expect(page.getByText('Reject this receipt? This cannot be undone.')).toHaveCount(0)
+    expect((await receiptState(page, RECEIPT.math)).status).toBe('STATUS_NEEDS_REVIEW')
+
+    await page.getByRole('button', { name: 'Verify anyway' }).click()
+    await page
+      .getByRole('group', { name: /Verify with RM 5\.00 unexplained\?/ })
+      .getByRole('button', { name: 'Confirm override' })
+      .click()
     await expect(page).not.toHaveURL(new RegExp(RECEIPT.math))
     expect((await receiptState(page, RECEIPT.math)).status).toBe('STATUS_VERIFIED')
   })

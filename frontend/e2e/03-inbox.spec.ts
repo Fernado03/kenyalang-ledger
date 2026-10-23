@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { CLIENT_ID, RECEIPT, seedSession } from './fixtures'
+import { CLIENT_ID, EMPTY_CLIENT_ID, RECEIPT, seedSession } from './fixtures'
 
 const INBOX = `/clients/${CLIENT_ID}/inbox`
 
@@ -17,9 +17,9 @@ test.describe('Receipt inbox', () => {
 
     const mathRow = table.getByRole('row').filter({ hasText: 'Kedai E2E Hardware' })
     await expect(mathRow).toContainText('265.00')
-    await expect(mathRow).toContainText('Δ RM 5.00')
+    await expect(mathRow).toContainText('Off by RM 5.00')
     // The flag summary under the supplier name explains the delta.
-    await expect(mathRow).toContainText('Math mismatch: Δ RM 5.00')
+    await expect(mathRow).toContainText('Math mismatch: off by RM 5.00')
 
     const unreadable = table.getByRole('row').filter({ hasText: 'unreadable.jpg' })
     await expect(unreadable).toContainText('Unreadable')
@@ -54,6 +54,14 @@ test.describe('Receipt inbox', () => {
     await expect(page.getByText(/receipts 1–1 of 1/)).toBeVisible()
     await expect(page.getByRole('table', { name: 'Receipt inbox' })).toContainText('Tidak Sah E2E')
 
+    // A failed scan is terminal, so it gets its own bucket rather than sitting in
+    // no tab at all: the error reason is visible without opening the receipt.
+    await filter.getByRole('button', { name: 'Errors' }).click()
+    await expect(page.getByText(/receipts 1–1 of 1/)).toBeVisible()
+    const errored = page.getByRole('table', { name: 'Receipt inbox' })
+    await expect(errored).toContainText('unreadable.jpg')
+    await expect(errored).toContainText('OCR could not read this scan')
+
     await filter.getByRole('button', { name: 'All' }).click()
     await expect(page.getByText(/receipts 1–11 of 11/)).toBeVisible()
 
@@ -65,8 +73,20 @@ test.describe('Receipt inbox', () => {
     await expect(filter.getByRole('button', { name: 'All 11' })).toBeVisible()
   })
 
+  test('shows zero counts for empty status buckets', async ({ page }) => {
+    await page.goto(`/clients/${EMPTY_CLIENT_ID}/inbox`)
+    await expect(page.getByRole('heading', { level: 1, name: 'Inbox' })).toBeVisible()
+
+    const filter = page.getByRole('group', { name: 'Status filter' })
+    await expect(filter.getByRole('button', { name: 'All 0' })).toBeVisible()
+    await expect(filter.getByRole('button', { name: 'Needs review 0' })).toBeVisible()
+    await expect(filter.getByRole('button', { name: 'Verified 0' })).toBeVisible()
+    await expect(filter.getByRole('button', { name: 'Exported 0' })).toBeVisible()
+    await expect(filter.getByRole('button', { name: 'Rejected 0' })).toBeVisible()
+    await expect(filter.getByRole('button', { name: 'Errors 0' })).toBeVisible()
+  })
   test('a filtered empty result shows the empty state, not a blank table', async ({ page }) => {
-    await page.goto(`/clients/c1000000-0000-4000-8000-000000000002/inbox`)
+    await page.goto(`/clients/${EMPTY_CLIENT_ID}/inbox`)
     await expect(page.getByRole('heading', { level: 1, name: 'Inbox' })).toBeVisible()
     await expect(page.getByText('No receipts yet — drop a batch above.')).toBeVisible()
     await expect(page.getByRole('table', { name: 'Receipt inbox' })).toHaveCount(0)
