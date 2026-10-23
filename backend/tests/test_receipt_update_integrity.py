@@ -270,9 +270,16 @@ def test_explicit_empty_line_items_clears_the_rows(
     assert detail["line_items"] == []
 
 
-def test_non_math_flags_survive_reconciliation(
+def test_update_rederives_flags_instead_of_patching_only_the_math_flag(
     client: TestClient, stub_pipeline, _storage_root: Path
 ) -> None:
+    """M5: stale per-row flags must not survive a line-item rewrite.
+
+    Rewriting the rows used to leave ``LOW_CONFIDENCE_line_items[i]`` pointing
+    at rows that no longer existed, because only ``MATH_*`` was refreshed. The
+    audit is deterministic, so the update re-derives the whole flag list from
+    the persisted state.
+    """
     stub_pipeline()
     client_id = _create_client(client)
     receipt_id = _upload(client, client_id)
@@ -281,7 +288,8 @@ def test_non_math_flags_survive_reconciliation(
         receipt = db.get(Receipt, uuid.UUID(receipt_id))
         assert receipt is not None
         receipt.validation_flags = [
-            "LOW_CONFIDENCE_0.42",
+            "LOW_CONFIDENCE_line_items[3]",
+            "LOW_CONFIDENCE_line_items[7]",
             "MATH_MISMATCH_DELTA_9.99",
         ]
         db.commit()
@@ -298,8 +306,43 @@ def test_non_math_flags_survive_reconciliation(
     assert response.json()["math_discrepancy"] == "0.00"
 
     detail = client.get(_detail_url(client_id, receipt_id)).json()
-    # Only the math flag is refreshed; an unrelated confidence flag survives.
-    assert detail["validation_flags"] == ["LOW_CONFIDENCE_0.42"]
+    flags = detail["validation_flags"]
+    # The two phantom rows are gone: the receipt now has one line item.
+    assert not any(flag.startswith("LOW_CONFIDENCE_line_items[") for flag in flags)
+    # And the stale mismatch flag is gone because the maths now reconciles.
+    assert not any(flag.startswith("MATH_MISMATCH_DELTA_") for flag in flags)
+
+
+def test_update_keeps_a_genuine_low_confidence_flag(
+    client: TestClient, stub_pipeline, _storage_root: Path
+) -> None:
+    """Re-derivation must preserve warnings that still describe the data."""
+    stub_pipeline()
+    client_id = _create_client(client)
+    receipt_id = _upload(client, client_id)
+
+    with SessionLocal() as db:
+        receipt = db.get(Receipt, uuid.UUID(receipt_id))
+        assert receipt is not None
+        # A header field whose OCR evidence is genuinely weak.
+        receipt.field_provenance = [
+            {"name": "merchant_name", "confidence": 0.42, "bbox": None},
+            {"name": "invoice_date", "confidence": 0.99, "bbox": None},
+            {"name": "grand_total", "confidence": 0.99, "bbox": None},
+        ]
+        db.commit()
+
+    response = client.put(
+        _detail_url(client_id, receipt_id),
+        json={
+            "grand_total": "14.50",
+            "line_items": [_line('PVC Pipe 2"', "14.50")],
+        },
+    )
+    assert response.status_code == 200
+
+    detail = client.get(_detail_url(client_id, receipt_id)).json()
+    assert "LOW_CONFIDENCE_merchant_name" in detail["validation_flags"]
 
 
 # --------------------------------------------------------------------------- #

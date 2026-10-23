@@ -61,6 +61,8 @@ from app.pipeline.extractor import (
 from app.pipeline.ocr_engine import OCRToken, process_receipt_image, tokens_to_dicts
 from app.pipeline.preprocessor import ImageDecodeError
 from app.schemas.receipt import (
+    ExtractedField,
+    LineItemSchema,
     ParsedReceiptSchema,
     ReceiptAuditRead,
     ReceiptAuditResponse,
@@ -76,7 +78,7 @@ from app.schemas.receipt import (
     ReceiptUploadResponse,
 )
 from app.services.classifier import classify_expense
-from app.services.reconciler import MATH_TOLERANCE, AuditResult, ReconcilerService
+from app.services.reconciler import AuditResult, ReconcilerService
 
 logger = logging.getLogger(__name__)
 
@@ -95,12 +97,23 @@ MAX_BATCH_BYTES: Final = 50 * 1024 * 1024
 MIN_OCR_TOKENS: Final = 5
 # docs/06_schema_api.md §6.3.2: Inbox status filter. "VERIFIED" spans both the
 # auto-verified and the accountant-confirmed state (docs/03_appflow.md §3.2).
+# Terminal pipeline failures. A row in one of these states is dead: the worker
+# will never touch it again, so an upload that matches one must not be treated
+# as a duplicate (that would hand back the dead row and block any retry).
+ERROR_STATUSES: Final = frozenset(
+    member for member in ReceiptStatus if member.is_error
+)
+
 INBOX_STATUS_FILTERS: Final = {
     "ALL": None,
     "NEEDS_REVIEW": (ReceiptStatus.STATUS_NEEDS_REVIEW,),
     "VERIFIED": (ReceiptStatus.STATUS_AUTO_VERIFIED, ReceiptStatus.STATUS_VERIFIED),
     "EXPORTED": (ReceiptStatus.STATUS_EXPORTED,),
     "REJECTED": (ReceiptStatus.STATUS_REJECTED,),
+    # Terminal pipeline failures need their own bucket (M1). Without it a
+    # corrupt upload was counted in ALL but reachable from no tab, so the tab
+    # counts did not add up to the total and the failure had no home.
+    "ERROR": tuple(sorted(ERROR_STATUSES, key=lambda member: member.value)),
 }
 # Docs/06_schema_api.md §6.3.2: default page size, and a hard ceiling so a
 # misconfigured console cannot pull the whole ledger in one request.
@@ -116,13 +129,6 @@ PROCESSING_STATUSES: Final = frozenset(
         ReceiptStatus.PROCESSING_LLM,
         ReceiptStatus.VALIDATING_MATH,
     }
-)
-
-# Terminal pipeline failures. A row in one of these states is dead: the worker
-# will never touch it again, so an upload that matches one must not be treated
-# as a duplicate (that would hand back the dead row and block any retry).
-ERROR_STATUSES: Final = frozenset(
-    member for member in ReceiptStatus if member.is_error
 )
 
 MATH_FLAG_PREFIX: Final = "MATH_MISMATCH_DELTA_"
@@ -271,6 +277,8 @@ def _apply_outcome(receipt: Receipt, outcome: PipelineOutcome) -> None:
     receipt.subtotal = parsed.subtotal
     receipt.tax_amount = parsed.tax_amount
     receipt.grand_total = parsed.grand_total
+    receipt.rounding = parsed.rounding
+    receipt.amount_basis = ReconcilerService.resolve_amount_basis(parsed)
     receipt.overall_confidence = audit.overall_confidence
     receipt.math_discrepancy = audit.math_discrepancy
     receipt.validation_flags = audit.flags
@@ -572,6 +580,83 @@ def _money_text(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
 
 
+# Header fields the review console can re-key. A value the accountant typed is
+# full-confidence evidence: they looked at the paper, so the OCR confidence that
+# produced the old value no longer applies to the new one.
+_EDITABLE_HEADER_FIELDS: Final = (
+    "merchant_name",
+    "merchant_brn",
+    "merchant_sst",
+    "invoice_date",
+    "invoice_number",
+    "subtotal",
+    "tax_amount",
+    "grand_total",
+    "rounding",
+)
+
+
+def _receipt_as_parsed(
+    receipt: Receipt, manually_set: frozenset[str] = frozenset()
+) -> ParsedReceiptSchema:
+    """Rebuild the reconciler's input from persisted columns (not the request).
+
+    The audit must run against what is actually stored, so a rejected or
+    partially-applied submission can never leave flags describing values that
+    did not survive.
+    """
+    provenance = [dict(row) for row in (receipt.field_provenance or [])]
+    known = {row.get("name") for row in provenance}
+    for name in manually_set:
+        if name in known:
+            for row in provenance:
+                if row.get("name") == name:
+                    row["confidence"] = 1.0
+        else:
+            provenance.append({"name": name, "confidence": 1.0, "bbox": None})
+
+    return ParsedReceiptSchema(
+        merchant_name=receipt.merchant_name,
+        merchant_brn=receipt.merchant_brn,
+        merchant_sst=receipt.merchant_sst,
+        invoice_date=receipt.invoice_date,
+        invoice_number=receipt.invoice_number,
+        subtotal=receipt.subtotal,
+        tax_amount=receipt.tax_amount,
+        grand_total=receipt.grand_total,
+        rounding=receipt.rounding,
+        amount_basis=receipt.amount_basis,
+        line_items=[
+            LineItemSchema(
+                line_index=row.line_index,
+                description=row.description,
+                quantity=row.quantity,
+                unit_price=row.unit_price,
+                line_total=row.line_total,
+                confidence=float(row.confidence) if row.confidence is not None else 1.0,
+                bbox=row.bbox,
+            )
+            for row in sorted(receipt.line_items, key=lambda item: item.line_index)
+        ],
+        fields=[ExtractedField(**row) for row in provenance],
+    )
+
+
+def _recompute_flags(
+    receipt: Receipt, manually_set: frozenset[str] = frozenset()
+) -> tuple[list[str], Decimal]:
+    """Re-derive every validation flag from persisted state (§5.4, M5).
+
+    Patching only ``MATH_*`` left phantom warnings behind: rewriting ten line
+    items into one kept ``LOW_CONFIDENCE_line_items[1..9]`` pointing at rows
+    that no longer existed. The audit is deterministic and cheap, so the honest
+    fix is to re-run it rather than to edit its previous output.
+    """
+    parsed = _receipt_as_parsed(receipt, manually_set)
+    audit = ReconcilerService.audit_receipt(parsed)
+    return list(audit.flags), audit.math_discrepancy or Decimal("0.00")
+
+
 def _reject_if_exported(receipt: Receipt) -> None:
     """Exported receipts are frozen: a marked month has left the ledger.
 
@@ -687,6 +772,7 @@ def _build_list_item(client_id: UUID, receipt: Receipt) -> ReceiptListItem:
         tax_amount=_money_text(receipt.tax_amount),
         grand_total=_money_text(receipt.grand_total),
         status=receipt.status,
+        processing_error=receipt.processing_error,
         validation_flags=list(receipt.validation_flags or []),
         overall_confidence=(
             None
@@ -716,6 +802,8 @@ def _build_detail(client_id: UUID, receipt: Receipt) -> ReceiptDetailResponse:
         subtotal=_money_text(receipt.subtotal),
         tax_amount=_money_text(receipt.tax_amount),
         grand_total=_money_text(receipt.grand_total),
+        rounding=_money_text(receipt.rounding),
+        amount_basis=receipt.amount_basis,
         math_discrepancy=_money_text(receipt.math_discrepancy) or "0.00",
         overall_confidence=(
             None
@@ -740,7 +828,9 @@ def list_client_receipts(
     client_id: uuid.UUID,
     db: DbSession,
     accountant_id: AccountantId,
-    status: str = Query("ALL", pattern="^(ALL|NEEDS_REVIEW|VERIFIED|EXPORTED|REJECTED)$"),
+    status: str = Query(
+        "ALL", pattern="^(ALL|NEEDS_REVIEW|VERIFIED|EXPORTED|REJECTED|ERROR)$"
+    ),
     limit: int = Query(DEFAULT_LIST_LIMIT, ge=1, le=MAX_LIST_LIMIT),
     offset: int = Query(0, ge=0),
 ) -> ReceiptListResponse:
@@ -777,10 +867,18 @@ def list_client_receipts(
     )
     # §6.2 requires a PROCESSING badge over the whole client. It is a count
     # bucket only: the ``status`` query enum stays fixed by §6.4.4, so this
-    # entry is deliberately absent from INBOX_STATUS_FILTERS.
+    # entry is deliberately absent from INBOX_STATUS_FILTERS. The two pre-worker
+    # states belong here too — a row sitting in PENDING_UPLOAD/UPLOADED is still
+    # being ingested — otherwise the buckets would not add up to ``ALL`` (M1).
     status_buckets = {
         **INBOX_STATUS_FILTERS,
-        "PROCESSING": tuple(PROCESSING_STATUSES),
+        "PROCESSING": tuple(
+            sorted(
+                PROCESSING_STATUSES
+                | {ReceiptStatus.PENDING_UPLOAD, ReceiptStatus.UPLOADED},
+                key=lambda member: member.value,
+            )
+        ),
     }
     status_counts = {
         name: sum(by_status.get(member, 0) for member in members)
@@ -923,17 +1021,36 @@ def update_client_receipt(
     apply_field("subtotal", payload.subtotal, receipt.subtotal)
     apply_field("tax_amount", payload.tax_amount, receipt.tax_amount)
     apply_field("grand_total", payload.grand_total, receipt.grand_total)
+    apply_field("rounding", payload.rounding, receipt.rounding)
+    apply_field("amount_basis", payload.amount_basis, receipt.amount_basis)
 
     if "line_items" in payload.model_fields_set and payload.line_items is not None:
-        previous = [
-            (row.description, str(row.line_total)) for row in receipt.line_items
-        ]
-        incoming = [
-            (item.description, str(item.line_total)) for item in payload.line_items
-        ]
-        if previous != incoming:
+        # Per-row audit detail (L2): "3 rows -> 1 rows" tells a reviewer nothing
+        # about what changed. Record the row-level edits themselves, keyed by
+        # position, and fall back to the count only for a wholesale re-index.
+        previous_rows = {
+            row.line_index: (row.description, str(row.line_total))
+            for row in receipt.line_items
+        }
+        for index, item in enumerate(payload.line_items):
+            before = previous_rows.pop(index, None)
+            after = (item.description, str(item.line_total))
+            if before == after:
+                continue
             changed.append(
-                ("line_items", f"{len(previous)} rows", f"{len(incoming)} rows")
+                (
+                    f"line_items[{index}]",
+                    None if before is None else f"{before[0]} @ {before[1]}",
+                    f"{after[0]} @ {after[1]}",
+                )
+            )
+        for index, before in sorted(previous_rows.items()):
+            changed.append(
+                (
+                    f"line_items[{index}]",
+                    f"{before[0]} @ {before[1]}",
+                    None,
+                )
             )
         receipt.line_items = [
             ReceiptLineItem(
@@ -948,24 +1065,16 @@ def update_client_receipt(
         ]
         db.flush()
 
-    tax = receipt.tax_amount if receipt.tax_amount is not None else Decimal("0.00")
-    line_sum = sum(
-        (item.line_total for item in receipt.line_items), start=Decimal("0.00")
+    manually_set = frozenset(
+        name
+        for name in _EDITABLE_HEADER_FIELDS
+        if name in payload.model_fields_set
     )
-    discrepancy = (
-        abs(line_sum + tax - receipt.grand_total)
-        if receipt.grand_total is not None
-        else Decimal("0.00")
-    )
+    # Re-derive the audit from the persisted state (M5). Patching only the
+    # MATH_* flag left phantom per-row warnings behind: deleting nine line items
+    # kept LOW_CONFIDENCE_line_items[1..9] pointing at rows that no longer exist.
+    flags, discrepancy = _recompute_flags(receipt, manually_set)
     receipt.math_discrepancy = discrepancy
-
-    flags = [
-        flag
-        for flag in receipt.validation_flags or []
-        if not flag.startswith(MATH_FLAG_PREFIX)
-    ]
-    if discrepancy > MATH_TOLERANCE:
-        flags.append(f"{MATH_FLAG_PREFIX}{discrepancy:.2f}")
     receipt.validation_flags = flags
 
     receipt.status = ReceiptStatus.STATUS_VERIFIED

@@ -456,7 +456,13 @@ def test_update_writes_audit_log_rows(
     logged = {(row.field_name, row.old_value, row.new_value) for row in rows}
     assert ("merchant_name", "Kim Guan Hardware", "Uncle Lim Kopi") in logged
     assert ("tax_amount", "0.00", None) in logged
-    assert ("line_items", "1 rows", "1 rows") in logged
+    # L2: the audit log names the row that actually changed instead of
+    # recording "1 rows -> 1 rows", which told a reviewer nothing.
+    assert (
+        "line_items[0]",
+        'PVC Pipe 2" @ 14.50',
+        "Teh O Peng @ 4.00",
+    ) in logged
 
 
 def test_update_omitted_keys_leave_fields_alone(
@@ -571,3 +577,51 @@ def test_unknown_client_returns_404(
 
     assert client.get(f"/api/v1/clients/{missing}/receipts").status_code == 404
     assert client.get(_detail_url(missing, str(uuid.uuid4()))).status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# M1: terminal failures are reachable from the inbox
+# --------------------------------------------------------------------------- #
+
+
+def test_error_bucket_is_a_real_filter_and_counts_add_up(
+    client: TestClient, stub_pipeline, _storage_root: Path
+) -> None:
+    """Every status must belong to exactly one tab.
+
+    ``ERROR`` was missing from the filter enum while ``ALL`` counted ERR rows, so
+    the tab badges summed to less than the total and a failed upload was
+    unreachable from any tab — it could only be found by guessing its URL.
+    """
+    stub_pipeline()
+    client_id = _create_client(client)
+    receipt_id = _upload_one(client, client_id)
+
+    with SessionLocal() as db:
+        receipt = db.get(Receipt, uuid.UUID(receipt_id))
+        assert receipt is not None
+        receipt.status = ReceiptStatus.ERR_UNREADABLE
+        receipt.processing_error = "OCR engine returned no tokens"
+        db.commit()
+
+    base = f"/api/v1/clients/{client_id}/receipts"
+
+    errors = client.get(base, params={"status": "ERROR"})
+    assert errors.status_code == 200
+    assert errors.json()["total"] == 1
+    item = errors.json()["items"][0]
+    # The reason travels with the list row so the inbox can show it (M1).
+    assert item["processing_error"] == "OCR engine returned no tokens"
+
+    counts = client.get(base).json()["status_counts"]
+    buckets = [
+        "NEEDS_REVIEW",
+        "VERIFIED",
+        "EXPORTED",
+        "REJECTED",
+        "ERROR",
+        "PROCESSING",
+    ]
+    assert counts["ALL"] == 1
+    assert sum(counts[name] for name in buckets) == counts["ALL"]
+    assert counts["ERROR"] == 1
