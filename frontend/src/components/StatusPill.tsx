@@ -72,9 +72,13 @@ export default function StatusPill({
         <span
           className={STAMP_MISMATCH}
           data-status={status}
-          title={`Math mismatch: Δ RM ${delta}`}
+          title={`Math mismatch: off by RM ${delta}`}
         >
-          <Icon name="alert" size={12} /> Δ RM {delta}
+          {/* Spelled out, not "Δ RM 0.04". At 10px in the mono stack the delta
+              glyph *is* a triangle: side by side with the alert icon it read as
+              two warnings, and once that icon was removed it read as a broken
+              icon on its own. Words cannot be mistaken for a glyph. */}
+          Off by RM {delta}
         </span>
       );
     }

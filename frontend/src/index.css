@@ -27,12 +27,12 @@
     cursor: pointer;
   }
 
-  :where(a, button, input, select, textarea, summary):focus-visible {
+  :where(a, button, input, select, textarea, summary, [tabindex='0']):focus-visible {
     outline: 2px solid #0e5a50;
     outline-offset: 2px;
   }
 
-  .on-dark :where(a, button, input, select, textarea, summary):focus-visible {
+  .on-dark :where(a, button, input, select, textarea, summary, [tabindex='0']):focus-visible {
     outline-color: #dcebe5;
   }
 
@@ -127,7 +127,7 @@
   }
 
   .link-quiet {
-    @apply inline-flex items-center gap-1 text-ui text-text-secondary underline-offset-4 transition-colors duration-100 hover:text-text-primary hover:underline;
+    @apply inline-flex min-h-11 items-center gap-1 py-2 text-ui text-text-secondary underline-offset-4 transition-colors duration-100 hover:text-text-primary hover:underline lg:min-h-0 lg:py-0;
   }
 
   .rule-total {

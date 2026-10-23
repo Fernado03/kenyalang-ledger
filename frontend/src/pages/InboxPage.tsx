@@ -18,6 +18,9 @@ const FILTER_TABS: readonly { label: string; value: ReceiptListStatus }[] = [
   { label: 'Verified', value: 'VERIFIED' },
   { label: 'Exported', value: 'EXPORTED' },
   { label: 'Rejected', value: 'REJECTED' },
+  // Terminal pipeline failures get their own tab (M1); without it the bucket
+  // counts did not add up to All and the failure had nowhere to be triaged.
+  { label: 'Errors', value: 'ERROR' },
 ];
 
 const DELTA_PREFIX = 'MATH_MISMATCH_DELTA_';
@@ -120,6 +123,7 @@ const FLAG_LABELS: Record<string, string> = {
   DATE_EXCEEDS_1_YEAR: 'Date older than a year',
   MISSING_SUBTOTAL: 'Missing subtotal',
   MISSING_SST_ON_REGISTERED_MERCHANT: 'Missing SST on registered merchant',
+  SST_FORMAT_INVALID: 'SST number is not a valid registration format',
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -141,7 +145,7 @@ function humanizeField(field: string): string {
 function flagDetails(flags: string[]): string[] {
   return flags.map((flag) => {
     if (flag.startsWith(DELTA_PREFIX)) {
-      return `Math mismatch: Δ RM ${flag.slice(DELTA_PREFIX.length)}`;
+      return `Math mismatch: off by RM ${flag.slice(DELTA_PREFIX.length)}`;
     }
     if (flag.startsWith('LOW_CONFIDENCE_')) {
       return `Low OCR confidence: ${humanizeField(flag.slice('LOW_CONFIDENCE_'.length))}`;
@@ -288,7 +292,13 @@ export default function InboxPage(): JSX.Element {
         <div
           role="group"
           aria-label="Status filter"
-          className="-mx-5 overflow-x-auto border-b border-border px-5 sm:mx-0 sm:px-0"
+          // The strip scrolls horizontally below sm, where six tabs exceed the
+          // viewport. A right-edge fade marks the overflow so the last tab is
+          // discoverable rather than looking like the end of the list (M6).
+          // Tabular scroll containers are keyboard-reachable, so this is an
+          // affordance hint, not the only way to reach the hidden tabs.
+          className="-mx-5 overflow-x-auto border-b border-border bg-gradient-to-l from-surface-subtle to-surface px-5 [background-position:right_center] [background-repeat:no-repeat] [background-size:2.5rem_100%] sm:mx-0 sm:bg-none sm:px-0"
+          tabIndex={0}
         >
           <div className="flex min-w-max items-end gap-6">
             {FILTER_TABS.map((tab) => (
@@ -304,7 +314,7 @@ export default function InboxPage(): JSX.Element {
                 }`}
               >
                 {tab.label}
-                {statusCounts[tab.value] !== undefined && statusCounts[tab.value] > 0 && (
+                {statusCounts[tab.value] !== undefined && (
                   <span className="ml-1.5 font-mono-numbers text-label text-text-muted">
                     {statusCounts[tab.value]}
                   </span>
@@ -365,7 +375,13 @@ export default function InboxPage(): JSX.Element {
             <tbody className="block md:table-row-group" role="rowgroup">
               {receipts.map((receipt) => {
                 const processing = PROCESSING_STATUSES.includes(receipt.status);
+                // A failed row has no flags to explain it, so its terminal reason
+                // is the detail line (M1) — the accountant should not have to open
+                // a receipt that will never load to find out why it failed.
                 const details = flagDetails(receipt.validation_flags);
+                if (details.length === 0 && receipt.processing_error) {
+                  details.push(receipt.processing_error);
+                }
                 const money = moneyParts(receipt.grand_total);
                 return (
                   <tr
@@ -406,12 +422,16 @@ export default function InboxPage(): JSX.Element {
                       )}
                     </td>
                     <td role="cell" className="border-b-0 px-0 py-0 align-middle font-mono-numbers text-label text-text-secondary md:table-cell md:border-b md:px-2 md:text-ui">
+                      {/* Below md the row stacks, so the value needs its column
+                          name inline (L5) — the table header is off-screen. */}
+                      <span className="mr-1 text-label text-text-muted md:hidden">Date</span>
                       {formatDate(receipt.invoice_date)}
                     </td>
                     <td role="cell" className="hidden border-b-0 px-0 py-0 text-right align-middle font-mono-numbers text-label text-text-secondary md:table-cell md:border-b md:px-2 md:text-ui">
                       {receipt.line_item_count}
                     </td>
                     <td role="cell" className="border-b-0 px-0 py-0 text-right align-middle md:table-cell md:border-b md:px-2">
+                      <span className="mr-1 text-label text-text-muted md:hidden">Total</span>
                       {money.currency !== null && (
                         <span className="mr-1 text-label text-text-muted">{money.currency}</span>
                       )}
@@ -424,6 +444,7 @@ export default function InboxPage(): JSX.Element {
                         status={receipt.status}
                         flags={receipt.validation_flags}
                         confidence={receipt.overall_confidence}
+                        processingError={receipt.processing_error}
                       />
                     </td>
                     <td

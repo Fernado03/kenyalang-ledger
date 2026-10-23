@@ -52,7 +52,6 @@ export default function MathBanner({ audit, missingSst, dirty }: MathBannerProps
         </p>
       ) : (
         <p className="text-ui font-semibold">
-          <Icon name="alert" size={12} className="mr-1 inline align-[-2px]" />
           Math Mismatch:{' '}
           <span className="font-mono-numbers">{audit.message}</span>
         </p>

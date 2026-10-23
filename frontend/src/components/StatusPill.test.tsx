@@ -35,7 +35,7 @@ describe('StatusPill', () => {
 
   it('shows the math delta from the mismatch flag', () => {
     render(<StatusPill status="STATUS_NEEDS_REVIEW" flags={['MATH_MISMATCH_DELTA_1.50']} />);
-    expect(screen.getByText('Δ RM 1.50')).toBeInTheDocument();
+    expect(screen.getByText('Off by RM 1.50')).toBeInTheDocument();
     expect(screen.queryByText(/OCR check/)).not.toBeInTheDocument();
   });
 

@@ -8,6 +8,22 @@ import { useReceiptStore } from '../store/receiptStore';
 
 const FILE_INPUT_ACCEPT = 'image/jpeg,image/png,image/heic,application/pdf';
 
+/** How often the accepted batch re-reads its real statuses (M2). */
+const POLL_INTERVAL_MS = 3_000;
+
+/** Statuses the pipeline is still working through. */
+const SETTLED_STATUSES = new Set([
+  'STATUS_NEEDS_REVIEW',
+  'STATUS_AUTO_VERIFIED',
+  'STATUS_VERIFIED',
+  'STATUS_EXPORTED',
+  'STATUS_REJECTED',
+]);
+
+function isSettled(status: string): boolean {
+  return SETTLED_STATUSES.has(status) || status.startsWith('ERR_');
+}
+
 const CAPTURE_BUTTON_CLASS =
   'flex h-24 w-full cursor-pointer items-center justify-center gap-3 rounded-sm bg-brand-900 text-ui font-semibold text-brand-50 transition-colors duration-100 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-50';
 
@@ -22,6 +38,7 @@ export default function UploadPage() {
   const uploadFiles = useReceiptStore((state) => state.uploadFiles);
   const uploadState = useReceiptStore((state) => state.uploadState);
   const uploadResult = useReceiptStore((state) => state.uploadResult);
+  const refreshUploadStatuses = useReceiptStore((state) => state.refreshUploadStatuses);
   const [inputKey, setInputKey] = useState(0);
   const cameraId = useId();
   const filesId = useId();
@@ -31,6 +48,32 @@ export default function UploadPage() {
     // against the accountant's actual workspaces, not trusted blindly.
     void loadClients();
   }, [loadClients]);
+
+  // Poll until every accepted row has settled (M2). The batch response carries
+  // a snapshot of the status at upload time, so without this the rows sit on
+  // "Processing" forever while the backend has long since finished.
+  const hasPendingRows =
+    uploadResult !== null &&
+    uploadResult.uploaded.some((item) => !isSettled(item.status));
+
+  useEffect(() => {
+    if (!hasPendingRows) {
+      return;
+    }
+    let cancelled = false;
+    const tick = (): void => {
+      if (cancelled) return;
+      void refreshUploadStatuses();
+    };
+    tick();
+    const timer = window.setInterval(tick, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+    // Deliberately not keyed on `uploadResult`: the object is replaced on every
+    // poll, which would tear down and rebuild the interval each tick.
+  }, [hasPendingRows, refreshUploadStatuses]);
 
   const client = clients.find((item) => item.id === currentClientId) ?? null;
   const hasSelectedClient =
