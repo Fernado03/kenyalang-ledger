@@ -3,7 +3,7 @@
  * one keydown into an action, so the page only maps actions onto handlers.
  */
 
-export type ReviewShortcut = 'blur' | 'save' | 'reject' | 'add-line' | 'delete-line';
+export type ReviewShortcut = 'blur' | 'save' | 'add-line' | 'delete-line';
 
 export interface ReviewShortcutContext {
   /** True while a text field, select, or contenteditable has focus. */
@@ -20,16 +20,21 @@ interface ReviewKeyEvent {
 }
 
 /**
- * Escape blurs a focused field and otherwise asks to reject (the page confirms
- * first). ⌘/Ctrl+Enter saves, Alt+A adds a line, Alt+Backspace deletes the
- * focused line — none of those fire while the accountant is typing.
+ * Escape blurs a focused field and nothing more (M4).
+ *
+ * Escape is the key users mash to dismiss things, so it must never arm an
+ * irreversible action. Rejecting is deliberate: the button (or the confirm band
+ * it opens) is the only route, and there is no keyboard path to it.
+ *
+ * ⌘/Ctrl+Enter saves, Alt+A adds a line, Alt+Backspace deletes the focused
+ * line — none of those fire while the accountant is typing.
  */
 export function resolveReviewShortcut(
   event: ReviewKeyEvent,
   context: ReviewShortcutContext,
 ): ReviewShortcut | null {
   if (event.key === 'Escape') {
-    return context.typing ? 'blur' : 'reject';
+    return context.typing ? 'blur' : null;
   }
   if (context.typing) {
     return null;

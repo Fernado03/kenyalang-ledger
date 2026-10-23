@@ -14,13 +14,15 @@ describe('resolveReviewShortcut', () => {
     ).toBe('blur');
   });
 
-  it('Escape outside a field asks to reject', () => {
+  it('Escape outside a field does nothing — it never arms reject', () => {
+    // Escape is the key people mash to dismiss things, so it must not open an
+    // irreversible confirmation (M4). Rejecting is the button's job.
     expect(
       resolveReviewShortcut(
         { key: 'Escape', metaKey: false, ctrlKey: false, altKey: false },
         idle,
       ),
-    ).toBe('reject');
+    ).toBeNull();
   });
 
   it('Cmd/Ctrl+Enter is ignored while typing', () => {
@@ -92,6 +94,6 @@ describe('resolveReviewShortcut', () => {
     ).toBeNull();
     expect(
       resolveReviewShortcut({ key: 'Escape', metaKey: true, ctrlKey: false, altKey: true }, idle),
-    ).toBe('reject');
+    ).toBeNull();
   });
 });

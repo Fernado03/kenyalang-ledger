@@ -10,6 +10,8 @@ interface LineItemsEditorProps {
   onRemove: (key: string) => void;
   onAdd: () => void;
   onFocusRow: (key: string) => void;
+  /** Called when focus leaves the grid entirely (not on row-to-row moves). */
+  onBlurGrid: () => void;
 }
 
 const HEADER_CELL =
@@ -20,6 +22,12 @@ const NUMERIC_HEADER_CELL = `${HEADER_CELL} text-right`;
 const INPUT_CLASS = 'field-input-dense mt-0';
 
 const NUMERIC_INPUT_CLASS = `${INPUT_CLASS} text-right font-mono-numbers`;
+
+/** Numeric columns are sized to their content, not to the table's spare width:
+ *  letting the table distribute down the middle left the description column — the
+ *  only free-text field — with ~144px once the confidence badge claimed its share,
+ *  which is narrower than the descriptions it has to show. */
+const NUMERIC_COL_WIDTH = '7.5rem';
 
 const DELETE_BUTTON_CLASS =
   'inline-flex h-11 w-11 items-center justify-center border border-transparent text-text-muted transition-colors duration-100 ease-out hover:border-border hover:bg-surface-subtle hover:text-mismatch-text';
@@ -131,10 +139,30 @@ export default function LineItemsEditor({
   onRemove,
   onAdd,
   onFocusRow,
+  onBlurGrid,
 }: LineItemsEditorProps): JSX.Element {
   return (
     <div className="relative overflow-x-auto border-y border-border bg-surface">
-      <table className="w-full min-w-[32rem] border-collapse">
+      <table
+        className="w-full min-w-[36rem] border-collapse"
+        // `onBlur` bubbles in React, so this fires when any row field loses
+        // focus. Only clear when focus landed outside the grid: moving between
+        // Qty and Total in the same row must not disarm the delete shortcut.
+        onBlur={(event) => {
+          const next = event.relatedTarget;
+          if (next instanceof Node && event.currentTarget.contains(next)) {
+            return;
+          }
+          onBlurGrid();
+        }}
+      >
+        <colgroup>
+          <col />
+          <col style={{ width: NUMERIC_COL_WIDTH }} />
+          <col style={{ width: NUMERIC_COL_WIDTH }} />
+          <col style={{ width: NUMERIC_COL_WIDTH }} />
+          <col style={{ width: '2.75rem' }} />
+        </colgroup>
         <thead>
           <tr>
             <th className={HEADER_CELL}>Description</th>

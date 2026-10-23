@@ -28,6 +28,8 @@ const EMPTY_DRAFT: ReceiptDraft = {
   subtotal: '',
   tax_amount: '',
   grand_total: '',
+  rounding: '',
+  amount_basis: null,
   line_items: [],
 };
 
@@ -108,6 +110,7 @@ function LabelledInput({
  * SCR-03 split-screen review console: receipt viewport on the left, the
  * correction form and math audit on the right, with the accountant-only
  * keyboard workflow (Ctrl+↵ save, Alt+A add line, Alt+Backspace delete, Esc out).
+ * Escape only blurs: rejecting is a deliberate button action (M4).
  */
 export default function ReviewPage(): JSX.Element {
   const { clientId, receiptId } = useParams<{ clientId: string; receiptId: string }>();
@@ -138,6 +141,14 @@ export default function ReviewPage(): JSX.Element {
   const [activeField, setActiveField] = useState<string | null>(null);
   const clearActiveField = useCallback(() => setActiveField(null), []);
   const [focusedLineKey, setFocusedLineKey] = useState<string | null>(null);
+  /**
+   * True while the "verify anyway" confirmation band is open (M7). A mismatch
+   * must not be silently verifiable: the accountant has to read the size of the
+   * unexplained difference and confirm it explicitly.
+   */
+  const [confirmingMismatch, setConfirmingMismatch] = useState(false);
+  /** The line-item grid, so destructive shortcuts can check real focus (M3). */
+  const lineItemsRef = useRef<HTMLDivElement | null>(null);
   const [confirmingReject, setConfirmingReject] = useState(false);
   const [auditState, setAuditState] = useState<{
     receiptId: string | null;
@@ -358,10 +369,15 @@ export default function ReviewPage(): JSX.Element {
         return;
       }
 
-      // An open reject confirmation owns Escape: the first press cancels it.
+      // An open confirmation band owns Escape: the first press cancels it.
       if (event.key === 'Escape' && confirmingReject) {
         event.preventDefault();
         setConfirmingReject(false);
+        return;
+      }
+      if (event.key === 'Escape' && confirmingMismatch) {
+        event.preventDefault();
+        setConfirmingMismatch(false);
         return;
       }
 
@@ -373,12 +389,14 @@ export default function ReviewPage(): JSX.Element {
       }
       if (action === 'save') {
         event.preventDefault();
-        if (!isLocked) void saveAndNext();
-        return;
-      }
-      if (action === 'reject') {
-        event.preventDefault();
-        if (!isLocked) setConfirmingReject(true);
+        if (isLocked) return;
+        // Ctrl+Enter is a deliberate save, but a mismatch still gets the same
+        // labelled confirmation rather than being waved through (M7).
+        if (audit.matches) {
+          void saveAndNext();
+        } else {
+          setConfirmingMismatch(true);
+        }
         return;
       }
       if (action === 'add-line') {
@@ -390,7 +408,12 @@ export default function ReviewPage(): JSX.Element {
       }
       if (action === 'delete-line') {
         event.preventDefault();
-        if (!isLocked && focusedLineKey !== null) {
+        // Belt and braces with the grid's own onBlur (M3): the shortcut only
+        // applies while focus is genuinely inside the line-item grid, so a
+        // stale key can never delete a row the accountant has moved away from.
+        const inGrid =
+          target instanceof Node && lineItemsRef.current?.contains(target) === true;
+        if (!isLocked && focusedLineKey !== null && inGrid) {
           removeDraftLine(focusedLineKey);
           setFocusedLineKey(null);
         }
@@ -417,7 +440,9 @@ export default function ReviewPage(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
     addDraftLine,
+    audit.matches,
     blocker,
+    confirmingMismatch,
     confirmingReject,
     focusedLineKey,
     isLocked,
@@ -521,7 +546,12 @@ export default function ReviewPage(): JSX.Element {
               </div>
               <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
                 {saveState === 'error' ? (
-                  <p className="flex items-center gap-1.5 text-label text-mismatch-text">
+                  // role="alert" so a screen reader announces the failure the
+                  // moment it renders instead of waiting for the next stop (L1).
+                  <p
+                    role="alert"
+                    className="flex items-center gap-1.5 text-label text-mismatch-text"
+                  >
                     <Icon name="alert" size={14} />
                     {saveError}
                   </p>
@@ -545,28 +575,88 @@ export default function ReviewPage(): JSX.Element {
                   onClick={() => setConfirmingReject(true)}
                 >
                   {saveState === 'saving' ? 'Rejecting…' : 'Reject'}
-                  <span className="font-mono text-micro text-text-muted" aria-hidden="true">
-                    Esc
-                  </span>
                 </button>
                 <button
                   type="button"
                   className={PRIMARY_BUTTON_CLASS}
                   disabled={saveState === 'saving' || !audit.valid || isLocked}
-                  onClick={() => void saveAndNext()}
-                  aria-keyshortcuts="Control+Enter"
+                  onClick={() => {
+                    // A mismatch is verifiable, but never silently: it opens a
+                    // labelled override that names the unexplained amount (M7).
+                    if (audit.matches) {
+                      void saveAndNext();
+                      return;
+                    }
+                    setConfirmingMismatch(true);
+                  }}
+                  // A keycap promises the key performs the action the click
+                  // performs. On a mismatch the click only opens the override
+                  // band, so advertising the shortcut there would read as
+                  // "Ctrl+Enter verifies this" — the opposite of the gate.
+                  aria-keyshortcuts={
+                    audit.matches ? 'Control+Enter' : undefined
+                  }
                 >
-                  {saveState === 'saving' ? 'Saving…' : 'Verify & Next'}
-                  <span
-                    className="hidden font-mono text-micro text-brand-100 sm:inline"
-                    aria-hidden="true"
-                  >
-                    Ctrl+↵
-                  </span>
+                  {saveState === 'saving'
+                    ? 'Saving…'
+                    : audit.valid && !audit.matches
+                      ? 'Verify anyway'
+                      : 'Verify & Next'}
+                  {audit.matches ? (
+                    <span
+                      className="hidden font-mono text-micro text-brand-100 sm:inline"
+                      aria-hidden="true"
+                    >
+                      Ctrl+↵
+                    </span>
+                  ) : null}
                 </button>
               </div>
             </div>
           </div>
+
+          {confirmingMismatch ? (
+            <div
+              role="group"
+              aria-labelledby="mismatch-strip-heading"
+              className="flex flex-wrap items-center justify-between gap-3 border-b border-warning-border bg-warning-bg px-5 py-3 lg:px-8"
+            >
+              <p
+                id="mismatch-strip-heading"
+                role="alert"
+                className="flex items-center gap-2 text-ui font-semibold text-warning-text"
+              >
+                Verify with RM{' '}
+                {formatCents(
+                  audit.deltaCents < 0n ? -audit.deltaCents : audit.deltaCents,
+                )}{' '}
+                unexplained? The audit trail records that you overrode it.
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className={ACTION_BUTTON_CLASS}
+                  onClick={() => setConfirmingMismatch(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={DANGER_BUTTON_CLASS}
+                  disabled={saveState === 'saving' || isLocked}
+                  onClick={() => {
+                    setConfirmingMismatch(false);
+                    void saveAndNext();
+                  }}
+                >
+                  {/* Not "Verify anyway": that is the toolbar button the user just
+                      pressed to open this band, so repeating it reads as the same
+                      control twice and leaves no visible sign of which one commits. */}
+                  {saveState === 'saving' ? 'Verifying…' : 'Confirm override'}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {confirmingReject ? (
             <div
@@ -665,6 +755,7 @@ export default function ReviewPage(): JSX.Element {
             <div className="mb-3">
               <h2 className="section-title">Line items</h2>
             </div>
+            <div ref={lineItemsRef}>
             <LineItemsEditor
               items={draft?.line_items ?? []}
               serverLineItems={activeReceipt.line_items}
@@ -679,7 +770,9 @@ export default function ReviewPage(): JSX.Element {
                   setActiveField(lineFieldNameFor(index));
                 }
               }}
+              onBlurGrid={() => setFocusedLineKey(null)}
             />
+            </div>
           </section>
 
           <section className="px-5 py-6 lg:px-8 lg:py-5">
@@ -723,6 +816,29 @@ export default function ReviewPage(): JSX.Element {
                   />
                 </span>
               </label>
+              <label className="flex items-center justify-between gap-3">
+                <span className={LABEL_CLASS}>Rounding</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="font-mono text-micro text-text-muted" aria-hidden="true">
+                    RM
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    aria-describedby="rounding-hint"
+                    value={draft?.rounding ?? ''}
+                    onChange={(event) => setDraftField('rounding', event.target.value)}
+                    onFocus={() => setActiveField('rounding')}
+                    onBlur={clearActiveField}
+                    className={NUMERIC_FIELD_CLASS}
+                  />
+                </span>
+              </label>
+              <p id="rounding-hint" className="text-micro text-text-muted">
+                Signed till-rounding line, e.g. −0.04. Leave blank when the receipt
+                prints none.
+              </p>
               <label className="rule-total flex items-center justify-between gap-3 pt-2">
                 <span className={LABEL_CLASS}>Grand Total</span>
                 <span className="flex items-center gap-1.5">
@@ -756,10 +872,34 @@ export default function ReviewPage(): JSX.Element {
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <dt className="text-label text-text-muted">Lines + Tax = Total</dt>
-                <dd className="font-mono-numbers text-label text-text-muted">
-                  {formatCents(audit.lineCents)} + {formatCents(audit.taxCents)} ={' '}
-                  {formatCents(audit.totalCents)}
+                <dt className="text-label text-text-muted">
+                  {/* The operator has to match the arithmetic: printing "=" over
+                      two numbers that do not add up is the exact error this
+                      screen exists to catch. */}
+                  {audit.taxInLines
+                    ? `Lines (GST inclusive)${
+                        audit.roundingCents === 0n ? '' : ' + Rounding'
+                      } ${audit.matches ? '=' : '≠'} Total`
+                    : `Lines + Tax${
+                        audit.roundingCents === 0n ? '' : ' + Rounding'
+                      } ${audit.matches ? '=' : '≠'} Total`}
+                </dt>
+                <dd
+                  className={
+                    audit.matches
+                      ? 'font-mono-numbers text-label text-text-muted'
+                      : 'font-mono-numbers text-label text-mismatch-text'
+                  }
+                >
+                  {audit.taxInLines
+                    ? formatCents(audit.lineCents)
+                    : `${formatCents(audit.lineCents)} + ${formatCents(audit.taxCents)}`}
+                  {audit.roundingCents === 0n
+                    ? ''
+                    : audit.roundingCents < 0n
+                      ? ` − ${formatCents(-audit.roundingCents)}`
+                      : ` + ${formatCents(audit.roundingCents)}`}{' '}
+                  {audit.matches ? '=' : '≠'} {formatCents(audit.totalCents)}
                 </dd>
               </div>
             </dl>
@@ -770,7 +910,7 @@ export default function ReviewPage(): JSX.Element {
             </div>
 
             <details className="mt-4 border-t border-border">
-              <summary className="section-label cursor-pointer py-3">Audit history</summary>
+              <summary className="section-label min-h-11 cursor-pointer py-3 lg:min-h-0">Audit history</summary>
               {auditError !== null ? (
                 <p className="border-t border-border py-2 text-label text-mismatch-text">{auditError}</p>
               ) : auditEntries.length === 0 ? (
