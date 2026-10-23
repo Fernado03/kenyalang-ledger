@@ -99,6 +99,25 @@ def _category_totals(payload: dict) -> dict[str, str]:
 # --------------------------------------------------------------------------- #
 
 
+def test_classify_expense_reads_malay_item_names() -> None:
+    """A Kuching hardware receipt is printed in Malay, not English.
+
+    Every line of the demo receipt ("PAKU 2 INCI", "CAT JOTUN (KECIL)",
+    "ROLLER BRUSH 7\"", "AMPELAS") fell through to OTHER, so the dashboard
+    reported RM 0.00 across HARDWARE/WORKSHOP/RETAIL for a hardware shop.
+    """
+    assert classify_expense("PAKU 2 INCI") == "HARDWARE"
+    assert classify_expense("CAT JOTUN (KECIL)") == "HARDWARE"
+    assert classify_expense('ROLLER BRUSH 7"') == "HARDWARE"
+    assert classify_expense("AMPELAS") == "HARDWARE"
+    assert classify_expense("Minyak Enjin") == "WORKSHOP"
+
+
+def test_classify_expense_keeps_english_meaning_where_malay_overlaps() -> None:
+    """"cat" is paint, but F&B is checked first, so pet food stays food."""
+    assert classify_expense("CAT FOOD") == "F&B"
+
+
 def test_classify_expense_matches_spark_and_gear_keywords() -> None:
     assert classify_expense("Spark Plug") == "HARDWARE"
     assert classify_expense("Minyak Gear") == "WORKSHOP"
@@ -311,6 +330,88 @@ def test_omitted_month_defaults_to_current_month(
     body = _summary(client, client_id).json()
 
     assert body["month"] == f"{today.year:04d}-{today.month:02d}"
+
+
+def test_latest_month_reports_where_the_data_actually_is(
+    client: TestClient, accountant_id: uuid.UUID
+) -> None:
+    """The console must be able to tell an empty month from an empty workspace.
+
+    Opening on the current month is only correct when the books are current; for
+    a workspace whose receipts are older, ``latest_month`` is what stops the page
+    from presenting a screen of RM 0.00 as the truth.
+    """
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(client_id, invoice_date=date(2026, 5, 14), grand_total="75.75")
+    _seed_receipt(client_id, invoice_date=date(2026, 4, 2), grand_total="10.00")
+
+    body = _summary(client, client_id, "2026-10").json()
+
+    assert body["month"] == "2026-10"
+    assert body["total_spend"] == "0.00"
+    assert body["latest_month"] == "2026-05"
+
+
+def test_omitted_month_follows_the_data_when_the_books_are_stale(
+    client: TestClient, accountant_id: uuid.UUID
+) -> None:
+    """A workspace with no receipt this month opens on the month that has one.
+
+    Defaulting to the current month regardless would open the console on a full
+    screen of RM 0.00 for a client whose books simply are not current.
+    """
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(client_id, invoice_date=date(2026, 5, 14), grand_total="75.75")
+
+    body = _summary(client, client_id).json()
+
+    assert body["month"] == "2026-05"
+    assert body["total_spend"] == "75.75"
+    assert body["latest_month"] == "2026-05"
+
+
+def test_omitted_month_stays_current_when_the_current_month_has_data(
+    client: TestClient, accountant_id: uuid.UUID
+) -> None:
+    """Following the data must never move a current workspace off today."""
+    client_id = _seed_client(accountant_id)
+    today = date.today()
+    _seed_receipt(client_id, invoice_date=date(2026, 5, 14), grand_total="10.00")
+    _seed_receipt(
+        client_id,
+        invoice_date=today.replace(day=1),
+        merchant_name="Current",
+        grand_total="20.00",
+    )
+
+    body = _summary(client, client_id).json()
+
+    assert body["month"] == f"{today.year:04d}-{today.month:02d}"
+    assert body["total_spend"] == "20.00"
+
+
+def test_latest_month_is_null_for_an_empty_workspace(
+    client: TestClient, accountant_id: uuid.UUID
+) -> None:
+    """No receipts means no month to point at; null, not the current month."""
+    client_id = _seed_client(accountant_id)
+
+    body = _summary(client, client_id).json()
+
+    assert body["latest_month"] is None
+
+
+def test_latest_month_ignores_receipts_without_a_date(
+    client: TestClient, accountant_id: uuid.UUID
+) -> None:
+    """A dateless receipt still counts by upload date, so it cannot be invisible."""
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(client_id, invoice_date=None, grand_total="10.00")
+
+    body = _summary(client, client_id).json()
+
+    today = date.today()
+    assert body["latest_month"] == f"{today.year:04d}-{today.month:02d}"
 
 
 def test_cross_tenant_summary_is_not_found(

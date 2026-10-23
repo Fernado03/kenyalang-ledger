@@ -53,6 +53,24 @@ def _current_month() -> str:
     return f"{today.year:04d}-{today.month:02d}"
 
 
+def _default_month(client_id: uuid.UUID, db: Session, latest_month: str | None) -> str:
+    """The month to show when the caller did not name one.
+
+    The current month wins while it holds anything; otherwise follow the newest
+    month that does. An empty workspace stays on the current month, where the
+    zero is the truth rather than a hint that the data is elsewhere.
+    """
+    current = _current_month()
+    if latest_month is None or latest_month == current:
+        return current
+    has_current = db.execute(
+        select(func.count(Receipt.id)).where(
+            Receipt.client_id == client_id, month_clause(current)
+        )
+    ).scalar_one()
+    return current if has_current else latest_month
+
+
 @router.get(
     "/clients/{client_id}/dashboard/summary",
     response_model=DashboardSummary,
@@ -71,7 +89,27 @@ def dashboard_summary(
 ) -> DashboardSummary:
     """Total spend, top suppliers, and category split for one client-month."""
     get_active_owned_client(db, client_id, accountant_id)
-    selected = month or _current_month()
+
+    # Newest month that actually holds a receipt for this client. A receipt
+    # without an invoice_date falls back to its upload date, matching the
+    # month_clause fallback below so "has data" and "counts in this month"
+    # can never disagree.
+    latest_row = db.execute(
+        select(
+            func.max(func.coalesce(Receipt.invoice_date, func.date(Receipt.created_at)))
+        ).where(Receipt.client_id == client_id)
+    ).scalar_one()
+    latest_month = (
+        f"{latest_row.year:04d}-{latest_row.month:02d}"
+        if latest_row is not None
+        else None
+    )
+
+    # "This month" is the right default for current books and the wrong one for
+    # a workspace whose receipts are older: the console would open on a full
+    # screen of RM 0.00 while the data sits one month back. Answer with the
+    # month the caller should show instead of making every client re-derive it.
+    selected = month or _default_month(client_id, db, latest_month)
     # Validate the trimmed form too, not just the raw query string.
     parse_month_range(selected)
     clause = month_clause(selected)
@@ -113,6 +151,7 @@ def dashboard_summary(
 
     return DashboardSummary(
         month=selected,
+        latest_month=latest_month,
         total_spend=_money(total),
         top_suppliers=[
             TopSupplier(

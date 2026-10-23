@@ -3,6 +3,11 @@
 The taxonomy is deliberately small and closed: it is a demo feature, not a
 general-purpose merchant classifier. Unknown descriptions fall back to
 ``OTHER`` so every row has a stable, queryable category.
+
+Keywords are English *and* Malay. Receipts in this market are printed in a
+mixture of both — a Kuching hardware shop sells ``PAKU`` and ``CAT``, not
+``NAIL`` and ``PAINT`` — so an English-only list put every line of a Malaysian
+receipt into ``OTHER`` and made the category breakdown structurally useless.
 """
 
 from __future__ import annotations
@@ -17,6 +22,8 @@ CATEGORY_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
     "F&B": (
         "kopi",
         "teh",
+        "roti canai",
+        "kuih",
         "makan",
         "nasi",
         "roti",
@@ -41,10 +48,33 @@ CATEGORY_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
         "tool",
         "spark plug",
         "spark",
+        # Malay / Manglish, the language these receipts are actually printed in.
+        "paku",
+        "cat",
+        "ampelas",
+        "kertas pasir",
+        "gam",
+        "tukul",
+        "gergaji",
+        "pili",
+        "paip",
+        "wayar",
+        "besi",
+        "skru",
+        "nat",
+        "roller",
+        "berus",
+        "grinder",
+        "drill",
+        "tangga",
     ),
     "WORKSHOP": (
         "oil",
         "minyak",
+        "enjin",
+        "brek",
+        "clutch",
+        "bateri",
         "tyre",
         "tayar",
         "servis",
