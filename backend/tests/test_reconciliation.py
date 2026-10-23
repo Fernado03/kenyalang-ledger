@@ -445,3 +445,277 @@ def test_well_formed_bbox_is_accepted() -> None:
 def test_non_finite_money_is_rejected() -> None:
     with pytest.raises(ValidationError):
         ExtractedReceiptData(merchant_name="Kopi Shop", grand_total=Decimal("NaN"))
+
+
+# --------------------------------------------------------------------------- #
+# Tax basis (H1): Malaysian retail receipts print GST-inclusive line totals
+# --------------------------------------------------------------------------- #
+
+
+def _inclusive(**overrides) -> ParsedReceiptSchema:
+    """A retail till receipt: lines 7.42, GST 0.42, total 7.42 (audit 100.jpg)."""
+    base = {
+        "merchant_name": "Kedai ABC",
+        "invoice_date": TODAY - timedelta(days=7),
+        "invoice_number": "CS00011955",
+        "subtotal": Decimal("7.00"),
+        "tax_amount": Decimal("0.42"),
+        "grand_total": Decimal("7.42"),
+        "line_items": [_line(0, "BEG GUNI", "7.42")],
+    }
+    base.update(overrides)
+    parsed = ParsedReceiptSchema(**base)
+    if "fields" not in overrides:
+        parsed.fields = [
+            ExtractedField(name=name, confidence=0.95)
+            for name in ("merchant_name", "invoice_date", "grand_total")
+        ]
+    return parsed
+
+
+def test_inclusive_line_totals_do_not_double_count_tax() -> None:
+    """The audit's headline defect: a correct retail receipt was flagged.
+
+    ``Σ lines == grand_total`` here, so adding ``tax`` produced a delta exactly
+    equal to the GST and pushed every such receipt into needs-review.
+    """
+    data = _inclusive()
+
+    assert ReconcilerService.resolve_amount_basis(data) == "INCLUSIVE"
+    assert ReconcilerService._math_discrepancy(data) == Decimal("0.00")
+
+    result = ReconcilerService.audit_receipt(data, today=TODAY)
+    assert result.status is ReceiptStatus.STATUS_AUTO_VERIFIED
+    assert result.flags == []
+
+
+def test_exclusive_receipts_still_add_tax() -> None:
+    """The basis must not break trade invoices that print net line totals."""
+    data = _parsed()  # 14.50 + 85.00 lines, 5.97 tax, 105.47 total
+
+    assert ReconcilerService.resolve_amount_basis(data) == "EXCLUSIVE"
+    assert ReconcilerService._math_discrepancy(data) == Decimal("0.00")
+
+
+@pytest.mark.parametrize(
+    ("lines", "subtotal", "tax", "total"),
+    [
+        # The four inclusive receipts reproduced in the audit.
+        (["7.42"], "7.00", "0.42", "7.42"),
+        (["29.68"], "28.00", "1.68", "29.68"),
+        (["73.30"], "69.15", "4.15", "73.30"),
+        (["30.30"], "28.58", "1.72", "30.30"),
+    ],
+)
+def test_audited_inclusive_receipts_reconcile(
+    lines: list[str], subtotal: str, tax: str, total: str
+) -> None:
+    data = _inclusive(
+        subtotal=Decimal(subtotal),
+        tax_amount=Decimal(tax),
+        grand_total=Decimal(total),
+        line_items=[_line(0, "Item", value) for value in lines],
+    )
+
+    assert ReconcilerService._math_discrepancy(data) == Decimal("0.00")
+    assert ReconcilerService.audit_receipt(data, today=TODAY).flags == []
+
+
+def test_explicit_basis_overrides_inference() -> None:
+    """A recorded basis is trusted even when the numbers look like the other."""
+    data = _inclusive(amount_basis="EXCLUSIVE")
+
+    # 7.42 + 0.42 != 7.42, so an exclusive reading is a genuine mismatch.
+    assert ReconcilerService._math_discrepancy(data) == Decimal("0.42")
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("inclusive", "INCLUSIVE"),
+        ("Tax Inclusive", "INCLUSIVE"),
+        ("GST-INCLUSIVE", "INCLUSIVE"),
+        ("exclusive", "EXCLUSIVE"),
+        ("Tax Exclusive", "EXCLUSIVE"),
+        ("nonsense", None),
+        (None, None),
+    ],
+)
+def test_amount_basis_labels_are_canonicalised(
+    raw: str | None, expected: str | None
+) -> None:
+    from app.schemas.receipt import normalize_amount_basis
+
+    assert normalize_amount_basis(raw) == expected
+
+
+def test_unknown_basis_falls_back_to_inference() -> None:
+    """An uninterpretable label must not be trusted as either basis."""
+    data = _inclusive(amount_basis="???")
+    assert ReconcilerService.resolve_amount_basis(data) == "INCLUSIVE"
+
+
+def test_no_line_items_still_uses_subtotal_plus_tax() -> None:
+    """A faded receipt with only a printed subtotal keeps its old behaviour."""
+    data = _inclusive(line_items=[])
+
+    assert ReconcilerService.resolve_amount_basis(data) == "EXCLUSIVE"
+    assert ReconcilerService._math_discrepancy(data) == Decimal("0.00")
+
+
+# --------------------------------------------------------------------------- #
+# H2: a poisoned money value must never reach the database
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["1e400", "-1e400", "1e10", "9" * 30],
+)
+def test_unrepresentable_money_magnitudes_are_rejected(value: str) -> None:
+    """``Decimal("1e400")`` is finite but bricks every later read.
+
+    ``is_finite()`` let it through, SQLite stored it, and the driver's
+    ``quantize`` then raised ``InvalidOperation`` on every subsequent read — so
+    one bad ``PUT`` returned 500 for the whole workspace, permanently.
+    """
+    with pytest.raises(ValidationError):
+        ExtractedReceiptData(merchant_name="Kopi Shop", grand_total=Decimal(value))
+
+
+def test_representable_money_is_accepted() -> None:
+    data = ExtractedReceiptData(
+        merchant_name="Kopi Shop", grand_total=Decimal("9999999999.99")
+    )
+
+    assert data.grand_total == Decimal("9999999999.99")
+
+
+def test_update_request_rejects_poisoned_money() -> None:
+    """The same guard protects the edit path, not just extraction."""
+    from app.schemas.receipt import ReceiptUpdateRequest
+
+    with pytest.raises(ValidationError):
+        ReceiptUpdateRequest(grand_total=Decimal("1e400"))
+
+
+# --------------------------------------------------------------------------- #
+# Printed till-rounding line (the RM 0.04 false mismatch)
+# --------------------------------------------------------------------------- #
+
+
+def test_printed_rounding_line_reconciles_a_correct_receipt() -> None:
+    """71.50 + 4.29 - 0.04 = 75.75: a till that rounds to 5 sen is not an error.
+
+    Before ``rounding`` existed there was nowhere to put the printed adjustment,
+    so this receipt -- correct as printed -- reported MATH_MISMATCH_DELTA_0.04
+    and was routed to a human for a discrepancy that does not exist.
+    """
+    result = ReconcilerService.audit_receipt(
+        _parsed(
+            merchant_sst=None,
+            subtotal=Decimal("71.50"),
+            tax_amount=Decimal("4.29"),
+            grand_total=Decimal("75.75"),
+            rounding=Decimal("-0.04"),
+            line_items=[
+                _line(0, "Paku 2 Inci", "4.50"),
+                _line(1, "Cat Jotun", "38.00"),
+                _line(2, "Roller Brush", "24.00"),
+                _line(3, "Ampelas", "5.00"),
+            ],
+        ),
+        today=TODAY,
+    )
+
+    assert result.flags == []
+    assert result.math_discrepancy == Decimal("0.00")
+    assert result.status is ReceiptStatus.STATUS_AUTO_VERIFIED
+
+
+def test_rounding_does_not_mask_a_real_gap() -> None:
+    """A rounding line absorbs exactly its own value, not an arbitrary delta."""
+    result = ReconcilerService.audit_receipt(
+        _parsed(
+            merchant_sst=None,
+            tax_amount=Decimal("0.00"),
+            grand_total=Decimal("75.75"),
+            rounding=Decimal("-0.04"),
+            line_items=[_line(0, "Cat Jotun", "71.50")],
+        ),
+        today=TODAY,
+    )
+
+    # 71.50 + 0.00 - 0.04 = 71.46 against a printed 75.75.
+    assert "MATH_MISMATCH_DELTA_4.29" in result.flags
+
+
+def test_positive_rounding_reconciles() -> None:
+    """Tills round up as well: 10.00 + 0.00 + 0.03 = 10.03."""
+    result = ReconcilerService.audit_receipt(
+        _parsed(
+            merchant_sst=None,
+            tax_amount=Decimal("0.00"),
+            grand_total=Decimal("10.03"),
+            rounding=Decimal("0.03"),
+            line_items=[_line(0, "Paku", "10.00")],
+        ),
+        today=TODAY,
+    )
+
+    assert result.flags == []
+    assert result.math_discrepancy == Decimal("0.00")
+
+
+def test_rounding_survives_the_money_bound() -> None:
+    """The H2 magnitude guard covers rounding like every other money field."""
+    with pytest.raises(ValidationError):
+        ExtractedReceiptData(rounding=Decimal("1e11"))
+
+
+def test_absent_rounding_keeps_the_identity_unchanged() -> None:
+    """No printed rounding line must behave exactly as before the field existed."""
+    result = ReconcilerService.audit_receipt(_parsed(), today=TODAY)
+
+    assert result.math_discrepancy == Decimal("0.00")
+    assert result.status is ReceiptStatus.STATUS_AUTO_VERIFIED
+
+
+# --------------------------------------------------------------------------- #
+# SST registration format
+# --------------------------------------------------------------------------- #
+
+
+def test_malformed_sst_number_is_flagged() -> None:
+    """A structurally broken SST ID cannot be exported as a scheme ID."""
+    result = ReconcilerService.audit_receipt(
+        _parsed(merchant_sst="W10-18-32000018"), today=TODAY
+    )
+
+    assert "SST_FORMAT_INVALID" in result.flags
+
+
+def test_well_formed_sst_number_is_not_flagged() -> None:
+    result = ReconcilerService.audit_receipt(_parsed(), today=TODAY)
+
+    assert "SST_FORMAT_INVALID" not in result.flags
+
+
+def test_absent_sst_number_is_not_a_format_error() -> None:
+    """A merchant with no SST number is a different finding, not a malformed one."""
+    result = ReconcilerService.audit_receipt(_parsed(merchant_sst=None), today=TODAY)
+
+    assert "SST_FORMAT_INVALID" not in result.flags
+
+
+def test_sst_digit_substitution_stays_undetectable() -> None:
+    """1808 -> 7808 is well-formed; the format has no check digit to catch it.
+
+    Pinned as a known limit so nobody reads SST_FORMAT_INVALID as proof that a
+    printed-ID misread has been solved. Only the confidence gate stands there.
+    """
+    result = ReconcilerService.audit_receipt(
+        _parsed(merchant_sst="W10-7808-32000018"), today=TODAY
+    )
+
+    assert "SST_FORMAT_INVALID" not in result.flags

@@ -15,7 +15,12 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 from app.models.receipt import ReceiptStatus
-from app.schemas.receipt import ParsedReceiptSchema
+from app.schemas.receipt import (
+    AMOUNT_BASIS_EXCLUSIVE,
+    AMOUNT_BASIS_INCLUSIVE,
+    ParsedReceiptSchema,
+    normalize_amount_basis,
+)
 
 # docs/05_trd.md §5.4 line 140: rounding slack on the arithmetic identity.
 MATH_TOLERANCE: Decimal = Decimal("0.02")
@@ -26,6 +31,12 @@ MAX_RECEIPT_AGE_DAYS: int = 365
 
 # SST registration format, e.g. W10-1808-32000018 (docs/05_trd.md §5.3.1).
 SST_NUMBER_RE = re.compile(r"^[A-Z]\d+-\d+-\d+$")
+# The registered shape: state letter + 2-digit state code, 4-digit branch, 8-digit
+# serial. Stricter than SST_NUMBER_RE, which only has to find a token inside a
+# compound field; this one decides whether the value is a usable registration.
+# There is no check digit in the format, so it catches structural damage only --
+# a well-formed digit substitution (1808 -> 7808) still passes.
+SST_REGISTRATION_RE = re.compile(r"^[A-Z]\d{2}-\d{4}-\d{8}$")
 # Receipts print the SST ID next to the BRN ("200401032489 / Y24-1808-31015655"),
 # so extraction and manual entry both concatenate the two. Search anywhere in the
 # field for the first well-formed SST number instead of demanding the whole string.
@@ -111,6 +122,16 @@ class ReconcilerService:
         if not data.tax_amount and ReconcilerService._is_sst_registered(data):
             flags.append("MISSING_SST_ON_REGISTERED_MERCHANT")
 
+        # 3c. An SST number was printed but does not fit the registration format.
+        # This catches structurally broken reads (dropped group, letter where a
+        # digit belongs). It cannot catch a plausible-looking digit substitution
+        # such as 1808 -> 7808: the format carries no check digit, so only the
+        # confidence gate stands between a wrong-but-well-formed ID and the
+        # export. Flagged rather than silently accepted.
+        sst_number = extract_sst_number(data.merchant_sst)
+        if sst_number is not None and not SST_REGISTRATION_RE.match(sst_number):
+            flags.append("SST_FORMAT_INVALID")
+
         # 4. Confidence gate
         # One flag per field: joining the names produced a single chip reading
         # "LOW_CONFIDENCE_merchant_sst_invoice_date", which is indistinguishable
@@ -146,28 +167,75 @@ class ReconcilerService:
         )
 
     @staticmethod
+    def resolve_amount_basis(data: ParsedReceiptSchema) -> str:
+        """Which arithmetic identity this receipt's line totals satisfy.
+
+        The printed basis wins when the extractor reported one. Otherwise infer
+        it from the numbers: an exclusive receipt satisfies ``Σlines + tax ==
+        total``, an inclusive one satisfies ``Σlines == total``. Exclusive is
+        tested first so a receipt with no tax (where both hold) is unchanged from
+        the pre-basis behaviour. A receipt that satisfies neither is treated as
+        exclusive, which is what the reconciler has always assumed, so an
+        unreconcilable record still reports the same delta it did before.
+        """
+        explicit = normalize_amount_basis(data.amount_basis)
+        if explicit is not None:
+            return explicit
+
+        if data.grand_total is None or not data.line_items:
+            return AMOUNT_BASIS_EXCLUSIVE
+
+        tax = data.tax_amount or Decimal("0.00")
+        line_sum = sum(
+            (item.line_total for item in data.line_items), Decimal("0.00")
+        )
+        if abs((line_sum + tax) - data.grand_total) <= MATH_TOLERANCE:
+            return AMOUNT_BASIS_EXCLUSIVE
+        if abs(line_sum - data.grand_total) <= MATH_TOLERANCE:
+            return AMOUNT_BASIS_INCLUSIVE
+        return AMOUNT_BASIS_EXCLUSIVE
+
+    @staticmethod
     def _math_discrepancy(data: ParsedReceiptSchema) -> Decimal | None:
-        """``|sum(line_total) + tax - grand_total|``, or None when unreconcilable.
+        """``|expected - grand_total|``, or None when unreconcilable.
 
         Line items are authoritative; a faded receipt with no readable lines falls
         back to the printed subtotal (docs/05_trd.md §5.4 line 142).
+
+        ``expected`` depends on the tax basis (docs/05_trd.md §5.4): when the
+        printed line totals are GST-inclusive they already contain the tax, so
+        adding ``tax`` counts it twice — the bug that flagged every correct
+        Malaysian retail receipt with a delta exactly equal to the tax.
+
+        A printed till-rounding line is part of the receipt's own arithmetic, so
+        it joins the identity rather than being absorbed by a wider tolerance.
+        Without it a correctly-printed receipt that rounds 75.79 down to 75.75
+        reports a RM 0.04 error that the accountant cannot fix.
         """
         if data.grand_total is None:
             return None
         tax = data.tax_amount or Decimal("0.00")
+        rounding = data.rounding or Decimal("0.00")
+        basis = ReconcilerService.resolve_amount_basis(data)
 
         if data.line_items:
             expected = sum(
                 (item.line_total for item in data.line_items), Decimal("0.00")
             )
+            if basis == AMOUNT_BASIS_EXCLUSIVE:
+                expected += tax
         elif data.subtotal is not None:
-            expected = data.subtotal
+            # A printed subtotal is the tax-exclusive figure on the receipt
+            # layouts this app targets, so tax is added on top either way.
+            expected = data.subtotal + tax
         else:
             return None
 
+        expected += rounding
+
         # Raw delta: the RM 0.02 tolerance is compared against this unquantized
         # value, so a 0.024 gap is not silently rounded down to 0.02 first.
-        return abs((expected + tax) - data.grand_total)
+        return abs(expected - data.grand_total)
 
     @staticmethod
     def _is_sst_registered(data: ParsedReceiptSchema) -> bool:
