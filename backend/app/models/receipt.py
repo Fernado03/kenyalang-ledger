@@ -97,6 +97,16 @@ class Receipt(Base):
         Money, nullable=True, default=Decimal("0.00")
     )
     grand_total: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    # Printed till-rounding line ("ROUNDING -0.04"), signed. Separate from
+    # grand_total so the arithmetic identity can balance without either widening
+    # the tolerance or pretending the receipt was wrong.
+    rounding: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    # Whether the printed line totals already include the tax (docs/05_trd.md
+    # §5.4). Malaysian retail receipts print GST-inclusive line amounts, but
+    # trade invoices print them exclusive, so the basis has to travel with the
+    # data instead of being assumed by the reconciler. NULL means "not
+    # recorded" — older rows — and the reconciler then infers from the numbers.
+    amount_basis: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     # Validation & confidence telemetry
     overall_confidence: Mapped[Decimal | None] = mapped_column(

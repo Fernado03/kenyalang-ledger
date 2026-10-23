@@ -25,6 +25,10 @@ __all__ = [
 
 
 CATEGORY_DDL = "VARCHAR(16) NOT NULL DEFAULT 'OTHER'"
+# Whether a receipt's printed line totals are GST-inclusive (docs/05_trd.md §5.4).
+# Nullable: rows written before the basis was recorded keep NULL and are inferred.
+BASIS_DDL = "VARCHAR(16)"
+ROUNDING_DDL = "NUMERIC(12, 2)"
 
 
 def init_db(target_engine: Engine | None = None) -> None:
@@ -60,6 +64,20 @@ def _apply_additive_guards(target_engine: Engine) -> None:
                     f"ADD COLUMN IF NOT EXISTS expense_category {CATEGORY_DDL}"
                 )
             )
+        with target_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE receipts "
+                    f"ADD COLUMN IF NOT EXISTS amount_basis {BASIS_DDL}"
+                )
+            )
+        with target_engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE receipts "
+                    f"ADD COLUMN IF NOT EXISTS rounding {ROUNDING_DDL}"
+                )
+            )
         return
 
     with target_engine.begin() as conn:
@@ -74,3 +92,17 @@ def _apply_additive_guards(target_engine: Engine) -> None:
                     f"ADD COLUMN expense_category {CATEGORY_DDL}"
                 )
             )
+
+    with target_engine.begin() as conn:
+        receipt_columns = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(receipts)"))
+        }
+        if "amount_basis" not in receipt_columns:
+            conn.execute(
+                text(
+                    f"ALTER TABLE receipts ADD COLUMN amount_basis {BASIS_DDL}"
+                )
+            )
+        # Money column: NUMERIC on Postgres, the project's Money type on SQLite.
+        if "rounding" not in receipt_columns:
+            conn.execute(text("ALTER TABLE receipts ADD COLUMN rounding NUMERIC(12, 2)"))

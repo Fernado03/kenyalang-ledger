@@ -16,12 +16,59 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.receipt import ReceiptStatus
 
+# docs/05_trd.md §5.4: whether a receipt's line totals already include tax.
+AMOUNT_BASIS_INCLUSIVE = "INCLUSIVE"
+AMOUNT_BASIS_EXCLUSIVE = "EXCLUSIVE"
+
+_INCLUSIVE_ALIASES = frozenset(
+    {"INCLUSIVE", "TAX_INCLUSIVE", "GST_INCLUSIVE", "SST_INCLUSIVE", "INC"}
+)
+_EXCLUSIVE_ALIASES = frozenset(
+    {"EXCLUSIVE", "TAX_EXCLUSIVE", "GST_EXCLUSIVE", "SST_EXCLUSIVE", "EXC"}
+)
+
+# ``Money`` is NUMERIC(12, 2): ten integer digits plus two decimals. Anything
+# at or beyond 1e10 cannot be stored, and an out-of-range exponent such as
+# ``1e400`` makes the driver's ``quantize`` raise on every later read.
+MONEY_LIMIT: Decimal = Decimal("1e10")
+
 
 def _finite_money(value: Decimal | None) -> Decimal | None:
-    """Reject NaN/Infinity at the LLM trust boundary (docs/05_trd.md §5.4)."""
-    if value is not None and not value.is_finite():
+    """Reject NaN/Infinity and unrepresentable magnitudes at the trust boundary.
+
+    ``is_finite()`` alone is not enough. ``Decimal("1e400")`` is finite but has an
+    exponent far outside ``NUMERIC(12, 2)``: SQLite stores it, then every later
+    read raises ``InvalidOperation`` while the driver quantises it back to two
+    decimal places, so one bad ``PUT`` bricks the whole workspace. The bound is
+    the largest value the Money column can hold, checked before it is written.
+    """
+    if value is None:
+        return value
+    if not value.is_finite():
         raise ValueError("monetary value must be finite")
+    if abs(value) >= MONEY_LIMIT:
+        raise ValueError(
+            f"monetary value must be smaller than {MONEY_LIMIT:.0e} in magnitude"
+        )
     return value
+
+
+def normalize_amount_basis(value: str | None) -> str | None:
+    """Canonicalise a tax-basis label, or ``None`` when it is not recognised.
+
+    Extraction models return free text, so accept the common spellings rather
+    than failing the whole receipt over "Tax Inclusive". An unrecognised value
+    becomes ``None``, which makes the reconciler infer the basis from the
+    numbers instead of trusting a label it cannot interpret.
+    """
+    if value is None:
+        return None
+    text = str(value).strip().upper().replace("-", "_").replace(" ", "_")
+    if text in _INCLUSIVE_ALIASES:
+        return AMOUNT_BASIS_INCLUSIVE
+    if text in _EXCLUSIVE_ALIASES:
+        return AMOUNT_BASIS_EXCLUSIVE
+    return None
 
 
 def _validate_bbox(bbox: list[float] | None) -> list[float] | None:
@@ -62,9 +109,7 @@ class LineItemSchema(BaseModel):
 class ExtractedReceiptData(BaseModel):
     """Structured extraction schema passed directly to the LLM (§6.2)."""
 
-    merchant_name: str | None = Field(
-        None, description="Trade name of supplier/shop"
-    )
+    merchant_name: str | None = Field(None, description="Trade name of supplier/shop")
     merchant_brn: str | None = Field(
         None, description="Malaysian Business Registration Number"
     )
@@ -83,13 +128,36 @@ class ExtractedReceiptData(BaseModel):
     )
     # Nullable so a missing total reaches the audit instead of aborting extraction;
     # the reconciler flags it INVALID_GRAND_TOTAL (docs/05_trd.md §5.4).
-    grand_total: Decimal | None = Field(
-        None, description="Final payable amount in MYR"
+    grand_total: Decimal | None = Field(None, description="Final payable amount in MYR")
+    # Malaysian tills round the payable total to the nearest 5 sen and print the
+    # adjustment as its own line ("ROUNDING -0.04"). It is neither a discount nor
+    # tax, so without a field of its own it made a *correct* receipt look like a
+    # RM 0.04 arithmetic error. Signed: negative when the till rounded down.
+    rounding: Decimal | None = Field(
+        None,
+        description=(
+            "Printed rounding adjustment applied to reach the grand total, "
+            "signed (e.g. -0.04). Omit when the receipt prints no such line."
+        ),
     )
     line_items: list[LineItemSchema] = Field(default_factory=list)
+    # Whether ``line_items[].line_total`` already includes ``tax_amount``
+    # (docs/05_trd.md §5.4). Malaysian retail till receipts print GST-inclusive
+    # line amounts; trade invoices print them exclusive. Recording the basis is
+    # what stops the reconciler from double-counting tax on every GST receipt.
+    amount_basis: str | None = Field(
+        None,
+        description=(
+            "INCLUSIVE when the printed line amounts already include the tax, "
+            "EXCLUSIVE when tax is added on top of them"
+        ),
+    )
 
-    _finite_money = field_validator("subtotal", "tax_amount", "grand_total")(
-        _finite_money
+    _finite_money = field_validator(
+        "subtotal", "tax_amount", "grand_total", "rounding"
+    )(_finite_money)
+    _normalize_amount_basis = field_validator("amount_basis", mode="before")(
+        normalize_amount_basis
     )
 
 
@@ -172,6 +240,7 @@ class ReceiptListItem(BaseModel):
     tax_amount: Decimal | None
     grand_total: Decimal | None
     status: ReceiptStatus
+    processing_error: str | None
     validation_flags: list[str]
     overall_confidence: float | None
     math_discrepancy: Decimal | None
@@ -227,6 +296,8 @@ class ReceiptDetailResponse(BaseModel):
     subtotal: Decimal | None
     tax_amount: Decimal | None
     grand_total: Decimal | None
+    rounding: Decimal | None
+    amount_basis: str | None
     math_discrepancy: Decimal | None
     overall_confidence: float | None
     validation_flags: list[str]
@@ -269,10 +340,15 @@ class ReceiptUpdateRequest(BaseModel):
     subtotal: Decimal | None = None
     tax_amount: Decimal | None = None
     grand_total: Decimal | None = None
+    rounding: Decimal | None = None
+    amount_basis: str | None = None
     line_items: list[ReceiptUpdateLineItem] | None = None
 
-    _finite_money = field_validator("subtotal", "tax_amount", "grand_total")(
-        _finite_money
+    _finite_money = field_validator(
+        "subtotal", "tax_amount", "grand_total", "rounding"
+    )(_finite_money)
+    _normalize_amount_basis = field_validator("amount_basis", mode="before")(
+        normalize_amount_basis
     )
 
 
