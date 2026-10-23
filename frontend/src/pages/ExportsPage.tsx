@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   downloadAccountingCsv,
   downloadBothExports,
   downloadMyInvoisJson,
+  getDashboardSummary,
   markExported,
 } from '../api/client';
 import AppShell from '../components/AppShell';
@@ -29,8 +30,12 @@ export default function ExportsPage(): JSX.Element {
   const [isExportingJson, setIsExportingJson] = useState(false);
   const [isExportingBoth, setIsExportingBoth] = useState(false);
   const [isMarking, setIsMarking] = useState(false);
+  const [confirmingMark, setConfirmingMark] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const markTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const markStripRef = useRef<HTMLDivElement | null>(null);
+  const markWasOpen = useRef(false);
   const clients = useReceiptStore((state) => state.clients);
   const loadClients = useReceiptStore((state) => state.loadClients);
   const loadClientReceipts = useReceiptStore((state) => state.loadClientReceipts);
@@ -41,6 +46,52 @@ export default function ExportsPage(): JSX.Element {
     // Aggregates shown elsewhere must be fresh on entry, like the dashboard.
     void loadClients();
   }, [clientId, loadClients]);
+
+  // Opening on the calendar month exports nothing for a client whose books are
+  // older, and the page gives no sign that the empty batch is a month problem
+  // rather than a missing-receipt problem. Ask the API which month it would
+  // default to and adopt that, so the first view matches the data.
+  //
+  // Guarded by "has the user chosen a month yet", not by a ran-once ref: React
+  // StrictMode mounts twice, and a ref guard would swallow the first (cancelled)
+  // mount's request and never issue a second one.
+  const [monthTouched, setMonthTouched] = useState(false);
+  useEffect(() => {
+    if (!clientId || monthTouched) return undefined;
+    let cancelled = false;
+    void getDashboardSummary(clientId)
+      .then((summary) => {
+        if (!cancelled && !monthTouched) setSelectedMonth(summary.month);
+      })
+      .catch(() => {
+        // Leave the calendar month in place: an unreachable API is reported by
+        // the export actions themselves, not by a silent month swap.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, monthTouched]);
+
+  useEffect(() => {
+    if (confirmingMark) {
+      markWasOpen.current = true;
+      markStripRef.current?.focus();
+    } else if (markWasOpen.current && !isMarking) {
+      markWasOpen.current = false;
+      markTriggerRef.current?.focus();
+    }
+  }, [confirmingMark, isMarking]);
+
+  useEffect(() => {
+    if (!confirmingMark) return undefined;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setConfirmingMark(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirmingMark]);
 
   if (!clientId) {
     return (
@@ -125,6 +176,8 @@ export default function ExportsPage(): JSX.Element {
     }
   };
 
+  const markScope = selectedMonth ? `the selected month (${selectedMonth})` : 'all billing dates';
+
   return (
     <AppShell clientId={clientId}>
       <div className="page-shell">
@@ -151,13 +204,20 @@ export default function ExportsPage(): JSX.Element {
                   id="month-picker"
                   type="month"
                   value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  onChange={(event) => {
+                    // An explicit choice must win over the default-month fetch.
+                    setMonthTouched(true);
+                    setSelectedMonth(event.target.value);
+                  }}
                   className="field-input w-auto font-mono-numbers"
                 />
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedMonth('')}
+                onClick={() => {
+                  setMonthTouched(true);
+                  setSelectedMonth('');
+                }}
                 aria-pressed={selectedMonth === ''}
                 title="Export all verified receipts without month filter"
                 className={`btn btn-secondary ${
@@ -243,9 +303,15 @@ export default function ExportsPage(): JSX.Element {
 
                 <div className="flex flex-col gap-1 sm:border-l sm:border-border sm:pl-4">
                   <button
+                    ref={markTriggerRef}
                     type="button"
-                    onClick={() => void handleMarkExported()}
-                    disabled={isMarking || isExportingBoth || isExportingCsv || isExportingJson}
+                    onClick={() => setConfirmingMark(true)}
+                    disabled={
+                      confirmingMark || isMarking || isExportingBoth || isExportingCsv || isExportingJson
+                    }
+                    aria-expanded={confirmingMark}
+                    aria-controls="mark-export-confirmation"
+                    aria-describedby="mark-export-note"
                     className="btn btn-ghost w-full justify-start border-border-strong sm:w-auto"
                   >
                     {isMarking ? 'Marking...' : 'Mark exported'}
@@ -253,13 +319,51 @@ export default function ExportsPage(): JSX.Element {
                 </div>
               </div>
             </div>
-            {/* Outside the row: a two-line caption inside made the right cluster
-                76px tall, so items-center pushed the sentence 16px below the
-                buttons. Here it hangs under Marking without moving anything. */}
-            <p className="mt-2 text-micro text-text-muted lg:text-right">
-              Downloads leave receipt statuses unchanged. Marking is a separate, explicit
-              action.
+            {/* The warning stays below the controls so the header row keeps its baseline. */}
+            <p id="mark-export-note" className="mt-2 text-micro text-text-muted lg:text-right">
+              Downloads leave receipt statuses unchanged. Marking is separate and permanent: it
+              locks every verified receipt for {markScope} from further edits.
             </p>
+            {confirmingMark ? (
+              <div
+                id="mark-export-confirmation"
+                ref={markStripRef}
+                tabIndex={-1}
+                role="group"
+                aria-labelledby="mark-export-confirmation-heading"
+                className="mt-3 flex flex-wrap items-center justify-between gap-3 border-l-[3px] border-l-mismatch-text bg-mismatch-bg py-3 pl-3 pr-2"
+              >
+                <p
+                  id="mark-export-confirmation-heading"
+                  role="alert"
+                  className="flex min-w-0 items-center gap-2 text-ui font-semibold text-mismatch-text"
+                >
+                  <Icon name="alert" size={16} />
+                  Mark these receipts as exported? This cannot be undone. Every verified receipt for{' '}
+                  {markScope} will become read-only.
+                </p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm text-mismatch-text"
+                    onClick={() => setConfirmingMark(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    disabled={isMarking}
+                    onClick={() => {
+                      setConfirmingMark(false);
+                      void handleMarkExported();
+                    }}
+                  >
+                    {isMarking ? 'Marking...' : 'Confirm mark exported'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* Accounting CSV */}
@@ -274,17 +378,27 @@ export default function ExportsPage(): JSX.Element {
                   Purchase journal batch import compatible with AutoCount and SQL Account desktop
                   systems.
                 </p>
-                <div className="mt-2 overflow-x-auto">
+                <div
+                  className="mt-2 overflow-x-auto"
+                  tabIndex={0}
+                  role="group"
+                  aria-label="CSV export metadata"
+                >
                   <p className="whitespace-nowrap font-mono text-micro text-text-muted">
                     Purchase journal · 11 columns · DocDate → TotalAmount
                   </p>
                 </div>
                 <details className="mt-3">
-                  <summary className="flex w-fit items-center gap-1 text-label text-text-secondary hover:text-text-primary">
+                  <summary className="flex min-h-11 w-fit items-center gap-1 py-2 text-label text-text-secondary hover:text-text-primary lg:min-h-0 lg:py-0">
                     <Icon name="chevron-right" size={14} />
                     Column mapping
                   </summary>
-                  <div className="mt-2 overflow-x-auto border-l-2 border-border pl-3">
+                  <div
+                    className="mt-2 overflow-x-auto border-l-2 border-border pl-3"
+                    tabIndex={0}
+                    role="group"
+                    aria-label="CSV column mapping"
+                  >
                     <p className="whitespace-nowrap font-mono text-micro leading-5 text-text-secondary">
                       {CSV_COLUMNS}
                     </p>
@@ -316,22 +430,34 @@ export default function ExportsPage(): JSX.Element {
                   A UBL-shaped draft modelled on the official SDK sample; it is not validated
                   against the LHDN schema, not signed, and never submitted.
                 </p>
-                <div className="mt-2 overflow-x-auto">
+                <div
+                  className="mt-2 overflow-x-auto"
+                  tabIndex={0}
+                  role="group"
+                  aria-label="JSON export metadata"
+                >
                   <p className="whitespace-nowrap font-mono text-micro text-text-muted">
                     UBL 2.1 · 1.1-Invoice-MultiLineItem-Sample.json · draft envelope, unsigned
                   </p>
                 </div>
                 <details className="mt-3">
-                  <summary className="flex w-fit items-center gap-1 text-label text-text-secondary hover:text-text-primary">
+                  <summary className="flex min-h-11 w-fit items-center gap-1 py-2 text-label text-text-secondary hover:text-text-primary lg:min-h-0 lg:py-0">
                     <Icon name="chevron-right" size={14} />
                     Schema notes
                   </summary>
-                  <ul className="mt-2 space-y-1 border-l-2 border-border pl-3 text-label leading-5 text-text-secondary">
-                    <li>UBL 2.1 CommonBasic and CommonAggregate namespaces</li>
-                    <li>PartyIdentification carries the merchant BRN and SST registration number</li>
-                    <li>InvoiceLine tax allocated from the document tax total</li>
-                    <li>Draft MyInvois envelope — validate before submission.</li>
-                  </ul>
+                  <div
+                    className="mt-2 max-h-64 overflow-y-auto border-l-2 border-border pl-3"
+                    tabIndex={0}
+                    role="group"
+                    aria-label="JSON schema notes"
+                  >
+                    <ul className="space-y-1 text-label leading-5 text-text-secondary">
+                      <li>UBL 2.1 CommonBasic and CommonAggregate namespaces</li>
+                      <li>PartyIdentification carries the merchant BRN and SST registration number</li>
+                      <li>InvoiceLine tax allocated from the document tax total</li>
+                      <li>Draft MyInvois envelope — validate before submission.</li>
+                    </ul>
+                  </div>
                 </details>
               </div>
             </div>

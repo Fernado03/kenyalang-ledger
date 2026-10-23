@@ -147,7 +147,7 @@ Every view must explicitly handle all **5 UX States**: Empty, Loading, Populated
     * **Month picker:** `type="month"`; clearing it exports all verified receipts (the input title states this). The label reads *"Filtering verified receipts for {month}"*.
     * **Export Option A (CSV):** A single accounting CSV purchase journal mapped for AutoCount / SQL Account import (11 columns, `DocDate` → `TotalAmount`), with the column list available in a native details disclosure.
     * **Export Option B (LHDN MyInvois v1.1 JSON):** Formatted multi-line JSON modelled on `1.1-Invoice-MultiLineItem-Sample.json`, labelled *"Draft MyInvois envelope — validate before submission."* There is no schema-validator badge and no compliance claim.
-    * **Download both:** One action downloads the CSV and JSON together; each row also has its own download button. A separate **Mark exported** action moves verified receipts to `STATUS_EXPORTED`; downloading never changes receipt status.
+    * A separate **Mark exported** action moves verified receipts to `STATUS_EXPORTED`; downloading never changes receipt status. Marking opens an inline confirmation naming the selected month or all-time scope because the transition is permanent and makes the receipts read-only.
 
 ### `SCR-06`: Spend Dashboard (`/clients/:clientId/dashboard`)
 
