@@ -67,7 +67,6 @@ class HealthResponse(BaseModel):
 
     status: str
     database: str
-    dialect: str
     version: str
 
 

@@ -46,8 +46,12 @@ def health_live() -> HealthLiveResponse:
 
 @router.get("/health/ready", response_model=HealthResponse)
 def health_ready(db: DbSession) -> HealthResponse:
-    """Readiness: return 200 only when the database answers a trivial query."""
-    dialect = db.bind.dialect.name if db.bind is not None else "unknown"
+    """Readiness: return 200 only when the database answers a trivial query.
+
+    Deliberately reports only *that* the database answered. Naming the engine
+    ("postgresql" / "sqlite") is unauthenticated stack fingerprinting (L3) and
+    tells a legitimate operator nothing they cannot see in their own config.
+    """
     try:
         db.execute(text("SELECT 1"))
     except SQLAlchemyError as exc:
@@ -56,7 +60,7 @@ def health_ready(db: DbSession) -> HealthResponse:
             detail="database unavailable",
         ) from exc
     return HealthResponse(
-        status="ok", database="connected", dialect=dialect, version=API_VERSION
+        status="ok", database="connected", version=API_VERSION
     )
 
 

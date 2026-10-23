@@ -14,13 +14,18 @@ def test_live_is_ok_without_authentication(test_app: TestClient) -> None:
     assert body["version"]
 
 
-def test_ready_reports_the_sqlite_database(client: TestClient) -> None:
+def test_ready_reports_connectivity_without_fingerprinting_the_stack(
+    client: TestClient,
+) -> None:
     response = client.get("/api/health/ready")
 
     assert response.status_code == 200
     body = response.json()
     assert body["database"] == "connected"
-    assert body["dialect"] == "sqlite"
+    assert body["status"] == "ok"
+    # The engine name is unauthenticated stack disclosure (L3), so the probe
+    # reports connectivity only.
+    assert "dialect" not in body
 
 
 def test_ready_is_503_when_the_database_is_unavailable(
