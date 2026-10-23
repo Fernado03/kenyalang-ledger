@@ -13,10 +13,25 @@ function currentMonth(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** `2026-05` -> `May 2026`, for copy that names a month in prose. */
+function monthLabel(month: string): string {
+  const [year, index] = month.split('-');
+  const parsed = new Date(Date.UTC(Number(year), Number(index) - 1, 1));
+  if (Number.isNaN(parsed.getTime())) return month;
+  return parsed.toLocaleDateString('en-MY', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 /** SCR-06 spend dashboard: month total, top suppliers, category split. */
 export default function DashboardPage() {
   const { clientId } = useParams<{ clientId: string }>();
-  const [month, setMonth] = useState(currentMonth);
+  // '' means "no explicit choice": the API then answers with the month the
+  // console should show (today when it holds receipts, otherwise the newest
+  // month that does). Sending today's month up front would defeat that.
+  const [month, setMonth] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [result, setResult] = useState<{
     requestKey: string;
@@ -35,6 +50,9 @@ export default function DashboardPage() {
   const loading = clientId !== undefined && result.requestKey !== requestKey;
   const summary = loading ? null : result.summary;
   const error = loading ? null : result.error;
+  // The picker shows what is actually on screen, which is the server's answer
+  // until the user picks a month of their own.
+  const displayMonth = month || summary?.month || currentMonth();
 
   // Counts and spend come from two endpoints, so one effect owns both: the
   // workspace aggregates are refreshed first, then the summary. Splitting them
@@ -96,7 +114,7 @@ export default function DashboardPage() {
               <input
                 id="dashboard-month"
                 type="month"
-                value={month}
+                value={displayMonth}
                 onChange={(event) => setMonth(event.target.value)}
                 className="field-input w-auto font-mono-numbers"
               />
@@ -121,6 +139,25 @@ export default function DashboardPage() {
           />
         ) : (
           <>
+            {summary.latest_month !== null && summary.latest_month !== summary.month ? (
+              <p
+                role="status"
+                className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 border-l-[3px] border-warning-border bg-warning-bg/60 px-3 py-2 text-ui text-warning-text"
+              >
+                <span>
+                  No verified spend in {monthLabel(summary.month)}. Latest activity is{' '}
+                  {monthLabel(summary.latest_month)}.
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost px-1 underline underline-offset-4"
+                  onClick={() => setMonth(summary.latest_month as string)}
+                >
+                  Go to {monthLabel(summary.latest_month)}
+                </button>
+              </p>
+            ) : null}
+
             <section aria-labelledby="spend-heading">
               <h2 id="spend-heading" className="section-title">
                 Spend this month

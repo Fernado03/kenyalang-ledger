@@ -125,6 +125,8 @@ export interface CategoryBreakdown {
 /** `GET /api/v1/clients/{clientId}/dashboard/summary` response. */
 export interface DashboardSummary {
   month: string;
+  /** Newest month with any receipt for this client; null when the workspace is empty. */
+  latest_month: string | null;
   total_spend: string;
   top_suppliers: TopSupplier[];
   category_breakdown: CategoryBreakdown[];
