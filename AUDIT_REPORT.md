@@ -337,6 +337,10 @@ Worth stating plainly, because these are the parts that make the demo land.
 
 ## 8. Gate Results
 
+> **Addendum (post-remediation).** Every finding in §2–§5 has since been fixed; the
+> table below records the state the audit found, not the current tree. See
+> §12 for the remediation summary and the gates re-run afterwards.
+
 All gates were re-run for this report.
 
 | Gate | Command | Result |
@@ -403,6 +407,51 @@ Things that will bite during a live walkthrough:
 5. **M1, M2** — status bucket completeness and upload polling. Both are visible on a normal demo path.
 6. **M3, M4** — focus and Escape handling. Cheap fixes, remove the two ways a user can destroy data by accident.
 7. Everything else is polish.
+
+---
+
+## 12. Remediation
+
+All 16 findings are fixed. Each row names the mechanism, so the fix can be reviewed
+against the defect rather than trusted.
+
+| ID | Status | Fix |
+|---|---|---|
+| H1 | Fixed | `amount_basis` (`INCLUSIVE`/`EXCLUSIVE`) added to the extraction schema, the prompt, the `receipts` table and the review console. `ReconcilerService.resolve_amount_basis` honours an explicit label and otherwise infers — exclusive first, so no-tax receipts behave as before. `_math_discrepancy` adds tax only on an exclusive basis; UBL/CSV normalise inclusive line totals back to net. |
+| H2 | Fixed | `_finite_money` rejects `|v| >= 1e10`, the `NUMERIC(12,2)` ceiling, so `1e400` can no longer be stored and wedge `quantize` on every later read. |
+| H3 | Fixed | `_csv_text` strips `\x00-\x1f`/`\x7f` *before* the formula-prefix guard (`\n` added to the prefix set) and the writer uses `QUOTE_ALL`. |
+| H4 | Fixed | Pure-ASGI `BodyLimitMiddleware` rejects on `Content-Length` before routing and counts streamed bytes; 50 MB cap, registered outermost so it runs before auth. |
+| M1 | Fixed | `ERROR` added to the status filter and `status_counts`; `PROCESSING` widened to cover `PENDING_UPLOAD`/`UPLOADED`; the buckets now partition the enum and sum to `ALL`. Failed rows expose `processing_error` and get an **Errors** tab. |
+| M2 | Fixed | `refreshUploadStatuses()` polls the whole batch with one request every 3 s and stops at a settled status. |
+| M3 | Fixed | The line-item grid clears `focusedLineKey` on blur that leaves the table; delete-line is additionally gated on containment. |
+| M4 | Fixed | `Escape` returns `null` from the shortcut resolver. It cancels a band or blurs, never arms reject. |
+| M5 | Fixed | Update re-runs `audit_receipt` over the persisted row, so every flag describes the row that exists. Manually-edited fields get confidence `1.0`. |
+| M6 | Fixed | The filter strip gained a right-edge fade, `tabIndex={0}` and a scroll hint, so the clipped tab is discoverable. |
+| M7 | Fixed | A mismatch makes the primary action `Verify anyway`, which opens a labelled confirmation band; `Ctrl+↵` takes the same gate. |
+| L1 | Fixed | The save-error line carries `role="alert"`. |
+| L2 | Fixed | Audit rows are keyed `line_items[{index}]` with `desc @ total` values instead of a row count. |
+| L3 | Fixed | `/api/health/ready` no longer reports `dialect`. |
+| L4 | Fixed | `statusCounts` resets when the workspace changes. |
+| L5 | Fixed | Stacked inbox cells label `Date` and `Total` at narrow widths. |
+| Docs | Fixed | TRD §5.4 states the tax basis and its inference rule; the API doc covers `amount_basis`, the `ERROR` bucket, `processing_error`, the health payload and the re-derivation semantics; the UI spec covers Escape, the override band and the basis-aware summary. |
+
+### 12.1 Findings from the live re-test
+
+The remediation above was verified by using the application, not by re-reading it. Doing so
+surfaced four more defects that no static review had caught, plus one export gap:
+
+| ID | Severity | Defect | Fix |
+|---|---|---|---|
+| R1 | High | The dashboard and Exports both opened on the calendar month. With the books in May and "today" in October, the console opened on a full screen of `RM 0.00` while the data sat one month back, with nothing to say the emptiness was a month problem. | `dashboard/summary` resolves an omitted month server-side (current month if it holds receipts, else the newest month that does) and echoes it back as `month`/`latest_month`. Both pages adopt that value until the user picks a month. An empty month now shows `No verified spend in December 2026. Latest activity is May 2026.` with a `Go to May 2026` action. |
+| R2 | High | A printed till-rounding line had no field. `71.50 + 4.29 - 0.04 = 75.75`, but with no place to record the `-0.04` the app reported `MATH_MISMATCH_DELTA_0.04` on a correct receipt and made the user override a discrepancy that did not exist. | `rounding` added to the extraction schema, the prompt (§5), the `receipts` table and the review console. The identity is `Σ lines + tax + rounding == grand_total`. Exports carry it too: a `Rounding adjustment` / `ITEM-RND` CSV row and a real `PayableRoundingAmount` (both were previously absent or hardcoded `0.0`, so the exported journal summed to `75.79` against a `75.75` receipt). |
+| R3 | Medium | Line-item descriptions absorbed the printed price — `PAKU 2 INCI 4.50`, `2 ROLLER BRUSH 7" 24.00` — so the accounting description column carried numbers that belong in the amount columns. | Prompt rule (§4) plus a deterministic guard that strips only a *trailing* amount equal to that line's own `line_total`/`unit_price`. Live re-upload produced `PAKU 2 INCI`, `Cat JOTUN (KECIL)`, `ROLLER BRUSH 7"`, `AMPELAS`. |
+| R4 | Medium | SST numbers had no format check at all. | `SST_FORMAT_INVALID` against `^[A-Z]\d{2}-\d{4}-\d{8}$`. **This does not catch the observed failure**: OCR read `W10-7808-32000123` for a printed `W10-1808-32000123`, and a single digit substitution stays well-formed. Malaysian SST registration numbers carry no published checksum, so no local rule can detect it; the receipt is instead surfaced as `LOW_CONFIDENCE_merchant_sst` for human review. |
+| R5 | Medium | `classify_expense` matched English keywords only. A Kuching hardware receipt prints `PAKU`, `CAT`, `AMPELAS`, `ROLLER BRUSH` — every line fell to `OTHER`, so a hardware shop reported `HARDWARE RM 0.00` and the category breakdown was structurally useless for the market the app serves. | Keyword lists extended with Malay/Manglish terms across `HARDWARE`, `WORKSHOP` and `F&B`. Whole-word matching is unchanged, so `oil` still does not fire inside `toilet`. `CAT FOOD` stays `F&B` because `F&B` is checked first. Categories are stored at write time, so existing rows keep their old value until the receipt is re-saved. |
+
+Gates after remediation: `pytest` **311 passed**, `ruff check .` clean apart from
+pre-existing `E402` in `conftest.py` (env setup before imports, as at the audited
+commit), `tsc -b` clean, `eslint .` clean, `vitest run` **56 passed**, Playwright
+**55 passed**, production build OK.
 
 ---
 
