@@ -143,6 +143,15 @@ CREATE INDEX idx_audit_logs_receipt ON receipt_audit_logs(receipt_id);
 taxonomy. Unknown or null descriptions become `OTHER`; the five persisted values are
 `F&B`, `HARDWARE`, `WORKSHOP`, `RETAIL`, `OTHER`.
 
+Keywords are whole-word matched (case-folded) against both English and Malay, because these
+receipts are printed in a mixture of both: `PAKU`, `CAT`, `AMPELAS`, `PAIP` and `MINYAK` are what
+a Kuching supplier actually prints. An English-only list put every line of the reference receipt
+into `OTHER`, so a hardware shop reported RM 0.00 under `HARDWARE`.
+
+Because the category is stored at write time, changing the keyword list only affects receipts
+processed afterwards; existing rows keep the category they were assigned. `classify_expense` runs
+again on every line-item update, so re-saving a receipt reclassifies it.
+
 ### 6.1.1 Receipt status values (14 members)
 
 | Status | Written by | Meaning |
@@ -209,19 +218,30 @@ class ParsedReceiptSchema(ExtractedReceiptData):
     fields: list[ExtractedField]
 ```
 
-Money fields reject `NaN`/`Infinity`; `bbox` must be four ordered normalized coordinates.
+Money fields reject `NaN`/`Infinity` **and** magnitudes the column cannot hold
+(`|v| >= 1e10`, i.e. anything outside `NUMERIC(12,2)`). A finite-but-unrepresentable
+value such as `1e400` used to be stored and then made the driver's `quantize` raise
+on every subsequent read, so a single bad `PUT` returned 500 for the whole workspace.
+`bbox` must be four ordered normalized coordinates.
 `ReceiptUploadResponse` is `{batch_id, total_received, receipts:[ReceiptUploadItem]}` where each
 item is `{id, filename, status}`. Review-console schemas add:
 
 - `ReceiptListItem` / `ReceiptListResponse {total, limit, offset, items, status_counts}`.
+  Each item carries `processing_error`, the terminal failure reason for an `ERR_*` row,
+  so the inbox can explain the failure without a second request.
   `status_counts` maps every inbox filter (`ALL`, `NEEDS_REVIEW`, `VERIFIED`, `EXPORTED`,
-  `PROCESSING`) to a row count over the whole client, computed by one grouped count so the
-  tabs do not need a request each. It ignores the active `status` filter: asking for one
-  bucket still reports the others. `VERIFIED` sums `AUTO_VERIFIED` and `VERIFIED`.
+  `REJECTED`, `ERROR`, `PROCESSING`) to a row count over the whole client, computed by one
+  grouped count so the tabs do not need a request each. It ignores the active `status`
+  filter: asking for one bucket still reports the others. `VERIFIED` sums `AUTO_VERIFIED`
+  and `VERIFIED`; `ERROR` is every `ERR_*` status; `PROCESSING` covers `PENDING_UPLOAD`,
+  `UPLOADED` and the three in-flight `PROCESSING_*`/`VALIDATING_*` states. The buckets
+  partition the enum, so they sum to `ALL` — `ERROR` was previously missing from the
+  filter enum, which made the tab badges disagree with the total and left failed rows
+  unreachable from any tab.
 - `ReceiptDetailLineItem {id, line_index, description, quantity, unit_price, line_total,
   expense_category, confidence, bbox}`
 - `ReceiptField {name, confidence, bbox}`, `ReceiptOcrToken {text, confidence, bbox, line_num}`
-- `ReceiptDetailResponse` (all detail fields listed in 6.4.5)
+- `ReceiptDetailResponse` (all detail fields listed in 6.4.5, including `amount_basis`)
 - `ReceiptUpdateLineItem`, `ReceiptUpdateRequest`, `ReceiptUpdateResponse {id, status, updated_at,
   verified_by, math_discrepancy}`
 - `ReceiptAuditRead {id, user_id, field_name, old_value, new_value, created_at}` and
@@ -295,10 +315,12 @@ receipt that belongs to another accountant.
 {
   "status": "ok",
   "database": "connected",
-  "dialect": "sqlite",
   "version": "0.1.0"
 }
 ```
+
+The engine name is deliberately **not** reported: this endpoint is unauthenticated,
+so naming the database is free stack fingerprinting for no operational benefit.
 
 `503 Service Unavailable` when the query fails:
 
@@ -494,6 +516,8 @@ belongs to `client_id`. Line items are returned in `line_index` order.
   "subtotal": "99.50",
   "tax_amount": "5.97",
   "grand_total": "105.47",
+  "rounding": null,
+  "amount_basis": "EXCLUSIVE",
   "math_discrepancy": "2.40",
   "overall_confidence": 0.88,
   "validation_flags": ["MATH_MISMATCH_DELTA_2.40"],
@@ -546,16 +570,28 @@ Semantics:
 - `line_items`, when the key is present with a list, replaces all rows and re-indexes them `0..n-1`;
   `expense_category` is recomputed with `classify_expense`. When the key is absent, or present as
   `null`, stored rows are kept; an explicit `[]` clears them.
-- `math_discrepancy` is recomputed from persisted rows as
-  `abs(sum(line_total) + tax_amount - grand_total)` (exact Decimal; `0.00` when `grand_total` is
-  null).
-- Existing `MATH_MISMATCH_DELTA_*` flags are dropped; if the new discrepancy exceeds `0.02`,
-  `MATH_MISMATCH_DELTA_{d:.2f}` is appended.
+- `amount_basis` accepts `INCLUSIVE` or `EXCLUSIVE` (free-text spellings are canonicalised; an
+  unrecognised label clears the field so the reconciler infers instead). Omitted means untouched.
+- `rounding` is the signed printed till-rounding adjustment (`"-0.04"`, `"0.03"`), or `null` when the
+  receipt prints none. It joins the arithmetic identity rather than widening the tolerance, so a
+  receipt whose total was rounded to 5 sen reconciles instead of reporting an unfixable delta.
+- The whole audit is **re-derived** from the persisted row after the write — not patched. Flags are
+  recomputed by re-running `ReconcilerService.audit_receipt` over the stored values, so
+  `math_discrepancy` and every `validation_flags` entry describe the row that actually exists.
+  Editing ten line items down to one therefore cannot leave `LOW_CONFIDENCE_line_items[3..9]`
+  pointing at rows that are gone. `math_discrepancy` is
+  `abs(expected - grand_total)` where `expected` follows the receipt's tax basis (§5.4 of the TRD):
+  `sum(line_total) + rounding` for `INCLUSIVE`, `sum(line_total) + tax_amount + rounding` for
+  `EXCLUSIVE`, falling back to `subtotal + tax_amount + rounding` when no line items were read. The value is an exact Decimal, `0.00`
+  when `grand_total` is null.
+- A header field present in the payload counts as manual evidence: its provenance confidence is
+  raised to `1.0`, so an accountant's correction clears the `LOW_CONFIDENCE_*` warning for that
+  field instead of preserving a warning about a value that no longer exists.
 - The status becomes `STATUS_VERIFIED`, with `verified_by` and `verified_at` set.
-- One audit row is written per header field whose value actually changed, plus `field_name =
-  'line_items'` when the submitted descriptions/totals differ from the stored rows, plus a `status`
-  row when the prior status was not `STATUS_VERIFIED`. `old_value`/`new_value` are strings;
-  `line_items` values are row counts like `'2 rows'`.
+- One audit row is written per header field whose value actually changed, plus one per changed
+  line-item row keyed `line_items[{index}]` with values like `'PVC Pipe 2" @ 14.50'` (`null` for a
+  row that was added or removed), plus a `status` row when the prior status was not
+  `STATUS_VERIFIED`.
 
 Response `200 OK`:
 
@@ -615,7 +651,13 @@ re-saved: both endpoints return `409` and the row keeps its `exported_at`.
 ### 6.4.9 Dashboard summary
 
 **`GET /api/v1/clients/{client_id}/dashboard/summary?month=2026-09`** - optional `month` in strict
-`YYYY-MM` form (defaults to the current month; invalid values are `422`). Includes receipts in
+`YYYY-MM` form (invalid values are `422`). Omitting it asks the server to choose: the current month
+when it holds any receipt, otherwise the newest month that does, otherwise the current month for an
+empty workspace. The response always echoes the month it actually reported in `month`, so a client
+that sent no month must adopt that value rather than assume today. `latest_month` is the newest month
+with any receipt (`invoice_date`, falling back to `created_at`), or `null` for an empty workspace; it
+lets the console say where the data is instead of presenting a screen of `RM 0.00` as the truth.
+Includes receipts in
 `STATUS_AUTO_VERIFIED`, `STATUS_VERIFIED` and `STATUS_EXPORTED`. `total_spend` sums `grand_total`;
 top suppliers group by `merchant_name` (blank names omitted), ordered spend-descending and capped
 at 5. `category_breakdown` always contains all five categories in taxonomy order and sums pre-tax
@@ -625,6 +667,7 @@ present.
 ```json
 {
   "month": "2026-09",
+  "latest_month": "2026-09",
   "total_spend": "4820.55",
   "top_suppliers": [
     { "supplier_name": "Kim Guan Hardware", "total_spend": "1204.00", "receipt_count": 12 },

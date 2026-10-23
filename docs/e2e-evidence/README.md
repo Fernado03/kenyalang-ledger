@@ -11,7 +11,7 @@ seeded fixture database. Regenerate after any UI change; the shots are generated
 
 ## Defects found and fixed
 
-Sixteen defects surfaced across the Playwright gate, the design audit and the live browser
+Nineteen defects surfaced across the Playwright gate, the design audit and the live browser
 pass. All are fixed in this branch; the ones with a plausible regression carry a test.
 
 1. **Inbox overflowed the page at 640–700px (medium).** The table switched to its seven desktop
@@ -90,6 +90,20 @@ pass. All are fixed in this branch; the ones with a plausible regression carry a
     mono range is styled on the note itself. All five rules now sit at 158px. The first block
     below the header was also three values — 32px (Clients, Upload), 24px (Exports), 28px
     (Inbox, Dashboard) — and is now 24px everywhere.
+17. **Bulk export marking had no error-prevention step (high).** `Mark exported` froze every
+    verified receipt in the selected month, or the whole workspace with `All time`, on the first
+    click. It now opens an inline confirmation band that names the scope, states that the change
+    cannot be undone, supports `Cancel`/`Escape`, and routes the server call only through
+    `Confirm mark exported`. The button's permanent-scope note is also exposed with
+    `aria-describedby`.
+18. **Zero-count inbox buckets disappeared (medium).** Filter tabs omitted a status count when
+    it was zero, so an empty workspace could not distinguish an empty bucket from an unavailable
+    aggregate. Every loaded bucket now renders its count, including `0`; `03-inbox` covers the
+    empty workspace.
+19. **Small contextual controls failed the audit target pass (minor).** Export metadata regions
+    with horizontal overflow are now keyboard-focusable and named; standalone masthead/back links
+    and disclosure summaries receive 44px mobile hit areas while retaining their compact desktop
+    geometry. The global focus ring remains visible on each target.
 
 ## Observations, no change made
 

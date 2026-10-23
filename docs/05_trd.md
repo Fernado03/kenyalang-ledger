@@ -230,6 +230,15 @@ Return ONLY a validated JSON payload adhering to the requested schema.
   confidence is the model's own score when it is below `1.0`; otherwise it is the
   minimum of the description and amount token confidences, and `0.0` if either is
   missing.
+* **Description / price separation:** the prompt states that `description` is the
+  item name only, and `_strip_price_from_description` enforces it deterministically
+  afterwards. The rule is deliberately narrow: only a *trailing* amount that equals
+  the line's own `line_total` or `unit_price` is removed, so `PAKU 2 INCI 4.50`
+  becomes `PAKU 2 INCI` while `PAKU 2 INCI`, `SHELL TELLUS 4L` and `BATERI 12V` keep
+  their numbers. Stripping every trailing number would rename products; stripping
+  nothing leaves a price in the audit trail and in the CSV description column. A
+  description consisting only of the price is left alone rather than blanked, because
+  an empty description hides the row from the reviewer.
 * **Token pruning:** tokens are grouped into visual rows using an estimated document
   slant (searched over slopes ±0.20, about ±11°), ordered top-to-bottom and joined
   left-to-right within a row. Each row is sent with its normalized `y` as a spatial
@@ -277,6 +286,7 @@ CONFIDENCE_THRESHOLD: float = 0.80        # below this, a human confirms the fie
 MAX_RECEIPT_AGE_DAYS: int = 365
 CRITICAL_FIELDS: tuple[str, ...] = ("merchant_name", "invoice_date", "grand_total")
 _SST_TOKEN_RE = re.compile(r"[A-Z]\d+-\d+-\d+")
+SST_REGISTRATION_RE = re.compile(r"^[A-Z]\d{2}-\d{4}-\d{8}$")
 
 def extract_sst_number(value: str | None) -> str | None:
     """First well-formed SST number in the field, upper-cased; None otherwise.
@@ -312,7 +322,9 @@ class ReconcilerService:
             elif (reference - data.invoice_date).days > MAX_RECEIPT_AGE_DAYS:
                 flags.append("DATE_EXCEEDS_1_YEAR")
 
-        # 3. Arithmetic reconciliation: sum(line_total) + tax == grand_total
+        # 3. Arithmetic reconciliation, tax-basis aware (see below):
+        #    inclusive -> sum(line_total)              + rounding == grand_total
+        #    exclusive -> sum(line_total) + tax_amount + rounding == grand_total
         discrepancy = ReconcilerService._math_discrepancy(data)
         if discrepancy is None:
             if not data.line_items and data.subtotal is None:
@@ -323,6 +335,14 @@ class ReconcilerService:
         # 3b. SST-registered merchant that charged no tax (documented review heuristic)
         if not data.tax_amount and ReconcilerService._is_sst_registered(data):
             flags.append("MISSING_SST_ON_REGISTERED_MERCHANT")
+
+        # 3c. An SST number was printed but does not fit the registration shape.
+        # Structural damage only: the format carries no check digit, so a
+        # plausible digit substitution (1808 -> 7808) still passes and is left
+        # to the confidence gate.
+        sst_number = extract_sst_number(data.merchant_sst)
+        if sst_number is not None and not SST_REGISTRATION_RE.match(sst_number):
+            flags.append("SST_FORMAT_INVALID")
 
         # 4. Confidence gate: the least-trusted audited field bounds the record
         low_confidence = [
@@ -356,15 +376,62 @@ class ReconcilerService:
         )
 ```
 
+**Tax basis (`amount_basis`).** Whether a receipt's printed line totals already
+contain the tax is not universal: Malaysian retail till receipts print GST-inclusive
+line amounts, while trade invoices print them tax-exclusive. Treating the basis as
+fixed double-counts tax on the retail case — a receipt whose lines sum to RM 7.42
+with GST 0.42 and a total of 7.42 was reported as a 42-cent mismatch, exactly equal
+to the tax.
+
+`ExtractedReceiptData.amount_basis` carries the answer (`INCLUSIVE` or `EXCLUSIVE`),
+the extraction prompt reports it, and `receipts.amount_basis` persists it. Free-text
+labels are canonicalised by `normalize_amount_basis` (`"Tax Inclusive"`,
+`"GST-INCLUSIVE"` and friends); an unrecognised label becomes `NULL` so the
+reconciler falls back to inference instead of trusting a value it cannot interpret.
+The column is nullable: rows written before the basis existed keep `NULL`.
+
+**Printed rounding line (`rounding`).** Malaysian tills round the payable amount
+to the nearest 5 sen and print the adjustment on its own line (`ROUNDING -0.04`,
+`PEMBUNDARAN 0.03`). It is neither tax nor a discount, so without a field of its own
+it went *into* `grand_total` only — making a correctly printed receipt report a
+discrepancy exactly equal to the rounding, on a screen whose only remedy is to edit
+a number that is already right. `rounding` is a signed nullable money column
+(`receipts.rounding`) with its own prompt rule, and it joins the arithmetic
+identity: `Σ lines + tax + rounding == grand_total` (exclusive) or
+`Σ lines + rounding == grand_total` (inclusive). `NULL` means the receipt prints no
+rounding line and contributes zero, so every existing receipt keeps its previous
+result. The tolerance was **not** widened to hide these deltas: RM 0.02 of slack is
+for printed drift, and a RM 0.04 rounding line is a fact about the receipt, not
+noise.
+
+`ReconcilerService.resolve_amount_basis` returns the explicit basis when present.
+Otherwise it infers: an exclusive receipt satisfies `Σ lines + tax == grand_total`
+and an inclusive one satisfies `Σ lines == grand_total`. Exclusive is tested first,
+so a receipt with no tax — where both identities hold — keeps the pre-basis
+behaviour, and a receipt satisfying neither is treated as exclusive so it reports
+the same delta it always did.
+
 **Reconciliation source of truth.** `_math_discrepancy` returns
-`abs((expected + tax) - grand_total)` as an exact `Decimal`, or `None` when there is
-no `grand_total`. The flag decision compares that raw value against `MATH_TOLERANCE`
-**before** any rounding; only the stored `math_discrepancy` is quantized by the
-database column. `expected` is the sum of `line_total` when line items exist;
-otherwise it falls back to the printed `subtotal`; otherwise the result is `None`.
-`tax_amount` is coerced to `Decimal("0.00")` when absent. Flag text is formatted from
-the `Decimal` itself (`:.2f`), not via `float()`. The `0.02` slack absorbs printed
-rounding drift, not binary float error.
+`abs(expected - grand_total)` as an exact `Decimal`, or `None` when there is no
+`grand_total`. `expected` is the sum of `line_total` when line items exist, plus
+`tax_amount` only when the basis is `EXCLUSIVE`, plus `rounding` when present. With no line items it falls back to
+the printed `subtotal` plus tax — a printed subtotal is the tax-exclusive figure on
+the layouts this app targets — and otherwise the result is `None`. The flag decision
+compares that raw value against `MATH_TOLERANCE` **before** any rounding; only the
+stored `math_discrepancy` is quantized by the database column. `tax_amount` is
+coerced to `Decimal("0.00")` when absent. Flag text is formatted from the `Decimal`
+itself (`:.2f`), not via `float()`. The `0.02` slack absorbs printed rounding drift,
+not binary float error.
+
+**Exports normalise to tax-exclusive.** UBL requires every
+`InvoiceLine/LineExtensionAmount` to be tax-exclusive and the header
+`LegalMonetaryTotal/LineExtensionAmount` to equal their sum. On an inclusive receipt
+the printed line totals cannot be copied straight through, so
+`receipt_line_amounts` allocates the tax back out of each line by largest remainder
+and rebuilds the header from the resulting net amounts. The CSV follows the same
+split: `UnitPrice` is the net figure, `TaxAmount` the allocated tax, and
+`TotalAmount` what the line actually cost — so a RM 7.42 receipt exports as
+7.00 + 0.42 = 7.42 rather than 7.84.
 
 A missing `grand_total` yields `INVALID_GRAND_TOTAL` and can also yield
 `MISSING_SUBTOTAL` when there are no line items and no printed subtotal, since both
@@ -380,6 +447,14 @@ number the MyInvois export ships under `schemeID: "SST"`. This is triage for the
 it does not assert that every SST registrant must charge tax on every receipt (exempt supplies,
 zero-rated items and non-taxable turnover exist). `merchant_sst` is the dedicated SST field;
 there is no combined `brn_tin` column or alias.
+
+A printed SST number that does not fit the registered shape (`SST_REGISTRATION_RE`,
+`^[A-Z]\d{2}-\d{4}-\d{8}$`) raises `SST_FORMAT_INVALID`. That catches structural
+damage — a dropped group, a letter where a digit belongs — and nothing more: the
+format has no check digit, so a plausible substitution such as `W10-1808-…` read as
+`W10-7808-…` is well-formed and passes. Such a misread is caught, if at all, by the
+confidence gate (`LOW_CONFIDENCE_merchant_sst`), never by this flag. Do not read
+`SST_FORMAT_INVALID`'s absence as evidence that a printed ID was read correctly.
 
 **Confidence gate and critical fields.** `_overall_confidence` returns `0.0` when any
 critical field is absent from provenance or holds `None`/`""`; otherwise it is the
@@ -422,6 +497,13 @@ remainders, ties broken by line order. The allocated amounts therefore sum exact
 the receipt's tax. A receipt with no line items is emitted as a single summary row
 (`General Purchase`, qty `1`) that uses the receipt subtotal, tax and total.
 
+A printed till-rounding line becomes its own row (`Rounding adjustment`, item code
+`ITEM-RND`, qty `0`, tax code `NONE`, signed `TotalAmount`), so the batch posts what
+the buyer actually paid. Without it the line rows summed to the pre-rounding figure
+and the journal disagreed with the receipt by exactly the rounding amount — a
+RM 0.04 error introduced by the export itself. No row is emitted when the receipt
+prints no rounding line.
+
 Every text cell passes through `_csv_text`, which prefixes an apostrophe when the
 value starts with `=`, `+`, `-`, `@`, tab or carriage return, neutralising
 spreadsheet formula injection.
@@ -447,7 +529,9 @@ Mapped shape:
 * `LegalMonetaryTotal` (`LineExtensionAmount`, `TaxExclusiveAmount`,
   `TaxInclusiveAmount`, `AllowanceTotalAmount`, `ChargeTotalAmount`,
   `PayableRoundingAmount`, `PayableAmount`) and `TaxTotal` (category `01`, scheme
-  `OTH` / `UN/ECE 5153`).
+  `OTH` / `UN/ECE 5153`). `PayableRoundingAmount` carries the receipt's own printed
+  rounding line (signed, `0.0` when absent); it used to be a hardcoded zero, which
+  left the document unable to explain why its own totals differed by four sen.
 * `InvoiceLine` per line item: `ID`, `InvoicedQuantity` (unit code `C62`),
   `LineExtensionAmount`, `TaxTotal`, `Item.Description`, `Price`,
   `ItemPriceExtension`. Per-line tax uses the same integer-cent allocation as the CSV.

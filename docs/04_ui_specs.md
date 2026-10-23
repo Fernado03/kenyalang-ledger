@@ -187,7 +187,7 @@ open.
 
 | Key | Behaviour |
 |---|---|
-| `Esc` | Closes the reject band if it is open; otherwise blurs the focused field; otherwise opens the reject band |
+| `Esc` | Closes an open confirmation band; otherwise blurs the focused field; otherwise does nothing |
 | `Ctrl/⌘ + Enter` | Save and move to the next receipt (ignored while a field has focus) |
 | `Alt + A` | Append a line item |
 | `Alt + Backspace` | Delete the focused line item, including the last one |
@@ -198,16 +198,27 @@ Single-key shortcuts (`[`, `]`, `R`) are ignored when focus is in an `input`, `t
 `select`, or `contenteditable`, and when any modifier is held, so typing in a field never
 triggers them. `[` and `]` are resolved only after the shortcut lookup. `R` resets scale to 100%
 only; the toolbar's **Reset** (`Reset zoom and center`) resets scale and returns the pan offset to
-0. While the reject band is open, `Escape` cancels it; while the leave dialog is open, the native
-`<dialog>` owns `Escape`.
+0. While a confirmation band is open, `Escape` cancels it; while the leave dialog is open, the
+native `<dialog>` owns `Escape`.
+
+`Escape` never arms an irreversible action. It is the key users press to dismiss things, so a
+stray press must not open the reject confirmation: rejecting is reachable only from the button,
+and the shortcut resolver returns `null` for it outside a field.
 
 ### Reconciliation and status copy
 
 The audit is unchanged and lives in `frontend/src/lib/audit.ts`:
 
-* It compares the printed line totals plus tax against the grand total — never
+* It compares the printed line totals against the grand total — never
   `qty × unit_price` as the total.
-* `|line_total sum + tax − grand_total| ≤ RM 0.02` counts as reconciled (`TOLERANCE_CENTS = 2`).
+* Whether tax is added to that sum follows the receipt's `amount_basis` (TRD §5.4). Malaysian
+  retail receipts print GST-inclusive line totals, so adding the tax again would flag every
+  correct receipt with a delta exactly equal to the GST. An explicit basis wins; otherwise the
+  console infers it, testing exclusive first so a receipt with no tax is unchanged.
+* `|expected − grand_total| ≤ RM 0.02` counts as reconciled (`TOLERANCE_CENTS = 2`), where
+  `expected` is the line sum for `INCLUSIVE` and the line sum plus tax for `EXCLUSIVE`.
+* The summary's `Lines + Tax = Total` line becomes `Lines (GST inclusive) = Total` on an
+  inclusive receipt, so the arithmetic on screen matches the arithmetic being applied.
   RM 0.01 matches; RM 0.03 does not.
 * A negative delta is retained for display (`−RM x.xx`); magnitude is used for the tolerance.
 * A draft is invalid when a money field cannot be parsed, a quantity is not a positive number,
@@ -216,7 +227,7 @@ The audit is unchanged and lives in `frontend/src/lib/audit.ts`:
 * `missingSstOnRegisteredMerchant` is true when tax is exactly zero while `merchant_sst` matches
   the LHDN shape (for example `W10-1808-32000018`). It is a warning stamp, not a blocker.
 
-All status text is English: `Verified`, `Exported`, `Rejected`, `Needs review`, `Δ RM x.xx`,
+All status text is English: `Verified`, `Exported`, `Rejected`, `Needs review`, `Off by RM x.xx`,
 `OCR check n%`, `Processing`, `Unreadable`, `Timed out`, `Extraction failed`, `File error`.
 Money is `RM 1234.50` (no thousands separator); dates are `DD/MM/YYYY`; an unrecognised status
 falls back to the `File error` stamp rather than exposing a raw enum.
@@ -273,9 +284,10 @@ selection or drop. A polite live region reports `Uploading…`, then
 `{filename}: {error}`, or shows `Batch rejected: {message}`. Results here are a sentence, not a
 stamp list — the stamped per-file result list belongs to `/upload`.
 
-**Filters.** Five underlined tabs: `All`, `Needs review`, `Verified`, `Exported`, `Rejected`.
-Each is a 40px button with `aria-pressed`; the active tab gets a 2px `brand-900` underline and
-semibold text. The group is labelled `Status filter` and scrolls horizontally at 320px.
+**Filters.** Five underlined tabs: `All`, `Needs review`, `Verified`, `Exported`, `Rejected`. Each
+is a 40px button with `aria-pressed`; the active tab gets a 2px `brand-900` underline and
+semibold text. When counts are available, every tab includes its bucket count, including `0`.
+The group is labelled `Status filter` and scrolls horizontally at 320px.
 
 **Table.** One DOM for both breakpoints. The `<table>` keeps explicit `table`/`rowgroup`/`row`/
 `cell` ARIA roles and switches from `block` to `table` at `md` (below `md` the seven columns
@@ -295,7 +307,7 @@ do not fit and would overflow the page):
   the filename; while absent, a `role="img"` placeholder is labelled `No preview for {filename}`.
 * **Supplier cell:** `merchant_name ?? filename`, with humanized validation flags beneath in
   `warning` text joined by ` · `. Flags are humanized, never raw: `MATH_MISMATCH_DELTA_0.05` →
-  `Math mismatch: Δ RM 0.05`; `LOW_CONFIDENCE_GRAND_TOTAL` → `Low OCR confidence: grand total`;
+  `Math mismatch: off by RM 0.05`; `LOW_CONFIDENCE_GRAND_TOTAL` → `Low OCR confidence: grand total`;
   `MISSING_CRITICAL_EVIDENCE_MERCHANT_NAME` → `No OCR evidence: merchant name`. Known flags
   (missing merchant name/date, invalid grand total, future date, date older than a year, missing
   subtotal, missing SST on a registered merchant) have explicit sentences; anything else becomes
@@ -325,7 +337,7 @@ text carries meaning. Variants are chosen in this exact precedence:
 | `STATUS_VERIFIED`, `STATUS_AUTO_VERIFIED` | `verified.*` | `Verified` | — |
 | `STATUS_EXPORTED` | `surface-subtle` / `border-strong` / `brand-900` | `Exported` | — |
 | `STATUS_REJECTED` | `mismatch.*` | `Rejected` | — |
-| `STATUS_NEEDS_REVIEW` with a `MATH_MISMATCH_DELTA_` flag | `mismatch.*` | `Δ RM {suffix}` | `Math mismatch: Δ RM {suffix}` |
+| `STATUS_NEEDS_REVIEW` with a `MATH_MISMATCH_DELTA_` flag | `mismatch.*` | `Off by RM {suffix}` | `Math mismatch: off by RM {suffix}` |
 | `STATUS_NEEDS_REVIEW` with known confidence `< 0.8` | `warning.*` | `OCR check {n}%` | `Low OCR confidence` |
 | `STATUS_NEEDS_REVIEW`, otherwise | `warning.*` | `Needs review` | — |
 | `PENDING_UPLOAD`, `UPLOADED`, `PROCESSING_OCR`, `PROCESSING_LLM`, `VALIDATING_MATH` | `surface-subtle` / `border` / `text-secondary` | `Processing` | — |
@@ -359,10 +371,19 @@ block with a `mismatch` left rule, the error message, and `Back to inbox`.
 **Action bar.** Sticky at `top-14 lg:top-0`, `surface`, bottom rule. Left: `Inbox`
 (`arrow-left`, title `Back to inbox without saving`), a vertical rule, `ID: {first 8}` in mono
 (`h1`), and the status stamp. Right: save error text, the `VERIFIED` stamp flash, the invalid
-message `Fix {first invalid field} before verifying.` (`role="status"`), `Reject` (secondary,
-`Esc` keycap), and `Verify & Next` (primary, `Ctrl/⌘ ↵` keycap). Save is disabled while saving
-or while the audit is invalid; labels swap to `Rejecting…` / `Saving…` while a request is in
-flight. The reject control opens an inline band, not a dialog.
+message `Fix {first invalid field} before verifying.` (`role="status"`), `Reject` (secondary),
+and `Verify & Next` (primary, `Ctrl/⌘ ↵` keycap). Save is disabled while saving or while the
+audit is invalid; labels swap to `Rejecting…` / `Saving…` while a request is in flight. The save
+error carries `role="alert"` so a screen reader announces the failure as it renders. The reject
+control opens an inline band, not a dialog.
+
+**Verify with a mismatch.** When the audit is valid but the arithmetic does not reconcile, the
+primary action reads `Verify anyway` and opens a `warning` confirmation band instead of saving
+directly: `Verify with RM {delta} unexplained? The audit trail records that you overrode it.`
+Actions are `Cancel` and `Confirm override` (danger) — deliberately not a second `Verify
+anyway`, since that is the button that opened the band and repeating the label leaves no
+visible sign of which control commits. A discrepancy is therefore never verified silently,
+and `Ctrl+↵` opens the same band rather than bypassing it.
 
 **Reject band.** A `mismatch` band below the action bar, not a dialog: it is an inline
 confirmation inside the page, so it uses `role="group"` with `aria-labelledby` pointing at the
@@ -386,15 +407,25 @@ no `section-label` index above it — there are no `01`/`02`/`03` markers:
    Delete is a 44px icon button (`Remove line 2`); the footer's ghost button reads
    `Add Line (Alt+A)`. A mono `{n} lines` count sits opposite it.
 3. **Totals & audit.** A right-aligned column (`max-w-md`) of labelled totals: Subtotal,
-   SST (6%), Grand Total. Inputs are `w-36` (144px), right-aligned mono, with an `aria-hidden`
-   `RM` prefix; Grand Total prints at 22px above a `.rule-total` double rule. A summary
-   definition list shows Line Items Total, Confidence (or `—`), and `Lines + Tax = Total`.
+   SST (6%), Rounding, Grand Total. Inputs are `w-36` (144px), right-aligned mono, with an
+   `aria-hidden` `RM` prefix; Grand Total prints at 22px above a `.rule-total` double rule.
+   Rounding is signed and optional — a printed till adjustment reads `-0.04` — with the hint
+   `Signed till-rounding line, e.g. −0.04. Leave blank when the receipt prints none.` It exists
+   because Malaysian tills round the payable total to 5 sen and print the difference; with no
+   field to hold it, a correctly printed receipt reported a delta the accountant could not fix
+   without falsifying a number that was already right. A summary definition list shows Line Items
+   Total, Confidence (or `—`), and `Lines + Tax = Total` — or `Lines (GST inclusive) = Total` on a
+   receipt whose line totals already contain the tax. A non-zero rounding line is named in both
+   the operator and the value (`Lines + Tax + Rounding`, `83.00 + 5.20 − 0.04`); a zero one is
+   omitted rather than printed as `+ 0.00`. When the two sides do not reconcile the operator is
+   `≠`, not `=`, and the value is drawn in the mismatch colour: a summary that asserts a false
+   equality undercuts the check it summarises.
 
 **Exported receipts are read-only.** `STATUS_EXPORTED` is terminal: the three form sections are
 wrapped in a single disabled `<fieldset>` carrying a plain explanation (`This receipt has already
 been exported, so it can no longer be edited.`), `Verify & Next` and `Reject` are disabled, and the
-`Ctrl+↵` / `Escape` / `Alt+A` / delete-line shortcuts refuse the action in the same guard so the
-keyboard cannot route around the buttons. The backend rejects a direct write with `409`. The
+`Ctrl+↵` / `Alt+A` / delete-line shortcuts refuse the action in the same guard so the keyboard
+cannot route around the buttons. `Escape` is unaffected: it only blurs or cancels. The backend rejects a direct write with `409`. The
 `Fix <field> before verifying` hint is suppressed while locked: there is nothing the accountant
 could do about it.
 
@@ -485,6 +516,13 @@ that was not re-queued; the inbox row is the source of truth.
 business name plus an `Inbox` link. Actions: the label `Accounting billing period`, a native
 `month` input, and an `All time` toggle (`aria-pressed`) that clears the month.
 
+**Which period opens.** On entry the page asks `GET …/dashboard/summary` with no month and adopts
+the month the server resolves, so the export batch covers the same period the dashboard is about.
+Opening on the calendar month exported nothing for a client whose books were older, and the page
+gave no sign that the empty batch was a month problem rather than a missing-receipt problem. Any
+explicit choice — typing a month or pressing `All time` — wins and stops the default from being
+applied.
+
 **Strips.** Error: a `mismatch` strip with `role="alert"` and `Dismiss`. Success: a `verified`
 strip with `role="status"` and `Dismiss`. Both are plain ruled bands, not floating toasts.
 
@@ -492,9 +530,12 @@ strip with `role="status"` and `Dismiss`. Both are plain ruled bands, not floati
 rules. Its header row shows the active filter
 (`Filtering verified receipts for {month}` or `Exporting all verified receipts across all
 billing dates`), the `Download both` primary button, and `Mark exported` (ghost) with the note
-`Downloads leave receipt statuses unchanged. Marking is a separate, explicit action.` Buttons
-disable individually while running; labels swap to `Generating bundle...`, `Downloading CSV...`,
-`Downloading JSON...`, and `Marking...`.
+`Downloads leave receipt statuses unchanged. Marking is separate and permanent: it locks every
+verified receipt for {scope} from further edits.` Clicking `Mark exported` opens an inline
+`role="group"` band with `aria-labelledby` naming the selected scope; only the question carries
+`role="alert"`. `Cancel` and `Escape` close it, and only `Confirm mark exported` calls the
+terminal mutation. Buttons disable individually while running; labels swap to
+`Generating bundle...`, `Downloading CSV...`, `Downloading JSON...`, and `Marking...`.
 
 Two ruled rows, each an 8/4 grid at `lg`:
 
@@ -516,8 +557,19 @@ current month; `All time` clears it.
 
 **Header.** Eyebrow `Workspace {registration}` (or `Workspace`); title `Dashboard`; meta is the
 business name, the note `verified and exported receipts only`, and an `Inbox` link. The action is
-a labelled (`Month`) `month` input, defaulting to the current month, that drives
+a labelled (`Month`) `month` input that drives
 `GET …/dashboard/summary?month=YYYY-MM`.
+
+**Which month opens.** The console sends no `month` until the user picks one and displays whatever
+the server answers with, so the first paint is the month that has data: the current month when it
+holds a receipt, otherwise the newest month that does. Defaulting to the calendar month regardless
+opened the screen on a full page of `RM 0.00` for any client whose books were not current — the
+numbers were individually correct and the page was still a lie about the workspace.
+
+When the selected month is empty but another month has receipts, a `role="status"` strip above the
+spend figure reads `No verified spend in {Month YYYY}. Latest activity is {Month YYYY}.` with a
+`Go to {Month YYYY}` button; the button selects that month. An empty workspace shows no strip,
+because there is no other month to point at.
 
 **Spend figure and counts.** The month's spend is the one dominant number on the screen: an `h2`
 `Spend this month` above a single `display-lg` (56px) mono figure. The three counts sit under it
@@ -550,8 +602,10 @@ focused, then pinned top-left as a 44px `surface` block with a 2px `brand-900` l
 targeting `<main id="main-content" tabIndex={-1}>`.
 
 **Focus.** One global rule owns focus appearance:
-`:where(a, button, input, select, textarea, summary):focus-visible` gets a 2px solid `#0E5A50`
-outline at 2px offset. `.on-dark` regions (the charcoal canvas and the `brand-950` gate panel)
+`:where(a, button, input, select, textarea, summary, [tabindex='0']):focus-visible` gets a 2px
+solid `#0E5A50` outline at 2px offset — the `[tabindex='0']` arm covers keyboard-reachable
+scroll regions such as the export metadata blocks. `.on-dark` regions (the charcoal canvas and
+the `brand-950` gate panel)
 use `#DCEBE5`. There are no per-component rings. The only local focus treatment is the hidden
 file input on `/upload`: because it is `sr-only`, its label shows a `focus-within` outline
 (`brand-50` on the teal target, `brand-700` on the outlined target). Disabled controls are
@@ -569,8 +623,8 @@ to a specific input by `aria-describedby`.
 **Target sizes.** Primary controls, inputs, delete/add, zoom, and toolbar buttons are 44px.
 Line-item text inputs are 34px dense fields, but their delete control and `Add Line` remain
 44px. Inbox filter tabs are 40px; inbox `Open` buttons are 44px and table rows are ≈44px at
-`sm`. Pagination buttons are 36px. Thumbnails are 32×32 and are not interactive. Mobile tab
-targets are at least 56px tall.
+`sm`. Pagination buttons are 36px. Masthead/back links and disclosure summaries have 44px mobile
+hit areas. Thumbnails are 32×32 and are not interactive. Mobile tab targets are at least 56px.
 
 **Live regions.** Polite (`role="status"`): inbox upload feedback, inbox pagination range,
 `/upload` upload feedback, review invalid-field message, math banner, export success. Assertive
@@ -580,9 +634,10 @@ stamps are ordinary text, so they are announced when the surrounding row is read
 
 **Dialogs.** The review leave prompt is a native `<dialog>` opened with `showModal()`: focus is
 trapped by the platform, `Escape` fires `cancel`, the backdrop is `rgb(23 26 24 / 0.58)`, and
-focus returns to the triggering control on close. The reject confirmation is an inline
-`role="alertdialog"` band that receives focus and is cancelled with `Escape`; it is deliberately
-not a second modal, so the receipt stays visible while rejecting.
+focus returns to the triggering control on close. The reject and export-mark confirmations are
+inline `role="group"` bands whose question carries `role="alert"`; they receive focus and are
+cancelled with `Escape`, and are deliberately not a second modal, so the surrounding data stays
+visible while confirming.
 
 **Structure and semantics.** The shell exposes two labelled `<nav>` landmarks (rail and mobile
 tabs; one is hidden by breakpoint). Every page has exactly one `h1` (page title or receipt ID).
@@ -784,6 +839,7 @@ export interface CategoryBreakdown {
 
 export interface DashboardSummary {
   month: string;
+  latest_month: string | null;  // newest month with any receipt; null when empty
   total_spend: string;
   top_suppliers: TopSupplier[];
   category_breakdown: CategoryBreakdown[];
