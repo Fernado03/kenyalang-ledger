@@ -15,6 +15,8 @@ import pytest
 
 from app.pipeline.extractor import (
     UNSUPPORTED_CONFIDENCE,
+    _clean_line_item_descriptions,
+    _strip_price_from_description,
     attach_provenance,
     render_tokens,
     sort_tokens,
@@ -363,3 +365,149 @@ def test_amount_on_a_single_row_token_is_evidence() -> None:
     parsed = attach_provenance(data, tokens)
 
     assert parsed.line_items[0].confidence == 0.91
+
+
+@pytest.mark.parametrize(
+    "ocr_text",
+    [
+        "75 .75",  # EasyOCR split the decimal from the integer (real 1568x875 scan)
+        "75. 75",
+        "75 , 75",
+    ],
+)
+def test_a_spaced_decimal_still_supports_the_total(ocr_text: str) -> None:
+    """OCR spaces inside a decimal must not cost the field its evidence.
+
+    Observed on a real scan where the printed ``75.75`` came back as ``75 .75``:
+    the digits parsed as two unrelated numbers, so a *correct* total matched no
+    token and the whole record was floored to 0% confidence by the critical-field
+    rule. A spacing artefact is not a reason to distrust a value.
+    """
+    tokens = [
+        _token("TOTAL :", 0.63, 0.05, 0.70),
+        _token(ocr_text, 0.98, 0.70, 0.70),
+    ]
+    data = ExtractedReceiptData(grand_total=Decimal("75.75"))
+
+    parsed = attach_provenance(data, tokens)
+
+    field = next(f for f in parsed.fields if f.name == "grand_total")
+    assert field.confidence == 0.98
+    assert field.bbox is not None
+
+
+def test_a_comma_decimal_still_supports_the_total() -> None:
+    """``24,00`` is 24.00 on a Malaysian receipt, not twenty-four thousand."""
+    tokens = [
+        _token("ROLLER BRUSH 7\"", 0.87, 0.05, 0.40),
+        _token("24,00", 0.83, 0.70, 0.40),
+    ]
+    data = ExtractedReceiptData(
+        line_items=[
+            LineItemSchema(
+                line_index=0,
+                description="ROLLER BRUSH 7\"",
+                quantity=Decimal("2.00"),
+                unit_price=Decimal("12.00"),
+                line_total=Decimal("24.00"),
+            )
+        ],
+    )
+
+    parsed = attach_provenance(data, tokens)
+
+    assert parsed.line_items[0].confidence == 0.83
+
+
+def test_a_thousands_separator_is_not_mistaken_for_a_decimal() -> None:
+    """``1,234.56`` must stay one thousand two hundred thirty-four, not 1.234."""
+    tokens = [_token("RM 1,234.56", 0.95, 0.70, 0.70)]
+    data = ExtractedReceiptData(grand_total=Decimal("1234.56"))
+
+    parsed = attach_provenance(data, tokens)
+
+    field = next(f for f in parsed.fields if f.name == "grand_total")
+    assert field.confidence == 0.95
+
+
+# --------------------------------------------------------------------------- #
+# Description / price separation (REQ-109)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("description", "line_total", "expected"),
+    [
+        # The price leaked to the end of the name: strip it.
+        ("PAKU 2 INCI 4.50", "4.50", "PAKU 2 INCI"),
+        ("CAT JOTUN (KECIL) 38.00", "38.00", "CAT JOTUN (KECIL)"),
+        ("AMPELAS 5.00", "5.00", "AMPELAS"),
+        ('ROLLER BRUSH 7" 24.00', "24.00", 'ROLLER BRUSH 7"'),
+        ("Minyak Hitam RM 85.00", "85.00", "Minyak Hitam"),
+    ],
+)
+def test_trailing_price_is_removed_from_a_description(
+    description: str, line_total: str, expected: str
+) -> None:
+    assert (
+        _strip_price_from_description(
+            description, Decimal(line_total), Decimal(line_total)
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        # A number that is part of the product name, not a price.
+        "PAKU 2 INCI",
+        "SHELL TELLUS 4L",
+        "BATERI 12V",
+        "PVC PIPE 2\"",
+    ],
+)
+def test_a_product_number_is_not_stripped(description: str) -> None:
+    """Only digits that reproduce the line's own money may be removed.
+
+    Stripping a trailing number unconditionally would turn "PAKU 2 INCI" into
+    "PAKU 2" or delete the name of a 4-litre bottle.
+    """
+    assert (
+        _strip_price_from_description(description, Decimal("4.50"), Decimal("4.50"))
+        == description
+    )
+
+
+def test_a_description_that_is_only_a_price_is_kept() -> None:
+    """Blank the field and the auditor loses the row entirely; keep the text."""
+    assert _strip_price_from_description("4.50", Decimal("4.50"), Decimal("4.50")) == "4.50"
+
+
+def test_cleaning_applies_to_every_line_item() -> None:
+    data = ExtractedReceiptData(
+        grand_total=Decimal("75.75"),
+        line_items=[
+            LineItemSchema(
+                line_index=0,
+                description="PAKU 2 INCI 4.50",
+                quantity=Decimal("1"),
+                unit_price=Decimal("4.50"),
+                line_total=Decimal("4.50"),
+            ),
+            LineItemSchema(
+                line_index=1,
+                description="CAT JOTUN 38.00",
+                quantity=Decimal("1"),
+                unit_price=Decimal("38.00"),
+                line_total=Decimal("38.00"),
+            ),
+        ],
+    )
+
+    _clean_line_item_descriptions(data)
+
+    assert [item.description for item in data.line_items] == [
+        "PAKU 2 INCI",
+        "CAT JOTUN",
+    ]

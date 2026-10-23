@@ -57,7 +57,27 @@ CRITICAL LOCAL KNOWLEDGE:
    - Labels: "Jumlah" = Total, "Cukai" = Tax, "Tarikh" = Date, "Resit Rasmi" = Official Receipt.
 4. Line Item Extraction:
    - Identify line items strictly: description, quantity (default 1 if absent), unit_price, line_total.
+   - description is the item NAME ONLY. Strip the price, quantity and per-unit arithmetic from it:
+     "PAKU 2 INCI 4.50" -> description "PAKU 2 INCI", line_total 4.50.
+     "2 ROLLER BRUSH 7\" 24.00" -> description "ROLLER BRUSH 7\"", quantity 2, unit_price 12.00.
+     A description ending in a number is almost always a price that leaked in.
    - Do not hallucinate items. If line items are unreadable due to fading, extract grand_total and set line_items to empty array.
+5. Rounding (rounding) -- SIGNED, usually the last line before the total:
+   - Malaysian tills round the payable amount to the nearest 5 sen and print the adjustment on its own
+     line: "ROUNDING -0.04", "PEMBUNDARAN 0.03", "ROUND ADJ -0.02".
+   - Report that signed number as rounding. It is neither tax nor a discount, and it is NOT part of any
+     line item. Include it only when the receipt actually prints such a line; otherwise omit the field.
+   - The audit expects: sum(line_total) + tax + rounding == grand_total.
+6. Tax Basis (amount_basis) -- REQUIRED, this drives the arithmetic audit:
+   - Report whether the printed line amounts ALREADY INCLUDE the tax, or whether tax is added on top.
+   - Set amount_basis to "INCLUSIVE" when sum(line_total) equals the final total, or when the receipt says
+     "Total (Inclusive of GST)", "Harga termasuk GST", "Termasuk Cukai". Malaysian retail till receipts are
+     usually INCLUSIVE: line 7.00 with GST 0.42 and Total 7.42 means the line is 7.00 exclusive OR 7.42
+     inclusive -- read the printed arithmetic to decide.
+   - Set amount_basis to "EXCLUSIVE" when sum(line_total) + tax_amount equals the final total, or when the
+     receipt says "Total (Excluding GST)", "Sebelum Cukai".
+   - When the receipt shows no tax, use "EXCLUSIVE".
+   - Never adjust the printed line totals to force one basis: report the numbers as printed and set the basis.
 
 Return ONLY a validated JSON payload adhering to the requested schema.
 """
@@ -88,6 +108,17 @@ UNSUPPORTED_CONFIDENCE: Final = 0.0
 _ABSENT: Final = (None, "", 0, Decimal(0), Decimal("0.00"))
 
 _NUMBER_RE: Final = re.compile(r"\d[\d,]*(?:\.\d+)?")
+# EasyOCR routinely splits a decimal from its integer part ("75 .75", "38 .00").
+# Left alone the digits parse as two unrelated numbers, so a correct total matches
+# no evidence at all and floors the whole record to 0% confidence.
+_SPACED_DECIMAL_RE: Final = re.compile(
+    r"(?<=\d)\s*\.\s*(?=\d)"  # "75 .75" / "75. 75"
+    r"|(?<=\d)\s+,\s*(?=\d)"  # "75 ,75"
+    r"|(?<=\d)\s*,\s+(?=\d)"  # "75, 75"
+)
+# A comma between digits is a thousands separator in "1,234.56" but a decimal
+# point in "24,00" — Malaysian receipts print both, sometimes in one image.
+_DECIMAL_COMMA_RE: Final = re.compile(r"^\d+,\d{2}$")
 # Currency markers are stripped only as standalone tokens: an unanchored "rm"
 # would eat the middle of "storm" and "form".
 _CURRENCY_RE: Final = re.compile(r"(?<![A-Za-z])(?:myr|rm|\$)(?![A-Za-z])")
@@ -267,6 +298,56 @@ def _is_timeout_error(exc: BaseException) -> bool:
     return False
 
 
+# A price that leaked into the item name: "PAKU 2 INCI 4.50", "CAT JOTUN 38.00".
+# Only a *trailing* amount that equals the line's own total or unit price is
+# removed -- a bare number at the end of a name can be part of the product
+# ("PAKU 2 INCI", "SHELL TELLUS 4L"), so the value has to corroborate the match.
+_TRAILING_AMOUNT_RE: Final = re.compile(
+    r"[\s@x×*()\-]*(?:RM|MYR)?[\s]*(\d[\d,]*(?:\.\d{1,2})?)[\s.)]*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_price_from_description(
+    description: str, line_total: Decimal | None, unit_price: Decimal | None
+) -> str:
+    """Drop a trailing printed price the model folded into the item name.
+
+    The prompt already forbids it, but a description and a price sit on one OCR
+    line and models conflate them often enough to matter (REQ-109). This only
+    removes digits that reproduce the line's own money, which keeps genuine
+    alphanumerics such as "PAKU 2 INCI" or "CAT 5L" intact.
+    """
+    text = description.strip()
+    if not text:
+        return text
+    match = _TRAILING_AMOUNT_RE.search(text)
+    if match is None:
+        return text
+    try:
+        value = Decimal(match.group(1).replace(",", ""))
+    except InvalidOperation:
+        return text
+    if value not in {line_total, unit_price}:
+        return text
+    # Trim separators only, then rebalance: the separator run can swallow the
+    # closing paren of a name such as "CAT JOTUN (KECIL) 38.00".
+    trimmed = text[: match.start()].rstrip(" \t-@x×*")
+    if trimmed.count("(") > trimmed.count(")"):
+        trimmed = f"{trimmed})"
+    # Never let the strip empty the field: a description made only of the price
+    # is still a line item, and blanking it would hide the row from the auditor.
+    return trimmed or text
+
+
+def _clean_line_item_descriptions(data: ExtractedReceiptData) -> None:
+    """Apply the trailing-price strip to every extracted line, in place."""
+    for item in data.line_items:
+        item.description = _strip_price_from_description(
+            item.description, item.line_total, item.unit_price
+        )
+
+
 def extract_receipt_data(
     tokens: list[OCRToken],
     *,
@@ -279,7 +360,7 @@ def extract_receipt_data(
 
     llm = client or get_llm_client()
     try:
-        return llm.chat.completions.create(
+        parsed = llm.chat.completions.create(
             model=model or os.getenv(MODEL_ENV) or DEFAULT_MODEL,
             response_model=ExtractedReceiptData,
             max_retries=2,
@@ -288,6 +369,8 @@ def extract_receipt_data(
                 {"role": "user", "content": render_tokens(tokens) + _SCHEMA_HINT},
             ],
         )
+        _clean_line_item_descriptions(parsed)
+        return parsed
     except Exception as exc:  # instructor retries already exhausted
         if _is_timeout_error(exc):
             raise ExtractionTimeout(f"LLM extraction timed out: {exc}") from exc
@@ -316,9 +399,12 @@ def _decimal_or_none(text: str) -> Decimal | None:
 
 
 def _token_numbers(token: OCRToken) -> list[Decimal]:
-    numbers = (
-        _decimal_or_none(match.group()) for match in _NUMBER_RE.finditer(token.text)
-    )
+    """The numeric values a token states, after undoing common OCR spacing damage."""
+    text = _SPACED_DECIMAL_RE.sub(".", token.text)
+    if _DECIMAL_COMMA_RE.match(text.strip()):
+        # "24,00" is 24.00 in this dialect, not twenty-four thousand.
+        text = text.strip().replace(",", ".")
+    numbers = (_decimal_or_none(match.group()) for match in _NUMBER_RE.finditer(text))
     return [number for number in numbers if number is not None]
 
 
