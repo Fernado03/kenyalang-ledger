@@ -24,7 +24,13 @@ export type ReceiptStatus =
   | 'ERR_EXTRACTION';
 
 /** Inbox filter values; passed verbatim as the `status` query parameter. */
-export type ReceiptListStatus = 'ALL' | 'NEEDS_REVIEW' | 'VERIFIED' | 'EXPORTED' | 'REJECTED';
+export type ReceiptListStatus =
+  | 'ALL'
+  | 'NEEDS_REVIEW'
+  | 'VERIFIED'
+  | 'EXPORTED'
+  | 'REJECTED'
+  | 'ERROR';
 
 /** One row of the SCR-02 batch inbox. */
 export interface ReceiptListItem {
@@ -36,6 +42,8 @@ export interface ReceiptListItem {
   tax_amount: string | null;
   grand_total: string | null;
   status: ReceiptStatus;
+  /** Reason a terminal ERR_* row failed, rendered as the stamp tooltip. */
+  processing_error: string | null;
   validation_flags: string[];
   overall_confidence: number | null;
   math_discrepancy: string;
@@ -95,6 +103,13 @@ export interface ReceiptDetail {
   subtotal: string | null;
   tax_amount: string | null;
   grand_total: string | null;
+  /** Signed printed till-rounding line ("ROUNDING -0.04"); null when absent. */
+  rounding: string | null;
+  /**
+   * Whether the printed line totals already include tax (TRD §5.4). Drives the
+   * review console's arithmetic so a GST-inclusive receipt is not flagged.
+   */
+  amount_basis: string | null;
   math_discrepancy: string;
   overall_confidence: number | null;
   validation_flags: string[];
@@ -115,6 +130,10 @@ export interface ReceiptUpdateRequest {
   subtotal: string | null;
   tax_amount: string | null;
   grand_total: string | null;
+  /** Signed rounding adjustment, or null when the receipt prints none. */
+  rounding?: string | null;
+  /** `INCLUSIVE` | `EXCLUSIVE`; omitted leaves the stored basis untouched. */
+  amount_basis?: string | null;
   line_items: ReceiptUpdateLineItem[];
 }
 
@@ -171,6 +190,13 @@ export interface ReceiptDraft {
   subtotal: string;
   tax_amount: string;
   grand_total: string;
+  /** Signed rounding adjustment as text, '' when the receipt prints none. */
+  rounding: string;
+  /**
+   * `INCLUSIVE` when the printed line totals already contain the tax. Held on
+   * the draft so the console can explain the arithmetic (TRD §5.4).
+   */
+  amount_basis: string | null;
   line_items: DraftLineItem[];
 }
 
@@ -183,6 +209,7 @@ export type DraftHeaderField =
   | 'invoice_number'
   | 'subtotal'
   | 'tax_amount'
+  | 'rounding'
   | 'grand_total';
 
 /** Line-item draft keys that map 1:1 onto a table input. */

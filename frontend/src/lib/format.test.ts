@@ -4,6 +4,7 @@ import {
   formatConfidence,
   formatDate,
   formatMoneyDisplay,
+  parseSignedMoneyToCents,
   parseMoneyToCents,
 } from './format';
 
@@ -97,5 +98,27 @@ describe('formatConfidence', () => {
     expect(formatConfidence(Number.NaN)).toBe('—');
     expect(formatConfidence(Number.POSITIVE_INFINITY)).toBe('—');
     expect(formatConfidence(-0.1)).toBe('—');
+  });
+});
+
+describe('parseSignedMoneyToCents', () => {
+  it('keeps the sign on a rounding adjustment', () => {
+    expect(parseSignedMoneyToCents('-0.04')).toBe(-4n);
+    expect(parseSignedMoneyToCents('0.03')).toBe(3n);
+  });
+
+  it('accepts the currency marker on either side of the sign', () => {
+    expect(parseSignedMoneyToCents('-RM 0.04')).toBe(-4n);
+    expect(parseSignedMoneyToCents('RM -0.04')).toBe(-4n);
+  });
+
+  it('still rejects junk', () => {
+    expect(parseSignedMoneyToCents('--1.00')).toBeNull();
+    expect(parseSignedMoneyToCents('1e3')).toBeNull();
+    expect(parseSignedMoneyToCents('')).toBeNull();
+  });
+
+  it('leaves the unsigned parser strict', () => {
+    expect(parseMoneyToCents('-0.04')).toBeNull();
   });
 });

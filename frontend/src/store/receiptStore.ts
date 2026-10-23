@@ -181,6 +181,8 @@ function readDraft(receiptId: string): PersistedDraft | null {
       subtotal: candidate.subtotal ?? '',
       tax_amount: candidate.tax_amount ?? '',
       grand_total: candidate.grand_total ?? '',
+      rounding: candidate.rounding ?? '',
+      amount_basis: candidate.amount_basis ?? null,
       line_items: candidate.line_items as DraftLineItem[],
     };
   } catch {
@@ -208,6 +210,8 @@ function draftFromReceipt(receipt: ReceiptDetail): ReceiptDraft {
     subtotal: receipt.subtotal === null ? '' : String(receipt.subtotal),
     tax_amount: receipt.tax_amount === null ? '' : String(receipt.tax_amount),
     grand_total: receipt.grand_total === null ? '' : String(receipt.grand_total),
+    rounding: receipt.rounding === null ? '' : String(receipt.rounding),
+    amount_basis: receipt.amount_basis ?? null,
     line_items: receipt.line_items.map((item, index) => ({
       key: crypto.randomUUID(),
       source_index: index,
@@ -251,6 +255,8 @@ function updateRequestFromDraft(draft: ReceiptDraft): ReceiptUpdateRequest {
     subtotal: nullIfBlank(draft.subtotal),
     tax_amount: nullIfBlank(draft.tax_amount),
     grand_total: nullIfBlank(draft.grand_total),
+    rounding: nullIfBlank(draft.rounding),
+    amount_basis: draft.amount_basis,
     line_items,
   };
 }
@@ -306,6 +312,12 @@ export interface ReceiptStoreState {
   rejectReceipt: () => Promise<ReceiptDetail>;
   dismissFlash: () => void;
   uploadFiles: (files: File[]) => Promise<void>;
+  /**
+   * Re-read the batch rows' real statuses from the server (M2). The upload page
+   * has no pipeline of its own, so without this its rows stayed "Processing"
+   * forever even after the backend had settled them.
+   */
+  refreshUploadStatuses: () => Promise<void>;
 }
 
 /** Inbox list fetch shared by `setCurrentClientId` and `loadClientReceipts`. */
@@ -403,6 +415,10 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
       currentClientId: id,
       receipts: [],
       receiptsTotal: 0,
+      // The tab counts belong to the previous workspace (L4). Leaving them in
+      // place shows the old client's badges against the new client's empty
+      // list until the first fetch lands.
+      statusCounts: {},
       receiptsOffset: 0,
       activeReceipt: null,
       draft: null,
@@ -989,6 +1005,55 @@ export const useReceiptStore = create<ReceiptStoreState>((set, get) => ({
         uploadState: 'error',
         uploadResult: { uploaded: [], failed: `Batch rejected: ${failureMessage(error)}` },
       });
+    }
+  },
+
+  refreshUploadStatuses: async () => {
+    const { currentClientId, uploadResult } = get();
+    if (currentClientId === null || uploadResult === null) {
+      return;
+    }
+    if (uploadResult.uploaded.length === 0) {
+      return;
+    }
+    try {
+      // One list request covers the whole batch: the rows were just created, so
+      // they are on the first page. Polling per receipt would multiply the load
+      // by the batch size for no extra information.
+      const page = await listReceipts(currentClientId, {
+        status: 'ALL',
+        limit: Math.max(DEFAULT_LIST_LIMIT, uploadResult.uploaded.length),
+        offset: 0,
+      });
+      const byId = new Map(page.items.map((item) => [item.id, item]));
+      // Drop the update if the workspace changed while the request was in
+      // flight, or the user cleared the result.
+      if (get().currentClientId !== currentClientId) {
+        return;
+      }
+      const latest = get().uploadResult;
+      if (latest === null) {
+        return;
+      }
+      set({
+        uploadResult: {
+          ...latest,
+          uploaded: latest.uploaded.map((item) => {
+            const fresh = byId.get(item.id);
+            if (fresh === undefined) {
+              return item;
+            }
+            return {
+              ...item,
+              status: fresh.status,
+              error: fresh.processing_error ?? item.error,
+            };
+          }),
+        },
+      });
+    } catch {
+      // A transient poll failure must not turn a completed upload into an
+      // error state; the next tick retries.
     }
   },
 }));

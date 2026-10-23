@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { auditMath } from './audit';
+import { auditMath, resolveAmountBasis } from './audit';
 import type { ReceiptDraft } from '../types/receipt';
 
 function draft(overrides: Partial<ReceiptDraft> = {}): ReceiptDraft {
@@ -12,6 +12,8 @@ function draft(overrides: Partial<ReceiptDraft> = {}): ReceiptDraft {
     subtotal: '10.00',
     tax_amount: '1.00',
     grand_total: '11.00',
+    rounding: '',
+    amount_basis: null,
     line_items: [
       {
         key: 'line-1',
@@ -167,5 +169,113 @@ describe('auditMath', () => {
       }),
     );
     expect(lowercase.missingSstOnRegisteredMerchant).toBe(true);
+  });
+});
+
+describe('tax basis (H1)', () => {
+  /** The audit's 100.jpg: lines 7.42, GST 0.42, total 7.42 — GST inclusive. */
+  const inclusiveReceipt = (overrides: Partial<ReceiptDraft> = {}): ReceiptDraft =>
+    draft({
+      subtotal: '7.00',
+      tax_amount: '0.42',
+      grand_total: '7.42',
+      line_items: [
+        {
+          key: 'line-1',
+          description: 'BEG GUNI',
+          quantity: '1',
+          unit_price: '7.42',
+          line_total: '7.42',
+        },
+      ],
+      ...overrides,
+    });
+
+  it('infers INCLUSIVE when the lines already equal the grand total', () => {
+    expect(resolveAmountBasis(inclusiveReceipt())).toBe('INCLUSIVE');
+  });
+
+  it('does not double-count GST on an inclusive receipt', () => {
+    const result = auditMath(inclusiveReceipt());
+
+    expect(result.matches).toBe(true);
+    expect(result.deltaCents).toBe(0n);
+    expect(result.message).toContain('Math Matches');
+    // The explanation must not claim tax is being added on top.
+    expect(result.message).toContain('GST inclusive');
+    expect(result.message).not.toContain('+ Tax RM 0.42');
+  });
+
+  it('still adds tax for an exclusive receipt', () => {
+    const result = auditMath(draft());
+
+    expect(resolveAmountBasis(draft())).toBe('EXCLUSIVE');
+    expect(result.matches).toBe(true);
+    expect(result.message).toContain('+ Tax RM 1.00');
+  });
+
+  it('honours an explicit basis over inference', () => {
+    const explicit = inclusiveReceipt({ amount_basis: 'EXCLUSIVE' });
+
+    expect(resolveAmountBasis(explicit)).toBe('EXCLUSIVE');
+    // Reading 7.42 + 0.42 against 7.42 is a genuine 42-cent mismatch.
+    expect(auditMath(explicit).deltaCents).toBe(42n);
+  });
+
+  it('reports the unexplained amount on a true mismatch', () => {
+    // Basis pinned so the expectation does not depend on inference: lines 7.42
+    // against a printed 8.00 leaves 58 cents unaccounted for.
+    const result = auditMath(
+      inclusiveReceipt({ amount_basis: 'INCLUSIVE', grand_total: '8.00' }),
+    );
+
+    expect(result.matches).toBe(false);
+    expect(result.deltaCents).toBe(-58n);
+    expect(result.message).toContain('Difference: RM 0.58');
+  });
+
+  it('treats a receipt with no lines as exclusive', () => {
+    expect(
+      resolveAmountBasis(
+        inclusiveReceipt({ line_items: [], subtotal: '7.00', grand_total: '7.42' }),
+      ),
+    ).toBe('EXCLUSIVE');
+  });
+});
+
+describe('printed rounding line', () => {
+  const receipt = draft({
+    tax_amount: '4.29',
+    grand_total: '75.75',
+    rounding: '-0.04',
+    line_items: [
+      { key: 'a', description: 'PAKU 2 INCI', quantity: '1', unit_price: '4.50', line_total: '4.50' },
+      { key: 'b', description: 'CAT JOTUN', quantity: '1', unit_price: '38.00', line_total: '38.00' },
+      { key: 'c', description: 'ROLLER BRUSH', quantity: '2', unit_price: '12.00', line_total: '24.00' },
+      { key: 'd', description: 'AMPELAS', quantity: '5', unit_price: '1.00', line_total: '5.00' },
+    ],
+  });
+
+  it('reconciles a receipt whose till rounded the total down', () => {
+    const audit = auditMath(receipt);
+
+    expect(audit.matches).toBe(true);
+    expect(audit.roundingCents).toBe(-4n);
+    expect(audit.message).toContain('− Rounding RM 0.04');
+  });
+
+  it('still reports the gap when the rounding line does not explain it', () => {
+    const audit = auditMath({ ...receipt, rounding: '0.00', grand_total: '75.75' });
+
+    expect(audit.matches).toBe(false);
+    expect(audit.message).toContain('Difference: RM 0.04');
+  });
+
+  it('keeps the identity unchanged when no rounding line is printed', () => {
+    const audit = auditMath({ ...receipt, rounding: '', grand_total: '75.79' });
+
+    expect(audit.matches).toBe(true);
+    expect(audit.roundingCents).toBe(0n);
+    expect(audit.message).not.toContain('Rounding');
   });
 });
