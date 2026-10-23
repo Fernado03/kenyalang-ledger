@@ -27,7 +27,8 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.database import session_scope, utcnow
 from app.models.receipt import Receipt, ReceiptStatus
 from app.models.receipt_audit_log import ReceiptAuditLog
-from app.services.reconciler import extract_sst_number
+from app.schemas.receipt import AMOUNT_BASIS_EXCLUSIVE, AMOUNT_BASIS_INCLUSIVE
+from app.services.reconciler import MATH_TOLERANCE, extract_sst_number
 
 MONTH_RE = re.compile(r"^([1-9]\d{3})-(0[1-9]|1[0-2])$")
 MONTH_PATTERN = r"^[1-9]\d{3}-(0[1-9]|1[0-2])$"
@@ -35,7 +36,12 @@ MONTH_ERROR = "month must be YYYY-MM"
 
 # Spreadsheet applications execute a cell whose text starts with one of these
 # characters. Prefixing a single quote forces the cell to stay text.
-CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
+
+# C0 controls and DEL. Tab, CR and LF are included: after a CR the cell text
+# continues as a new logical line, which is how a formula smuggles itself into
+# the first column of the next row.
+CSV_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 EXPORTABLE_STATUSES: tuple[ReceiptStatus, ...] = (
     ReceiptStatus.STATUS_VERIFIED,
@@ -137,10 +143,18 @@ def _parse_month_range(month: str | None) -> tuple[date, date] | None:
 def _csv_text(value: str | None) -> str:
     """Neutralise spreadsheet formula injection in a text cell.
 
-    Cells beginning with ``=``, ``+``, ``-``, ``@``, tab, or carriage return are
-    prefixed with an apostrophe so Excel/Sheets treat them as literal text.
+    A cell is dangerous when its *first* character is one of
+    ``=``, ``+``, ``-``, ``@``, tab, CR or LF. Stripping control characters
+    first is what closes the demonstrated bypass: ``"\\r=cmd|..."`` did not
+    start with ``=``, so the prefix guard let it through, and the embedded CR
+    then broke the row apart on the receiving side. Control characters can
+    never appear in a legitimate merchant name or description, and a carriage
+    return inside a quoted field is exactly how a CSV row gets injected, so they
+    are replaced with a space rather than escaped. A space (not deletion) keeps
+    ``"A\rB"`` from silently becoming the different name ``"AB"``.
     """
     text = "" if value is None else str(value)
+    text = CSV_CONTROL_CHARS_RE.sub(" ", text).strip()
     if text.startswith(CSV_DANGEROUS_PREFIXES):
         return "'" + text
     return text
@@ -194,6 +208,57 @@ def allocate_tax_cents(
         floors[index] += 1
         leftover -= 1
     return floors
+
+
+def receipt_line_amounts(receipt: Receipt) -> tuple[list[int], list[int], int]:
+    """Split a receipt's lines into tax-exclusive amounts and allocated tax.
+
+    Returns ``(line_net_cents, line_tax_cents, header_net_cents)``.
+
+    UBL requires every ``InvoiceLine/LineExtensionAmount`` to be tax-*exclusive*
+    and the header ``LineExtensionAmount`` to equal their sum. Malaysian retail
+    receipts print inclusive line totals, so the printed figures cannot be
+    copied straight through: the tax is allocated back out of each line and the
+    header is rebuilt from the resulting net amounts. Copying the printed
+    subtotal into the header while emitting inclusive line amounts produced a
+    document whose header disagreed with its own lines — rejected by LHDN
+    validators — and a CSV whose ``TotalAmount`` double-counted GST.
+    """
+    if not receipt.line_items:
+        return [], [], 0
+
+    tax_cents = _to_cents(receipt.tax_amount)
+    if tax_cents < 0:
+        tax_cents = 0
+    printed_cents = [_to_cents(item.line_total) for item in receipt.line_items]
+
+    basis = receipt.amount_basis or _infer_basis_cents(
+        printed_cents, tax_cents, _to_cents(receipt.grand_total)
+    )
+    if basis == AMOUNT_BASIS_INCLUSIVE:
+        # The printed totals already contain the tax: take it back out.
+        allocated = allocate_tax_cents(sum(printed_cents), tax_cents, printed_cents)
+        net = [max(line - tax, 0) for line, tax in zip(printed_cents, allocated)]
+        return net, allocated, sum(net)
+
+    # Exclusive: printed line totals are already net.
+    allocated = allocate_tax_cents(sum(printed_cents), tax_cents, printed_cents)
+    return printed_cents, allocated, sum(printed_cents)
+
+
+def _infer_basis_cents(
+    line_cents: list[int], tax_cents: int, total_cents: int
+) -> str:
+    """Infer the basis from cents when a row predates the recorded field."""
+    if not line_cents:
+        return AMOUNT_BASIS_EXCLUSIVE
+    line_sum = sum(line_cents)
+    tolerance = int(MATH_TOLERANCE * 100)
+    if abs(line_sum + tax_cents - total_cents) <= tolerance:
+        return AMOUNT_BASIS_EXCLUSIVE
+    if abs(line_sum - total_cents) <= tolerance:
+        return AMOUNT_BASIS_INCLUSIVE
+    return AMOUNT_BASIS_EXCLUSIVE
 
 
 def _fetch_export_receipts(
@@ -297,7 +362,11 @@ def generate_accounting_csv(
     def _execute(session: Session) -> str:
         receipts = _fetch_export_receipts(session, client_id, month=month)
         output = io.StringIO()
-        writer = csv.writer(output, lineterminator="\n")
+        # QUOTE_ALL: every field is quoted, so a value that still contains a
+        # separator or quote cannot shift the columns of a neighbouring row.
+        writer = csv.writer(
+            output, lineterminator="\n", quoting=csv.QUOTE_ALL
+        )
         writer.writerow(CSV_COLUMNS)
 
         for receipt in receipts:
@@ -329,24 +398,26 @@ def generate_accounting_csv(
             tax_code = "SST-6" if has_tax else "NONE"
 
             if receipt.line_items:
-                subtotal = receipt.subtotal or sum(
-                    (it.line_total for it in receipt.line_items), Decimal("0.00")
-                )
-                line_cents = [_to_cents(it.line_total) for it in receipt.line_items]
-                tax_cents = _to_cents(receipt.tax_amount) if has_tax else 0
-                tax_by_line = allocate_tax_cents(
-                    _to_cents(subtotal), tax_cents, line_cents
-                )
-                for item, allocated in zip(receipt.line_items, tax_by_line):
+                net_cents, tax_by_line, _ = receipt_line_amounts(receipt)
+                for item, net, allocated in zip(
+                    receipt.line_items, net_cents, tax_by_line
+                ):
                     desc = item.description or "General Item"
                     item_code = f"ITEM-{item.line_index + 1:02d}"
                     qty_str = _format_qty(item.quantity)
-                    unit_price_str = f"{item.unit_price:.2f}"
 
+                    # UnitPrice is the tax-exclusive price, matching the net
+                    # line amount; TotalAmount is what the line actually cost
+                    # the buyer, so the invoice header still reconciles.
+                    item_net = Decimal(net) / 100
                     item_tax = Decimal(allocated) / 100
-                    item_total = (item.line_total + item_tax).quantize(
-                        Decimal("0.01")
-                    )
+                    item_total = item_net + item_tax
+                    unit_price_str = f"{item_net:.2f}"
+                    if item.quantity:
+                        try:
+                            unit_price_str = f"{item_net / Decimal(item.quantity):.2f}"
+                        except (ArithmeticError, ValueError):  # pragma: no cover
+                            unit_price_str = f"{item_net:.2f}"
 
                     writer.writerow(
                         [
@@ -361,6 +432,28 @@ def generate_accounting_csv(
                             _csv_text(tax_code),
                             f"{item_tax:.2f}",
                             f"{item_total:.2f}",
+                        ]
+                    )
+
+                # The till's printed rounding line is part of what the buyer
+                # actually paid, so it needs a journal line of its own: without
+                # one the batch posts RM 0.04 more than the receipt. Posted as a
+                # zero-quantity adjustment so it cannot be mistaken for goods.
+                rounding = receipt.rounding or Decimal("0.00")
+                if rounding != Decimal("0.00"):
+                    writer.writerow(
+                        [
+                            _csv_text(doc_date),
+                            _csv_text(doc_no),
+                            _csv_text(supplier_code),
+                            _csv_text(supplier_name),
+                            _csv_text("Rounding adjustment"),
+                            _csv_text("ITEM-RND"),
+                            "0",
+                            f"{rounding:.2f}",
+                            _csv_text("NONE"),
+                            "0.00",
+                            f"{rounding:.2f}",
                         ]
                     )
             else:
@@ -448,17 +541,24 @@ def generate_myinvois_json(
                 party_ids.append({"ID": [{"_": "NA", "schemeID": "BRN"}]})
 
             tax_dec = receipt.tax_amount or Decimal("0.00")
-            # A NULL subtotal means the header was not read; derive the
-            # tax-exclusive figure from the grand total so tax never lands
-            # inside TaxExclusiveAmount/TaxableAmount.
-            subtotal_dec = (
-                receipt.subtotal
-                if receipt.subtotal is not None
-                else max(
+            # UBL demands a tax-exclusive header that equals the sum of the
+            # tax-exclusive line amounts. On an inclusive receipt the printed
+            # subtotal is *not* that number — the printed line totals include
+            # GST — so the header is rebuilt from the lines and the tax is
+            # allocated back out of them. Deriving it from ``grand_total - tax``
+            # keeps a receipt with no readable lines internally consistent too.
+            net_cents, tax_by_line_cents, header_net_cents = receipt_line_amounts(
+                receipt
+            )
+            if receipt.line_items:
+                subtotal_dec = Decimal(header_net_cents) / 100
+            elif receipt.subtotal is not None:
+                subtotal_dec = receipt.subtotal
+            else:
+                subtotal_dec = max(
                     (receipt.grand_total or Decimal("0.00")) - tax_dec,
                     Decimal("0.00"),
                 )
-            )
             grand_total_dec = (
                 receipt.grand_total
                 if receipt.grand_total is not None
@@ -468,6 +568,7 @@ def generate_myinvois_json(
             subtotal_num = round(float(subtotal_dec), 2)
             tax_num = round(float(tax_dec), 2)
             grand_total_num = round(float(grand_total_dec), 2)
+            rounding_num = round(float(receipt.rounding or Decimal("0.00")), 2)
 
             supplier_party = [
                 {
@@ -496,7 +597,13 @@ def generate_myinvois_json(
                     ],
                     "AllowanceTotalAmount": [{"_": 0.0, "currencyID": "MYR"}],
                     "ChargeTotalAmount": [{"_": 0.0, "currencyID": "MYR"}],
-                    "PayableRoundingAmount": [{"_": 0.0, "currencyID": "MYR"}],
+                    # The receipt's own printed rounding line, signed. Emitting a
+                    # hardcoded 0.00 left the UBL block unable to explain why
+                    # TaxInclusiveAmount + tax differs from PayableAmount on a
+                    # receipt whose till rounded to 5 sen.
+                    "PayableRoundingAmount": [
+                        {"_": rounding_num, "currencyID": "MYR"}
+                    ],
                     "PayableAmount": [{"_": grand_total_num, "currencyID": "MYR"}],
                 }
             ]
@@ -533,28 +640,19 @@ def generate_myinvois_json(
 
             invoice_lines: list[dict[str, Any]] = []
             if receipt.line_items:
-                line_cents = [_to_cents(item.line_total) for item in receipt.line_items]
-                tax_cents = _to_cents(tax_dec)
-                tax_by_line = allocate_tax_cents(
-                    _to_cents(subtotal_dec), tax_cents, line_cents
-                )
-                for idx, (item, allocated) in enumerate(
-                    zip(receipt.line_items, tax_by_line)
+                for idx, (item, net_cents, allocated) in enumerate(
+                    zip(receipt.line_items, net_cents, tax_by_line_cents)
                 ):
                     qty_num = (
                         float(item.quantity)
                         if item.quantity is not None
                         else 1.0
                     )
+                    # LineExtensionAmount is tax-exclusive by definition, and
+                    # PriceAmount must agree with it so qty x price == line.
+                    line_tot_num = round(net_cents / 100, 2)
                     unit_p_num = (
-                        float(item.unit_price)
-                        if item.unit_price is not None
-                        else 0.0
-                    )
-                    line_tot_num = (
-                        float(item.line_total)
-                        if item.line_total is not None
-                        else round(qty_num * unit_p_num, 2)
+                        round(line_tot_num / qty_num, 2) if qty_num else line_tot_num
                     )
 
                     item_tax_num = round(allocated / 100, 2)

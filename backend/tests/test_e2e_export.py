@@ -12,6 +12,8 @@ Covers:
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
@@ -211,15 +213,32 @@ def test_e2e_export_flow(
 
     # 4. Call generate_accounting_csv() and assert AutoCount / SQL Account columns
     csv_str = generate_accounting_csv(client_id, month="2026-09")
-    csv_lines = [line.strip() for line in csv_str.strip().split("\n") if line.strip()]
-    expected_header = (
-        "DocDate,DocNo,SupplierCode,SupplierName,Description,ItemCode,Qty,UnitPrice,TaxCode,TaxAmount,TotalAmount"
-    )
-    assert csv_lines[0] == expected_header
-    assert len(csv_lines) == 3  # header + 2 line items
-    assert "12/09/2026,INV-99120" in csv_lines[1]
-    assert 'PVC Pipe 2"' in csv_lines[1]
-    assert "Minyak Hitam 4L" in csv_lines[2]
+    # Parsed with the csv module rather than split(","): every field is quoted
+    # (QUOTE_ALL, H3), so the raw text is not comma-delimited in the naive sense.
+    csv_rows = list(csv.reader(io.StringIO(csv_str)))
+    csv_rows = [row for row in csv_rows if any(cell.strip() for cell in row)]
+    expected_header = [
+        "DocDate",
+        "DocNo",
+        "SupplierCode",
+        "SupplierName",
+        "Description",
+        "ItemCode",
+        "Qty",
+        "UnitPrice",
+        "TaxCode",
+        "TaxAmount",
+        "TotalAmount",
+    ]
+    assert csv_rows[0] == expected_header
+    assert len(csv_rows) == 3  # header + 2 line items
+    assert csv_rows[1][0] == "12/09/2026"
+    assert csv_rows[1][1] == "INV-99120"
+    assert 'PVC Pipe 2"' in csv_rows[1][4]
+    assert "Minyak Hitam 4L" in csv_rows[2][4]
+    # Exclusive receipt: line totals are already net, so the printed values
+    # survive unchanged and TotalAmount still reconciles to the grand total.
+    assert sum(float(row[10]) for row in csv_rows[1:]) == pytest.approx(105.47, abs=0.01)
 
 
 def test_export_api_endpoints_and_tenancy(

@@ -58,6 +58,8 @@ def _seed_receipt(
     subtotal: str = "99.99",
     tax: str = "0.07",
     grand_total: str = "100.06",
+    amount_basis: str | None = None,
+    rounding: str | None = None,
     lines: tuple[tuple[int, str, str, str], ...] = (
         (0, "Item A", "1.00", "33.33"),
         (1, "Item B", "1.00", "33.33"),
@@ -81,6 +83,8 @@ def _seed_receipt(
             subtotal=Decimal(subtotal),
             tax_amount=Decimal(tax),
             grand_total=Decimal(grand_total),
+            amount_basis=amount_basis,
+            rounding=None if rounding is None else Decimal(rounding),
         )
         for index, description, unit_price, line_total in lines:
             receipt.line_items.append(
@@ -369,3 +373,256 @@ def test_invalid_month_is_422_on_every_export_route(
     assert csv_response.status_code == 422
     assert json_response.status_code == 422
     assert mark_response.status_code == 422
+
+
+# --------------------------------------------------------------------------- #
+# H3: control characters cannot break out of a CSV cell
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "\r=cmd|' /C calc'!A0",
+        "\n=cmd|' /C calc'!A0",
+        "Vendor\r\nName",
+        "\x00Vendor",
+        "Vendor\x1b[31m",
+    ],
+)
+def test_csv_strips_control_characters_before_the_prefix_guard(
+    accountant_id: uuid.UUID, payload: str
+) -> None:
+    """A leading CR bypassed the prefix blocklist and split the record.
+
+    The payload ``"\\r=cmd|..."`` did not *start* with ``=``, so the guard let
+    it through and the CR then started a new line inside the cell — which is
+    exactly what Excel and RFC-4180 readers treat as a record boundary.
+    """
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(
+        client_id,
+        merchant_name=payload,
+        invoice_number="INV-CR",
+        lines=((0, payload, "1.00", "10.00"),),
+        subtotal="10.00",
+        tax="0.60",
+        grand_total="10.60",
+    )
+
+    with SessionLocal() as db:
+        csv_text = generate_accounting_csv(client_id, month="2026-09", db=db)
+
+    # The record count is unchanged: no payload can create an extra row.
+    rows = _parse_csv(csv_text)
+    assert len(rows) == 2  # header + one line item
+
+    # No control character survives into any cell.
+    for row in rows:
+        for cell in row:
+            assert "\r" not in cell
+            assert "\n" not in cell
+            assert not any(ord(char) < 0x20 for char in cell)
+
+    row = next(row for row in rows[1:] if "INV-CR" in row)
+    # Whatever is left is neutralised, so a spreadsheet cannot execute it.
+    assert row[3].startswith("'") or not row[3].startswith(("=", "+", "-", "@"))
+    assert row[4].startswith("'") or not row[4].startswith(("=", "+", "-", "@"))
+
+
+def test_csv_quotes_every_field(accountant_id: uuid.UUID) -> None:
+    """QUOTE_ALL keeps a separator inside a value from shifting the columns."""
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(
+        client_id,
+        merchant_name='Vendor, Inc. "The Best"',
+        invoice_number="INV-QUOTE",
+        lines=((0, "Item, with comma", "1.00", "10.00"),),
+        subtotal="10.00",
+        tax="0.60",
+        grand_total="10.60",
+    )
+
+    with SessionLocal() as db:
+        csv_text = generate_accounting_csv(client_id, month="2026-09", db=db)
+
+    first_line = csv_text.splitlines()[0]
+    assert first_line.startswith('"DocDate"')
+    rows = _parse_csv(csv_text)
+    row = next(row for row in rows[1:] if "INV-QUOTE" in row)
+    assert len(row) == 11
+    assert row[3] == 'Vendor, Inc. "The Best"'
+    assert row[4] == "Item, with comma"
+
+
+# --------------------------------------------------------------------------- #
+# H1: exports must not double-count GST on an inclusive receipt
+# --------------------------------------------------------------------------- #
+
+
+def _seed_inclusive_receipt(client_id: uuid.UUID) -> None:
+    """The audit's 100.jpg: lines 7.42, GST 0.42, total 7.42 (GST inclusive)."""
+    _seed_receipt(
+        client_id,
+        merchant_name="Kedai ABC",
+        invoice_number="CS00011955",
+        lines=((0, "BEG GUNI", "7.42", "7.42"),),
+        subtotal="7.00",
+        tax="0.42",
+        grand_total="7.42",
+        amount_basis="INCLUSIVE",
+    )
+
+
+def test_csv_total_amount_does_not_double_count_inclusive_gst(
+    accountant_id: uuid.UUID,
+) -> None:
+    """A RM 7.42 receipt used to be exported as RM 7.84 (line + tax again)."""
+    client_id = _seed_client(accountant_id)
+    _seed_inclusive_receipt(client_id)
+
+    with SessionLocal() as db:
+        csv_text = generate_accounting_csv(client_id, month="2026-09", db=db)
+
+    rows = _parse_csv(csv_text)
+    row = next(row for row in rows[1:] if "CS00011955" in row)
+    # UnitPrice and TotalAmount are the net figure and what was actually paid.
+    assert row[7] == "7.00"  # UnitPrice, tax-exclusive
+    assert row[9] == "0.42"  # TaxAmount
+    assert row[10] == "7.42"  # TotalAmount, NOT 7.84
+
+
+def test_ubL_header_equals_the_sum_of_its_lines(
+    accountant_id: uuid.UUID,
+) -> None:
+    """The header used to carry the printed subtotal while the lines were gross.
+
+    LHDN validators reject a document whose ``LegalMonetaryTotal`` disagrees
+    with the sum of ``InvoiceLine/LineExtensionAmount``.
+    """
+    client_id = _seed_client(accountant_id)
+    _seed_inclusive_receipt(client_id)
+
+    payload = generate_myinvois_json(client_id, month="2026-09")
+    invoice = payload["Invoice"][0]
+    totals = invoice["LegalMonetaryTotal"][0]
+    lines = invoice["InvoiceLine"]
+
+    line_sum = round(sum(line["LineExtensionAmount"][0]["_"] for line in lines), 2)
+    assert totals["LineExtensionAmount"][0]["_"] == line_sum
+    assert totals["TaxExclusiveAmount"][0]["_"] == line_sum
+    # TaxExclusive + tax must land on the printed payable amount.
+    assert round(
+        totals["TaxExclusiveAmount"][0]["_"]
+        + invoice["TaxTotal"][0]["TaxAmount"][0]["_"],
+        2,
+    ) == totals["PayableAmount"][0]["_"]
+    assert totals["PayableAmount"][0]["_"] == 7.42
+
+
+def test_exclusive_export_is_unchanged(accountant_id: uuid.UUID) -> None:
+    """Trade invoices still export their printed net line totals verbatim."""
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(
+        client_id,
+        invoice_number="INV-EXC",
+        lines=((0, "PVC Pipe", "14.50", "14.50"), (1, "Minyak", "85.00", "85.00")),
+        subtotal="99.50",
+        tax="5.97",
+        grand_total="105.47",
+        amount_basis="EXCLUSIVE",
+    )
+
+    payload = generate_myinvois_json(client_id, month="2026-09")
+    invoice = payload["Invoice"][0]
+    totals = invoice["LegalMonetaryTotal"][0]
+
+    assert [line["LineExtensionAmount"][0]["_"] for line in invoice["InvoiceLine"]] == [
+        14.50,
+        85.00,
+    ]
+    assert totals["TaxExclusiveAmount"][0]["_"] == 99.50
+    assert totals["TaxInclusiveAmount"][0]["_"] == 105.47
+
+
+# --------------------------------------------------------------------------- #
+# Printed rounding line in the exports
+# --------------------------------------------------------------------------- #
+
+
+def test_csv_posts_the_printed_rounding_line(accountant_id: uuid.UUID) -> None:
+    """71.50 + 4.29 - 0.04 = 75.75, so the batch must net to 75.75.
+
+    Without a rounding row the journal sums to 75.79 while the receipt says
+    75.75: the accountant books four sen more than was paid, and the export
+    disagrees with the audit that approved it.
+    """
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(
+        client_id,
+        merchant_sst="W10-1808-32000123",
+        subtotal="71.50",
+        tax="4.29",
+        grand_total="75.75",
+        rounding="-0.04",
+        amount_basis="EXCLUSIVE",
+        lines=(
+            (0, "PAKU 2 INCI", "4.50", "4.50"),
+            (1, "CAT JOTUN (KECIL)", "38.00", "38.00"),
+            (2, "ROLLER BRUSH", "12.00", "24.00"),
+            (3, "AMPELAS", "1.00", "5.00"),
+        ),
+    )
+
+    with SessionLocal() as db:
+        csv_text = generate_accounting_csv(client_id, month="2026-09", db=db)
+
+    rows = _parse_csv(csv_text)
+    data_rows = [row for row in rows[1:] if row[1] == "INV-001"]
+
+    rounding_rows = [row for row in data_rows if row[5] == "ITEM-RND"]
+    assert len(rounding_rows) == 1
+    assert rounding_rows[0][10] == "-0.04"
+    assert rounding_rows[0][6] == "0"
+
+    # The journal now agrees with the receipt.
+    posted = sum(Decimal(row[10]) for row in data_rows)
+    assert posted == Decimal("75.75")
+
+
+def test_csv_omits_the_rounding_row_when_nothing_was_rounded(
+    accountant_id: uuid.UUID,
+) -> None:
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(client_id, rounding=None)
+
+    with SessionLocal() as db:
+        csv_text = generate_accounting_csv(client_id, month="2026-09", db=db)
+
+    rows = _parse_csv(csv_text)
+    assert not [row for row in rows[1:] if row[5] == "ITEM-RND"]
+
+
+def test_ubl_reports_the_printed_rounding_amount(accountant_id: uuid.UUID) -> None:
+    """PayableRoundingAmount was hardcoded 0.00, so the document could not add up."""
+    client_id = _seed_client(accountant_id)
+    _seed_receipt(
+        client_id,
+        subtotal="71.50",
+        tax="4.29",
+        grand_total="75.75",
+        rounding="-0.04",
+        amount_basis="EXCLUSIVE",
+        lines=(
+            (0, "PAKU 2 INCI", "4.50", "4.50"),
+            (1, "CAT JOTUN (KECIL)", "38.00", "38.00"),
+            (2, "ROLLER BRUSH", "12.00", "24.00"),
+            (3, "AMPELAS", "1.00", "5.00"),
+        ),
+    )
+
+    payload = generate_myinvois_json(client_id, month="2026-09")
+    totals = payload["Invoice"][0]["LegalMonetaryTotal"][0]
+
+    assert totals["PayableRoundingAmount"][0]["_"] == -0.04
+    assert totals["PayableAmount"][0]["_"] == 75.75
