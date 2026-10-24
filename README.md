@@ -7,6 +7,11 @@ This repository is a **portfolio demo**, not a production service. It runs local
 forged demo identity, stores files on the local disk, and processes uploads in-process.
 Sections below state exactly where those demo boundaries are.
 
+![The Kenyalang Ledger launch film — eight scenes, 48 seconds](kenyalang-launch/renders/kenyalang-launch-preview.gif)
+
+*Above: a silent 8-second trailer, one beat per scene. The full 48-second cut with voiceover,
+sound design and score is **[here](kenyalang-launch/renders/kenyalang-launch.mp4)** (33 MB, MP4).*
+
 ---
 
 ## Overview
@@ -62,6 +67,20 @@ who knows a UUID can act as that accountant. `KENYALANG_ENV` gates the header to
 `RuntimeError("Kenyalang Ledger demo auth must not run in production")`. Never expose this
 service on a public network.
 
+### Media in this repository
+
+The launch film is a portfolio artefact, and its media carries its own provenance:
+
+| Asset | Origin | Licence |
+|---|---|---|
+| Receipt photographs (`kenyalang-launch/assets/media/`) | A demo receipt photographed as a prop for this film; not a customer document | Covered by this repository's MIT licence |
+| Voiceover (`assets/audio/vo-*.mp3`) | ElevenLabs, voice `Eric` | Generated on a free tier |
+| Score (`assets/bgm/track.mp3`) | *Suasam Sarawak*, generated with Suno | **Suno free tier is non-commercial.** Fine for a portfolio and a local render; if this film is ever used commercially, replace the track |
+| Sound effects (`assets/sfx/`) | ElevenLabs sound generation | Generated on a free tier |
+
+No real customer receipt, supplier invoice, or personal data appears in the film or the
+repository. The receipts the app processes in the demo are fixtures, not scans of anyone's paper.
+
 ---
 
 ## Architecture & tech stack
@@ -115,11 +134,6 @@ kenyalang-ledger/
 ```
 
 ### The launch film
-
-![The Kenyalang Ledger launch film — eight scenes, 48 seconds](kenyalang-launch/renders/kenyalang-launch-preview.gif)
-
-*Above: a silent 8-second trailer, one beat per scene. The full 48-second cut with voiceover,
-sound design and score is **[here](kenyalang-launch/renders/kenyalang-launch.mp4)** (33 MB, MP4).*
 
 `kenyalang-launch/` holds a 48-second product film (1920×1080, 30 fps) built with
 [HyperFrames](https://hyperframes.dev). It is not a mockup: every product frame is a real
