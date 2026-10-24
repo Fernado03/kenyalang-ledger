@@ -1,0 +1,261 @@
+<template>
+  <style>
+    #root {
+      --canvas: #f6f1e7;
+      --surface: #fbf8f1;
+      --surface-subtle: #efe8da;
+      --rule: #d9d2c3;
+      --rule-strong: #8a8274;
+      --ink: #171a18;
+      --ink-2: #3f4742;
+      --muted: #5f665f;
+      --brand: #0b3f3a;
+      --brand-mid: #147a6c;
+      --brand-50: #e7f0eb;
+      --amber: #c9a05a;
+      --amber-ink: #7a4e0a;
+      --verified: #2d5334;
+      --charcoal: #141713;
+      --font-display: "EB Garamond", "Iowan Old Style", Georgia, serif;
+      --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+      position: absolute;
+      inset: 0;
+      background: var(--canvas);
+      overflow: hidden;
+      font-family: var(--font-ui);
+      color: var(--ink);
+    }
+    .ex-head {
+      position: absolute;
+      left: 140px;
+      top: 76px;
+    }
+    .ex-step {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--brand-mid);
+    }
+    .ex-title {
+      margin-top: 12px;
+      font-family: var(--font-display);
+      font-size: 58px;
+      line-height: 1.04;
+      letter-spacing: -0.02em;
+    }
+    .ex-sub {
+      margin-top: 10px;
+      font-size: 30px;
+      color: var(--ink-2);
+      max-width: 980px;
+      line-height: 1.42;
+    }
+
+    /* the real Exports page, cropped to its content band (330,60 1260x500) */
+    #ex-frame {
+      position: absolute;
+      left: 140px;
+      top: 292px;
+      width: 1680px;
+      height: 667px;
+      background: var(--canvas);
+      border: 1px solid var(--rule);
+      overflow: hidden;
+      transform-origin: left top;
+    }
+    #ex-shot {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1680px;
+      height: 666.67px;
+      display: block;
+    }
+    #ex-frame-mask {
+      position: absolute;
+      left: 140px;
+      top: 292px;
+      width: 1680px;
+      height: 667px;
+      border: 1px solid var(--rule-strong);
+      pointer-events: none;
+      transform-origin: left top;
+    }
+
+    #ex-panel {
+      position: absolute;
+      left: 140px;
+      top: 292px;
+      width: 1680px;
+      height: 442px;
+      background: var(--charcoal);
+      overflow: hidden;
+      box-shadow: 0 30px 70px -30px rgba(20, 23, 19, 0.55);
+    }
+    .ex-pbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 26px;
+      border-bottom: 1px solid rgba(246, 241, 231, 0.12);
+      font-family: var(--font-mono);
+      font-size: 28px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(246, 241, 231, 0.55);
+    }
+    .ex-pbar span:last-child {
+      color: #e8c68a;
+    }
+    #ex-code {
+      padding: 22px 26px;
+      font-family: var(--font-mono);
+      font-size: 28px;
+      line-height: 1.78;
+      color: rgba(246, 241, 231, 0.84);
+      white-space: pre;
+      letter-spacing: -0.012em;
+      overflow: hidden;
+    }
+    #ex-code .h {
+      color: #e8c68a;
+    }
+    /* the row runs off the panel; fade the cut so it reads as "and so on" */
+    #ex-panel::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 96px;
+      bottom: 0;
+      background: linear-gradient(
+        to right,
+        rgba(20, 23, 19, 0) 82%,
+        rgba(20, 23, 19, 1) 98%
+      );
+      pointer-events: none;
+    }
+    #ex-code .ln {
+      display: block;
+      opacity: 0;
+    }
+    .ex-note {
+      position: absolute;
+      left: 140px;
+      top: 778px;
+      width: 1680px;
+      font-size: 28px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .ex-note b {
+      color: var(--amber-ink);
+      font-weight: 500;
+    }
+
+    /* step badge: one per product scene, same slot, same type, opaque ground so it
+       reads on both the cream app chrome and the dark review workspace */
+    #ex-badge {
+      position: absolute;
+      z-index: 60;
+      left: 140px;
+      top: 940px;
+      display: inline-flex;
+      align-items: center;
+      gap: 18px;
+      padding: 12px 22px 13px;
+      background: #141713;
+      border-left: 3px solid #c9a05a;
+    }
+    .ex-badge-n {
+      font-family: var(--font-mono);
+      font-size: 30px;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      color: #f0d9a8;
+    }
+    .ex-badge-l {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #f6f1e7;
+    }
+  </style>
+
+  <div data-hf-id="hf-a06i" id="root" data-composition-id="exports" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-bdex" id="ex-badge" class="clip" data-start="0" data-duration="5">
+      <span data-hf-id="hf-bdnex" class="ex-badge-n">05</span>
+      <span data-hf-id="hf-bdlex" class="ex-badge-l">Export</span>
+    </div>
+    <div data-hf-id="hf-w9zf" id="ex-head" class="clip" data-start="0.05" data-duration="4.95">
+      <div data-hf-id="hf-lvcm" class="ex-head">
+        <div data-hf-id="hf-vk42" class="ex-step">Export</div>
+        <div data-hf-id="hf-5ymq" class="ex-title">Out to the accountant, not into a PDF.</div>
+        <div data-hf-id="hf-e7yl" class="ex-sub">
+          Eleven columns modelled on the AutoCount purchase journal import: DocDate through
+          TotalAmount, one line per item.
+        </div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-dec8" id="ex-frame" class="clip" data-start="0.15" data-duration="4.85">
+      <img data-hf-id="hf-e8qr" id="ex-shot" src="assets/shots/exports-crop.jpg" alt="Exports page with accounting batch CSV and MyInvois JSON" />
+    </div>
+    <div data-hf-id="hf-z1d5" id="ex-frame-mask" class="clip" data-start="0.15" data-duration="4.85"></div>
+
+    <div data-hf-id="hf-wn7c" id="ex-panel" class="clip" data-start="1.9" data-duration="3.1">
+      <div data-hf-id="hf-7707" class="ex-pbar"><span data-hf-id="hf-inst">purchase-journal-2026-06.csv</span><span data-hf-id="hf-e60w">11 columns</span></div>
+      <div data-hf-id="hf-ap3v" id="ex-code" data-hold><span data-hf-id="hf-n21o" class="h">&quot;DocDate&quot;,&quot;DocNo&quot;,&quot;SupplierCode&quot;,&quot;SupplierName&quot;,&quot;Description&quot;,&quot;ItemCode&quot;,&quot;Qty&quot;,&quot;UnitPrice&quot;,&quot;TaxCode&quot;,&quot;TaxAmount&quot;,&quot;TotalAmount&quot;</span><span class="ln" data-hold>&quot;05/06/2026&quot;,&quot;002318&quot;,&quot;SUPP-KOPIAHSENG&quot;,&quot;KOPITIAM AH SENG&quot;,&quot;KOPI O&quot;,&quot;ITEM-01&quot;,&quot;2&quot;,&quot;2.50&quot;,&quot;SST-6&quot;,&quot;0.30&quot;,&quot;5.30&quot;</span><span class="ln" data-hold>&quot;05/06/2026&quot;,&quot;002318&quot;,&quot;SUPP-KOPIAHSENG&quot;,&quot;KOPITIAM AH SENG&quot;,&quot;ROTI KAYA&quot;,&quot;ITEM-02&quot;,&quot;1&quot;,&quot;3.00&quot;,&quot;SST-6&quot;,&quot;0.18&quot;,&quot;3.18&quot;</span><span class="ln" data-hold>&quot;05/06/2026&quot;,&quot;002318&quot;,&quot;SUPP-KOPIAHSENG&quot;,&quot;KOPITIAM AH SENG&quot;,&quot;MEE GORENG&quot;,&quot;ITEM-03&quot;,&quot;1&quot;,&quot;8.50&quot;,&quot;SST-6&quot;,&quot;0.51&quot;,&quot;9.01&quot;</span><span class="ln" data-hold>&quot;09/06/2026&quot;,&quot;PJ-88214&quot;,&quot;SUPP-PERCMAJUJAYA&quot;,&quot;PERCETAKAN MAJU JAYA&quot;,&quot;A4 PAPER 80GSM&quot;,&quot;ITEM-04&quot;,&quot;2&quot;,&quot;12.00&quot;,&quot;SST-6&quot;,&quot;1.44&quot;,&quot;25.44&quot;</span><span class="ln" data-hold>&quot;09/06/2026&quot;,&quot;PJ-88214&quot;,&quot;SUPP-PERCMAJUJAYA&quot;,&quot;PERCETAKAN MAJU JAYA&quot;,&quot;PHOTOCOPY&quot;,&quot;ITEM-05&quot;,&quot;1&quot;,&quot;6.50&quot;,&quot;SST-6&quot;,&quot;0.39&quot;,&quot;6.89&quot;</span><span class="ln" data-hold>&quot;09/06/2026&quot;,&quot;PJ-88214&quot;,&quot;SUPP-PERCMAJUJAYA&quot;,&quot;PERCETAKAN MAJU JAYA&quot;,&quot;STAPLER&quot;,&quot;ITEM-06&quot;,&quot;1&quot;,&quot;7.80&quot;,&quot;SST-6&quot;,&quot;0.47&quot;,&quot;8.27&quot;</span></div>
+    </div>
+
+    <div data-hf-id="hf-q4fy" id="ex-note" class="clip" data-start="2.1" data-duration="2.9">
+      <div data-hf-id="hf-6bkh" class="ex-note">
+        MyInvois JSON: a <b data-hf-id="hf-y592">UBL draft, never submitted.</b>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    tl.fromTo("#ex-head", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 0.05);
+    tl.fromTo(
+      "#ex-frame",
+      { opacity: 0, y: 22 },
+      { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
+      0.15,
+    );
+    tl.fromTo("#ex-frame-mask", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "none" }, 0.15);
+
+    // push slowly into the two download cards
+    tl.to("#ex-frame", { scale: 1.07, duration: 1.9, ease: "power2.inOut" }, 0.25);
+    tl.to("#ex-frame-mask", { scale: 1.07, duration: 1.9, ease: "power2.inOut" }, 0.25);
+
+    // the CSV itself, typed row by row
+    tl.fromTo("#ex-panel", { opacity: 0 }, { opacity: 1, duration: 0.16, ease: "none" }, 1.9);
+    tl.fromTo("#ex-code .h", { opacity: 0 }, { opacity: 1, duration: 0.24, ease: "none" }, 2.0);
+    gsap.utils.toArray("#ex-code .ln").forEach((ln, i) => {
+      tl.fromTo(
+        ln,
+        { opacity: 0, x: -8 },
+        { opacity: 1, x: 0, duration: 0.22, ease: "power2.out" },
+        2.08 + i * 0.075,
+      );
+    });
+
+    tl.fromTo("#ex-note", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, 2.1);
+
+    // the CSV panel takes over the frame; the download cards drop out from under it
+    tl.to("#ex-frame", { opacity: 0, duration: 0.001 }, 2.29);
+    tl.to("#ex-frame-mask", { opacity: 0, duration: 0.001 }, 2.29);
+    // hard cut out: hold the full panel, no trailing fade to canvas
+
+    window.__timelines["exports"] = tl;
+    tl.seek(0);
+  </script>
+</template>

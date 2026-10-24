@@ -1,0 +1,198 @@
+<template>
+  <style>
+    #root {
+      --canvas: #f6f1e7;
+      --surface: #fbf8f1;
+      --surface-subtle: #efe8da;
+      --rule: #d9d2c3;
+      --rule-strong: #8a8274;
+      --ink: #171a18;
+      --ink-2: #3f4742;
+      --muted: #5f665f;
+      --brand: #0b3f3a;
+      --brand-mid: #147a6c;
+      --brand-50: #e7f0eb;
+      --amber: #c9a05a;
+      --amber-ink: #7a4e0a;
+      --verified: #2d5334;
+      --charcoal: #141713;
+      --font-display: "EB Garamond", "Iowan Old Style", Georgia, serif;
+      --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+      position: absolute;
+      inset: 0;
+      background: var(--canvas);
+      overflow: hidden;
+      font-family: var(--font-ui);
+    }
+    .hk-label {
+      position: absolute;
+      left: 140px;
+      top: 96px;
+      font-family: var(--font-mono);
+      font-size: 28px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .hk-copy {
+      position: absolute;
+      left: 140px;
+      top: 300px;
+      width: 900px;
+    }
+    .hk-line {
+      font-family: var(--font-display);
+      font-size: 108px;
+      line-height: 1.02;
+      letter-spacing: -0.022em;
+      color: var(--ink);
+      font-weight: 400;
+    }
+    .hk-line em {
+      font-style: italic;
+      color: var(--brand);
+    }
+    .hk-sub {
+      margin-top: 34px;
+      font-size: 30px;
+      line-height: 1.45;
+      color: var(--ink-2);
+      max-width: 560px;
+    }
+    .hk-stack {
+      position: absolute;
+      right: 120px;
+      top: 150px;
+      width: 620px;
+      height: 800px;
+    }
+    .hk-card {
+      position: absolute;
+      inset: 0;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #fff;
+      box-shadow:
+        0 26px 60px -20px rgba(23, 26, 24, 0.45),
+        0 3px 10px rgba(23, 26, 24, 0.12);
+      border: 1px solid var(--rule);
+    }
+    .hk-card {
+      background-image: url("assets/media/receipt-crop.jpg");
+      background-size: cover;
+      background-position: center top;
+    }
+    .hk-rule {
+      position: absolute;
+      left: 140px;
+      top: 250px;
+      width: 92px;
+      height: 3px;
+      background: var(--amber);
+    }
+    .hk-foot {
+      position: absolute;
+      left: 140px;
+      bottom: 96px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-family: var(--font-mono);
+      font-size: 28px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .hk-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--brand-mid);
+    }
+  </style>
+
+  <div data-hf-id="hf-ktv8" id="root" data-composition-id="hook" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-6fv8" id="hk-label" class="clip" data-start="0" data-duration="6">
+      <div data-hf-id="hf-18vf" class="hk-label">Kenyalang Ledger · receipt digitizer</div>
+    </div>
+
+    <div data-hf-id="hf-0b9n" id="hk-rule" class="clip" data-start="0.4" data-duration="5.6">
+      <div data-hf-id="hf-mwr2" class="hk-rule"></div>
+    </div>
+
+    <div data-hf-id="hf-m72c" id="hk-copy" class="clip" data-start="0" data-duration="6">
+      <div data-hf-id="hf-jwx7" class="hk-copy">
+        <h1 data-hf-id="hf-akuq" id="hk-line" class="hk-line">The receipts pile up<br data-hf-id="hf-x5px" />faster than the <em data-hf-id="hf-4d94">typing</em>.</h1>
+        <p data-hf-id="hf-46aj" id="hk-sub" class="hk-sub">
+          One month of thermal paper, and the journal still has to be keyed in by hand.
+        </p>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-qdko" id="hk-stack" class="clip" data-start="1.3" data-duration="4.7">
+      <div data-hf-id="hf-s69w" class="hk-stack">
+        <div data-hf-id="hf-kr60" id="hk-c1" class="hk-card" role="img" aria-label="Thermal receipt from a Kuching hardware shop"></div>
+        <div data-hf-id="hf-fkim" id="hk-c2" class="hk-card" aria-hidden="true"></div>
+        <div data-hf-id="hf-jimn" id="hk-c3" class="hk-card" aria-hidden="true"></div>
+        <div data-hf-id="hf-ngqo" id="hk-c4" class="hk-card" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-jfde" id="hk-foot" class="clip" data-start="0.7" data-duration="5.3">
+      <div data-hf-id="hf-8ldd" class="hk-foot"><span data-hf-id="hf-njg0" class="hk-dot"></span> 3 receipts · 1 month · 0 typed</div>
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // frame 0 already carries the label and the headline (social thumbnail)
+    tl.fromTo("#hk-label", { y: -8 }, { y: 0, duration: 0.5, ease: "power2.out" }, 0);
+    tl.fromTo(
+      "#hk-rule",
+      { scaleX: 0, transformOrigin: "left center" },
+      { scaleX: 1, duration: 0.55, ease: "power3.out" },
+      0.4,
+    );
+    tl.fromTo("#hk-line", { y: 18 }, { y: 0, duration: 0.75, ease: "power3.out" }, 0);
+    tl.fromTo(
+      "#hk-sub",
+      { opacity: 0, y: 18 },
+      { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" },
+      1.0,
+    );
+    tl.fromTo(
+      "#hk-foot",
+      { opacity: 0 },
+      { opacity: 1, duration: 0.5, ease: "none" },
+      0.8,
+    );
+
+    const cards = [
+      { sel: "#hk-c1", x: 0, y: 0, rot: -2.5, delay: 1.3 },
+      { sel: "#hk-c2", x: -46, y: 26, rot: -7, delay: 1.55 },
+      { sel: "#hk-c3", x: 44, y: 40, rot: 5.5, delay: 1.8 },
+      { sel: "#hk-c4", x: -12, y: 62, rot: 10, delay: 2.05 },
+    ];
+    cards.forEach((c) => {
+      tl.fromTo(
+        c.sel,
+        { opacity: 0, y: c.y + 120, x: c.x, rotation: c.rot - 6 },
+        { opacity: 1, y: c.y, x: c.x, rotation: c.rot, duration: 0.85, ease: "power3.out" },
+        c.delay,
+      );
+    });
+
+    // settle: the stack breathes once, then the whole frame leaves
+    tl.to("#hk-stack", { y: -26, duration: 3.2, ease: "sine.inOut" }, 2.3);
+    tl.to("#hk-c4", { rotation: 12.5, duration: 3.2, ease: "sine.inOut" }, 2.3);
+
+    // hard cut out: the last frame stays full so the cut to brand lands on content,
+    // not on an empty canvas (the old trailing fade-out showed as a white flash)
+
+    window.__timelines["hook"] = tl;
+    tl.seek(0);
+  </script>
+</template>

@@ -1,0 +1,186 @@
+<template>
+  <style>
+    #root {
+      --canvas: #f6f1e7;
+      --surface: #fbf8f1;
+      --surface-subtle: #efe8da;
+      --rule: #d9d2c3;
+      --rule-strong: #8a8274;
+      --ink: #171a18;
+      --ink-2: #3f4742;
+      --muted: #5f665f;
+      --brand: #0b3f3a;
+      --brand-mid: #147a6c;
+      --brand-50: #e7f0eb;
+      --amber: #c9a05a;
+      --amber-ink: #7a4e0a;
+      --verified: #2d5334;
+      --charcoal: #141713;
+      --font-display: "EB Garamond", "Iowan Old Style", Georgia, serif;
+      --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+      position: absolute;
+      inset: 0;
+      background: #0d100e;
+      overflow: hidden;
+      font-family: var(--font-ui);
+      color: var(--ink);
+    }
+    #ib-stage {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+    }
+    #ib-shot {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      object-fit: cover;
+      display: block;
+    }
+    /* the app draws its own OCR-check and verified stamps; no overlay rings sit on top */
+    #ib-vignette {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      /* matched to #up-vig: the upload and inbox scenes are the same screen, so a different
+         vignette centre/falloff stepped the corner brightness ~20 levels at the cut. */
+      background: radial-gradient(
+        ellipse at 50% 52%,
+        rgba(0, 0, 0, 0) 40%,
+        rgba(0, 0, 0, 0.3) 100%
+      );
+      pointer-events: none;
+    }
+    .ib-cap {
+      position: absolute;
+      left: 140px;
+      top: 790px;
+      width: 760px;
+      padding: 22px 26px 24px;
+      border-left: 3px solid var(--amber);
+      background: rgba(251, 248, 241, 0.95);
+    }
+    .ib-cap-k {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--brand-mid);
+    }
+    .ib-cap-t {
+      margin-top: 10px;
+      font-size: 30px;
+      line-height: 1.32;
+      letter-spacing: -0.005em;
+      color: var(--ink);
+    }
+    #ib-cap-2 {
+      opacity: 0;
+    }
+
+
+    /* step badge: one per product scene, same slot, same type, opaque ground so it
+       reads on both the cream app chrome and the dark review workspace */
+    #ib-badge {
+      position: absolute;
+      z-index: 60;
+      left: 140px;
+      top: 940px;
+      display: inline-flex;
+      align-items: center;
+      gap: 18px;
+      padding: 12px 22px 13px;
+      background: #141713;
+      border-left: 3px solid #c9a05a;
+    }
+    .ib-badge-n {
+      font-family: var(--font-mono);
+      font-size: 30px;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      color: #f0d9a8;
+    }
+    .ib-badge-l {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #f6f1e7;
+    }
+  </style>
+
+  <div data-hf-id="hf-odz1" id="root" data-composition-id="inbox" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-bdib" id="ib-badge" class="clip" data-start="0" data-duration="6">
+      <span data-hf-id="hf-bdnib" class="ib-badge-n">02</span>
+      <span data-hf-id="hf-bdlib" class="ib-badge-l">Triage</span>
+    </div>
+    <div data-hf-id="hf-iwmu" id="ib-stage" class="clip" data-start="0" data-duration="6">
+      <img data-hf-id="hf-lrmn" id="ib-shot" src="assets/shots/inbox.jpg" alt="Kenyalang Ledger inbox with three receipts" />
+    </div>
+
+    <div data-hf-id="hf-lr8t" id="ib-vig-clip" class="clip" data-start="0" data-duration="6">
+      <div data-hf-id="hf-13tf" id="ib-vignette"></div>
+    </div>
+
+    <div data-hf-id="hf-0iwj" id="ib-cap-1" class="clip" data-start="0.75" data-duration="2.45">
+      <div data-hf-id="hf-ggvi" class="ib-cap">
+        <div data-hf-id="hf-1ga5" class="ib-cap-k">Inbox · 3 receipts</div>
+        <div data-hf-id="hf-nnjo" class="ib-cap-t">Every row shows why it needs a human.</div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-o2z2" id="ib-cap-2" class="clip" data-start="3.2" data-duration="2.6">
+      <div data-hf-id="hf-8woi" class="ib-cap">
+        <div data-hf-id="hf-vw4m" class="ib-cap-k">Rule · confidence gate</div>
+        <div data-hf-id="hf-jctf" class="ib-cap-t">Low confidence never reaches the journal. It waits here.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // hard cut in: the shot is present at frame 0, no dip to black at the seam
+    // vignette is static: fading it in from 0 made every cut-in start brighter than the scene
+    gsap.set("#ib-vignette", { opacity: 1 });
+
+    // no reverse settle: the cut already lands on the wide frame, so a 1.26 -> 1.19
+    // pull-back at the top read as a twitch before the real move started.
+    // Opens on EXACTLY the transform the upload scene ends with (1.19, y +56) so the cut is a
+    // data change on a held frame, not a camera jump. See upload.html for the measurement.
+    gsap.set("#ib-stage", { scale: 1.19, x: 0, y: 56 });
+    tl.to(
+      "#ib-stage",
+      { scale: 1.52, x: -414, y: 62, duration: 2.55, ease: "power2.inOut" },
+      1.05,
+    );
+
+    tl.fromTo(
+      "#ib-cap-1",
+      { opacity: 0, x: -24 },
+      { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" },
+      0.75,
+    );
+    tl.to("#ib-cap-1", { opacity: 0, x: -14, duration: 0.32, ease: "power2.in" }, 3.05);
+    tl.fromTo(
+      "#ib-cap-2",
+      { opacity: 0, x: -24 },
+      { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" },
+      3.2,
+    );
+
+    // ease back so the verified rows below come into frame
+    tl.to("#ib-stage", { scale: 1.19, x: 0, y: -6, duration: 1.7, ease: "power2.inOut" }, 4.35);
+
+    tl.to("#ib-cap-2", { opacity: 0, duration: 0.3, ease: "power2.in" }, 5.5);
+    // hard cut out: hold the full frame so the next scene cuts in, never washes to bg
+    // hard cut out: hold the full frame so the next scene cuts in, never washes to bg
+
+    window.__timelines["inbox"] = tl;
+    tl.seek(0);
+  </script>
+</template>

@@ -96,6 +96,8 @@ backend/storage-e2e/
 # Local scratch files that must never be committed
 .taste-skill/
 backend/kenyalang.db.bak
+*.db.bak*
+*.db.bak-*
 omp-session-*.html
 receipt_crop.jpg
 chat.json
@@ -119,6 +121,26 @@ videos/*/node_modules/
 videos/*/renders/view/
 videos/*/renders/.*.hf-transaction-*/
 videos/*/audio_*.json
+
+# The launch video lives at kenyalang-launch/ (not videos/), so the rules above miss it
+# entirely. Same intent: commit authored source and the rendered MP4, ignore tool caches.
+kenyalang-launch/.hyperframes/
+kenyalang-launch/.thumbnails/
+kenyalang-launch/.media/
+kenyalang-launch/.tmp/
+kenyalang-launch/.tmp-*/
+kenyalang-launch/.waveform-cache/
+kenyalang-launch/.hf-check/
+kenyalang-launch/capture/
+kenyalang-launch/node_modules/
+kenyalang-launch/renders/view/
+kenyalang-launch/renders/.*.hf-transaction-*/
+kenyalang-launch/audio_*.json
+
+# Local capture/measurement scratch, not project source.
+.captures/
+.tmp-ocr/
+frontend/*.mjs
 .tmp-shots/
 .tmp-site/
 .serena/

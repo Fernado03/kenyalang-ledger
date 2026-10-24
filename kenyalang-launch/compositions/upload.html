@@ -1,0 +1,231 @@
+<template>
+  <style>
+    #root {
+      --canvas: #f6f1e7;
+      --surface: #fbf8f1;
+      --surface-subtle: #efe8da;
+      --rule: #d9d2c3;
+      --rule-strong: #8a8274;
+      --ink: #171a18;
+      --ink-2: #3f4742;
+      --muted: #5f665f;
+      --brand: #0b3f3a;
+      --brand-mid: #147a6c;
+      --brand-50: #e7f0eb;
+      --amber: #c9a05a;
+      --amber-ink: #7a4e0a;
+      --verified: #2d5334;
+      --charcoal: #141713;
+      --font-display: "EB Garamond", "Iowan Old Style", Georgia, serif;
+      --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+      position: absolute;
+      inset: 0;
+      background: #0d100e;
+      overflow: hidden;
+      font-family: var(--font-ui);
+      color: var(--ink);
+    }
+    /* the real inbox screen is the upload surface: a drop strip above the table */
+    #up-stage {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+    }
+    .up-layer {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      display: block;
+      opacity: 0;
+    }
+    #up-idle { opacity: 1; }
+    #up-vig {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse at 50% 52%,
+        rgba(0, 0, 0, 0) 40%,
+        rgba(0, 0, 0, 0.3) 100%
+      );
+      pointer-events: none;
+      opacity: 0;
+    }
+    /* drop strip: real rules at y189 and y241 (h 52), content x416..1575.
+       Measured from the live DOM at 1920x1080, not guessed. */
+    #up-drop {
+      position: absolute;
+      left: 416px;
+      top: 189px;
+      width: 1160px;
+      height: 52px;
+      border: 2px solid var(--brand-mid);
+      background: rgba(20, 122, 108, 0.08);
+      box-sizing: border-box;
+      opacity: 0;
+    }
+    /* the row the new receipt lands in: real rules at y406 and y471, x416..1575 */
+    #up-newrow {
+      position: absolute;
+      left: 416px;
+      top: 406px;
+      width: 1160px;
+      height: 65px;
+      border: 2px solid var(--amber);
+      background: rgba(201, 160, 90, 0.1);
+      box-sizing: border-box;
+      opacity: 0;
+    }
+
+    .up-cap {
+      position: absolute;
+      left: 140px;
+      top: 790px;
+      width: 800px;
+      padding: 22px 26px 24px;
+      border-left: 3px solid var(--amber);
+      background: rgba(251, 248, 241, 0.95);
+    }
+    .up-cap-k {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--brand-mid);
+    }
+    .up-cap-t {
+      margin-top: 10px;
+      font-size: 30px;
+      line-height: 1.32;
+      letter-spacing: -0.005em;
+      color: var(--ink);
+    }
+    #up-cap-2, #up-cap-3 {
+      opacity: 0;
+    }
+
+    /* step badge: one per product scene, same slot, same type, opaque ground so it
+       reads on both the cream app chrome and the dark review workspace */
+    #up-badge {
+      position: absolute;
+      z-index: 60;
+      left: 140px;
+      top: 940px;
+      display: inline-flex;
+      align-items: center;
+      gap: 18px;
+      padding: 12px 22px 13px;
+      background: #141713;
+      border-left: 3px solid #c9a05a;
+    }
+    .up-badge-n {
+      font-family: var(--font-mono);
+      font-size: 30px;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      color: #f0d9a8;
+    }
+    .up-badge-l {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #f6f1e7;
+    }
+  </style>
+
+  <div data-hf-id="hf-jd5q" id="root" data-composition-id="upload" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-bdup" id="up-badge" class="clip" data-start="0" data-duration="6.5">
+      <span data-hf-id="hf-bdnup" class="up-badge-n">01</span>
+      <span data-hf-id="hf-bdlup" class="up-badge-l">Capture</span>
+    </div>
+    <div data-hf-id="hf-8z6l" id="up-stage" class="clip" data-start="0" data-duration="6.5">
+      <img data-hf-id="hf-le79" class="up-layer" id="up-idle" src="assets/shots/upload-idle.jpg" alt="Inbox drop strip waiting for a receipt" />
+      <img data-hf-id="hf-jbm7" class="up-layer" id="up-proc" src="assets/shots/upload-processing.jpg" alt="Inbox after a receipt is dropped, with the new row processing and the queue counter set to one" />
+      <div data-hf-id="hf-uvgc" id="up-drop"></div>
+      <div data-hf-id="hf-zrd9" id="up-newrow"></div>
+    </div>
+    <!-- vignette sits OUTSIDE the scaling stage: a lens falloff is fixed in screen space, and
+         inbox's is outside too. Inside the stage it zoomed to 1.19 and stepped the corner
+         brightness at the upload->inbox cut. -->
+    <div data-hf-id="hf-o4y7" id="up-vig"></div>
+
+    <div data-hf-id="hf-5u7l" id="up-cap-1" class="clip" data-start="0.6" data-duration="2.5">
+      <div data-hf-id="hf-x154" class="up-cap">
+        <div data-hf-id="hf-2m2z" class="up-cap-k">Capture</div>
+        <div data-hf-id="hf-t6ue" class="up-cap-t">Drop the receipt in. No form, no template.</div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-zbkt" id="up-cap-2" class="clip" data-start="3.1" data-duration="1.7">
+      <div data-hf-id="hf-ernk" class="up-cap">
+        <div data-hf-id="hf-qvqr" class="up-cap-k">OCR running</div>
+        <div data-hf-id="hf-wodf" class="up-cap-t">OCR reads the photo.</div>
+      </div>
+    </div>
+
+    <div data-hf-id="hf-hhzj" id="up-cap-3" class="clip" data-start="4.7" data-duration="1.9">
+      <div data-hf-id="hf-dkqh" class="up-cap">
+        <div data-hf-id="hf-4159" class="up-cap-k">Queued</div>
+        <div data-hf-id="hf-13wj" class="up-cap-t">Filed straight to the inbox.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // idle screen: drop strip highlighted
+    // hard cut in: the idle screen is present at frame 0, no dip to black at the seam
+    // vignette is static: fading it in from 0 made every cut-in start brighter than the scene
+    gsap.set("#up-vig", { opacity: 1 });
+    gsap.set("#up-stage", { scale: 1.16 });
+
+    tl.fromTo(
+      "#up-drop",
+      { opacity: 0, scaleY: 0.6 },
+      { opacity: 1, scaleY: 1, duration: 0.4, ease: "power3.out" },
+      0.7,
+    );
+
+    // the drop itself: the real processing state appears, strip pulses amber
+    tl.fromTo("#up-proc", { opacity: 0 }, { opacity: 1, duration: 0.32, ease: "none" }, 2.5);
+    tl.to(
+      "#up-drop",
+      { borderColor: "#c9a05a", background: "rgba(201, 160, 90, 0.12)", duration: 0.35, ease: "none" },
+      2.5,
+    );
+    tl.to("#up-drop", { opacity: 0, duration: 0.4, ease: "none" }, 3.55);
+
+    // push onto the new row while OCR runs.
+    // Lands on EXACTLY the transform inbox opens with (1.19, y +56). The two shots share
+    // pixel-identical top chrome, so any difference across the cut reads as the whole page
+    // lurching. Matching framing makes the cut a data change, not a camera jump.
+    // y +56 also keeps the "Inbox" heading (shot y81-98 -> screen y50-70) on screen, which
+    // the old 1.22/+26 end clipped to a 6 px margin.
+    tl.to("#up-stage", { scale: 1.19, x: 0, y: 56, duration: 2.2, ease: "power2.inOut" }, 2.6);
+    tl.fromTo(
+      "#up-newrow",
+      { opacity: 0, scaleY: 0.72 },
+      { opacity: 1, scaleY: 1, duration: 0.45, ease: "power3.out" },
+      4.9,
+    );
+
+    tl.fromTo("#up-cap-1", { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out" }, 0.6);
+    tl.to("#up-cap-1", { opacity: 0, x: -14, duration: 0.3, ease: "power2.in" }, 2.95);
+    tl.fromTo("#up-cap-2", { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.45, ease: "power3.out" }, 3.1);
+    tl.to("#up-cap-2", { opacity: 0, x: -14, duration: 0.3, ease: "power2.in" }, 4.75);
+    tl.fromTo("#up-cap-3", { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.4, ease: "power3.out" }, 5.05);
+
+    tl.to("#up-newrow", { opacity: 0.32, duration: 0.4, ease: "none" }, 5.75);
+    tl.to("#up-cap-3", { opacity: 0, duration: 0.3, ease: "power2.in" }, 6.15);
+    // hard cut out: hold the full frame so the next scene cuts in, never washes to bg
+    // hard cut out: hold the full frame so the next scene cuts in, never washes to bg
+
+    window.__timelines["upload"] = tl;
+    tl.seek(0);
+  </script>
+</template>

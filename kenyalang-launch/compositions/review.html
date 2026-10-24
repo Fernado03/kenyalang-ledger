@@ -1,0 +1,203 @@
+<template>
+  <style>
+    #root {
+      --canvas: #f6f1e7;
+      --surface: #fbf8f1;
+      --surface-subtle: #efe8da;
+      --rule: #d9d2c3;
+      --rule-strong: #8a8274;
+      --ink: #171a18;
+      --ink-2: #3f4742;
+      --muted: #5f665f;
+      --brand: #0b3f3a;
+      --brand-mid: #147a6c;
+      --brand-50: #e7f0eb;
+      --amber: #c9a05a;
+      --amber-ink: #7a4e0a;
+      --verified: #2d5334;
+      --charcoal: #141713;
+      --font-display: "EB Garamond", "Iowan Old Style", Georgia, serif;
+      --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+      position: absolute;
+      inset: 0;
+      background: #0d100e;
+      overflow: hidden;
+      font-family: var(--font-ui);
+      color: var(--ink);
+    }
+    #rv-stage {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+    }
+    /* the app's own provenance boxes are already in these captures; we only
+       cross-fade between real focus states */
+    .rv-layer {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      display: block;
+      opacity: 0;
+    }
+    #rv-base { opacity: 1; }
+    #rv-vig {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse at 26% 52%,
+        rgba(0, 0, 0, 0) 42%,
+        rgba(0, 0, 0, 0.34) 100%
+      );
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    /* closing panel: the real Totals & audit block */
+    #rv-panel {
+      position: absolute;
+      inset: 0;
+      background: var(--charcoal);
+      opacity: 0;
+    }
+    #rv-detail-frame {
+      position: absolute;
+      left: 150px;
+      top: 214px;
+      width: 1620px;
+      height: 576px;
+      background: var(--surface);
+      border: 1px solid rgba(246, 241, 231, 0.16);
+      overflow: hidden;
+    }
+    #rv-detail {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 1620px;
+      height: 576px;
+      display: block;
+    }
+
+    #rv-cap {
+      position: absolute;
+      left: 150px;
+      top: 838px;
+      width: 1620px;
+      display: flex;
+      align-items: baseline;
+      gap: 26px;
+    }
+    #rv-cap .k {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #e8c68a;
+      flex: none;
+    }
+    #rv-cap .t {
+      font-size: 30px;
+      line-height: 1.4;
+      color: rgba(246, 241, 231, 0.9);
+    }
+
+    /* step badge: one per product scene, same slot, same type, opaque ground so it
+       reads on both the cream app chrome and the dark review workspace */
+    #rv-badge {
+      position: absolute;
+      z-index: 60;
+      left: 140px;
+      top: 940px;
+      display: inline-flex;
+      align-items: center;
+      gap: 18px;
+      padding: 12px 22px 13px;
+      background: #141713;
+      border-left: 3px solid #c9a05a;
+    }
+    .rv-badge-n {
+      font-family: var(--font-mono);
+      font-size: 30px;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      color: #f0d9a8;
+    }
+    .rv-badge-l {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #f6f1e7;
+    }
+  </style>
+
+  <div data-hf-id="hf-3y3n" id="root" data-composition-id="review" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-bdrv" id="rv-badge" class="clip" data-start="0" data-duration="11">
+      <span data-hf-id="hf-bdnrv" class="rv-badge-n">03</span>
+      <span data-hf-id="hf-bdlrv" class="rv-badge-l">Review</span>
+    </div>
+    <div data-hf-id="hf-xgcr" id="rv-stage" class="clip" data-start="0" data-duration="6.6">
+      <img data-hf-id="hf-dck8" id="rv-base" class="rv-layer" src="assets/shots/review.jpg" alt="Review workspace for a Kuching hardware receipt" />
+      <img data-hf-id="hf-g69n" id="rv-sst" class="rv-layer" src="assets/shots/review-merchant.jpg" alt="Supplier name field focused, its provenance box turned teal on the receipt" />
+      <img data-hf-id="hf-8t67" id="rv-date" class="rv-layer" src="assets/shots/review-invoicenumber.jpg" alt="Invoice number field focused, its provenance box turned teal on the receipt" />
+      <div data-hf-id="hf-ytbs" id="rv-vig"></div>
+    </div>
+
+    <div data-hf-id="hf-wjbl" id="rv-panel" class="clip" data-start="6.6" data-duration="4.4">
+      <div data-hf-id="hf-s7k9" id="rv-detail-frame">
+        <img data-hf-id="hf-secr" id="rv-detail" src="assets/shots/review-totals-detail.jpg" alt="Totals and audit block showing the receipt's math check" />
+      </div>
+      <div data-hf-id="hf-vgkm" id="rv-cap">
+        <span data-hf-id="hf-o3rq" class="k">Math check</span>
+        <span data-hf-id="hf-giz5" class="t">The app checks the arithmetic before it will file.</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // 1. workspace at rest: hold still, then move. A reverse settle at the top of a
+    // scene reads as a stutter because the cut already landed on the wide frame.
+    gsap.set("#rv-vig", { opacity: 1 });
+
+    // 2. push into the receipt photo (box 72..921 x 325..799, centre 496,562).
+    // 2.4 s for a 2x push: at 1.65 s it snapped.
+    tl.to("#rv-stage", { scale: 1.88, x: 872, y: -41, duration: 2.4, ease: "power2.inOut" }, 1.0);
+
+    // 3. real focus states, cross-faded on the beat
+    tl.to("#rv-sst", { opacity: 1, duration: 0.4, ease: "none" }, 2.75);
+    tl.to("#rv-sst", { opacity: 0, duration: 0.4, ease: "none" }, 4.15);
+    tl.to("#rv-date", { opacity: 1, duration: 0.4, ease: "none" }, 4.2);
+
+    // 4. slow drift so the frame stays alive
+    tl.to("#rv-stage", { scale: 1.93, x: 896, y: -43, duration: 0.9, ease: "sine.inOut" }, 4.3);
+
+    // 5. out, then the real totals block. 1.35 s instead of 0.78: the pull-back was
+    // the fastest move in the film and it whipped.
+    tl.to("#rv-stage", { scale: 1.0, x: 0, y: 0, duration: 1.35, ease: "power2.inOut" }, 5.2);
+    tl.fromTo("#rv-panel", { opacity: 0 }, { opacity: 1, duration: 0.45, ease: "none" }, 6.6);
+
+    tl.fromTo(
+      "#rv-detail-frame",
+      { opacity: 0, y: 26, scale: 0.985 },
+      { opacity: 1, y: 0, scale: 1, duration: 0.6, ease: "power3.out" },
+      6.85,
+    );
+    tl.fromTo(
+      "#rv-cap",
+      { opacity: 0, y: 16 },
+      { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" },
+      8.1,
+    );
+
+    // hard cut out: hold the totals card full-frame, no trailing fade to the canvas
+
+    window.__timelines["review"] = tl;
+    tl.seek(0);
+  </script>
+</template>

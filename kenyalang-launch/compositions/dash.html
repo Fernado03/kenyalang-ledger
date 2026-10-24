@@ -1,0 +1,194 @@
+<template>
+  <style>
+    #root {
+      --canvas: #f6f1e7;
+      --surface: #fbf8f1;
+      --surface-subtle: #efe8da;
+      --rule: #d9d2c3;
+      --rule-strong: #8a8274;
+      --ink: #171a18;
+      --ink-2: #3f4742;
+      --muted: #5f665f;
+      --brand: #0b3f3a;
+      --brand-mid: #147a6c;
+      --brand-50: #e7f0eb;
+      --amber: #c9a05a;
+      --amber-ink: #7a4e0a;
+      --verified: #2d5334;
+      --charcoal: #141713;
+      --font-display: "EB Garamond", "Iowan Old Style", Georgia, serif;
+      --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+      position: absolute;
+      inset: 0;
+      background: #0d100e;
+      overflow: hidden;
+      font-family: var(--font-ui);
+      color: var(--ink);
+    }
+    #ds-stage {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 50%;
+    }
+    #ds-shot {
+      position: absolute;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      display: block;
+    }
+    /* the dashboard's own rule under the spend figure: x416..1575 at y303 */
+    #ds-underline {
+      position: absolute;
+      left: 416px;
+      top: 303px;
+      width: 1160px;
+      height: 3px;
+      background: var(--amber);
+      transform-origin: left center;
+      opacity: 0;
+    }
+    /* the spend block: label ink y194..215, figure ink y230..272, left edge x416 */
+    #ds-spend-box {
+      position: absolute;
+      left: 404px;
+      top: 184px;
+      width: 302px;
+      height: 100px;
+      border: 1.5px solid rgba(201, 160, 90, 0.85);
+      background: rgba(201, 160, 90, 0.08);
+      box-sizing: border-box;
+      opacity: 0;
+    }
+    #ds-note {
+      position: absolute;
+      left: 1010px;
+      top: 96px;
+      width: 740px;
+      padding: 22px 26px 24px;
+      background: rgba(20, 23, 19, 0.95);
+      border-left: 3px solid var(--amber);
+    }
+    #ds-note .k {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 28px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #e8c68a;
+      margin-bottom: 10px;
+    }
+    #ds-note .t {
+      font-size: 30px;
+      line-height: 1.42;
+      color: var(--canvas);
+    }
+    #ds-vig {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse at 34% 26%,
+        rgba(0, 0, 0, 0) 42%,
+        rgba(0, 0, 0, 0.26) 100%
+      );
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    /* step badge: one per product scene, same slot, same type, opaque ground so it
+       reads on both the cream app chrome and the dark review workspace */
+    #ds-badge {
+      position: absolute;
+      z-index: 60;
+      left: 140px;
+      top: 940px;
+      display: inline-flex;
+      align-items: center;
+      gap: 18px;
+      padding: 12px 22px 13px;
+      background: #141713;
+      border-left: 3px solid #c9a05a;
+    }
+    .ds-badge-n {
+      font-family: var(--font-mono);
+      font-size: 30px;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      color: #f0d9a8;
+    }
+    .ds-badge-l {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: #f6f1e7;
+    }
+  </style>
+
+  <div data-hf-id="hf-4bpr" id="root" data-composition-id="dash" data-width="1920" data-height="1080">
+    <div data-hf-id="hf-bdds" id="ds-badge" class="clip" data-start="0" data-duration="5.5">
+      <span data-hf-id="hf-bdnds" class="ds-badge-n">04</span>
+      <span data-hf-id="hf-bdlds" class="ds-badge-l">Reconcile</span>
+    </div>
+    <div data-hf-id="hf-ng50" id="ds-stage" class="clip" data-start="0" data-duration="5.5">
+      <img data-hf-id="hf-84wx" id="ds-shot" src="assets/shots/dashboard.jpg" alt="Dashboard for June 2026 showing RM 58.10 spend across three receipts" />
+      <div data-hf-id="hf-t695" id="ds-spend-box"></div>
+      <div data-hf-id="hf-po1t" id="ds-underline"></div>
+    </div>
+
+    <div data-hf-id="hf-bgqb" id="ds-vig-clip" class="clip" data-start="0" data-duration="5.5">
+      <div data-hf-id="hf-xg43" id="ds-vig"></div>
+    </div>
+
+    <div data-hf-id="hf-b64k" id="ds-note" class="clip" data-start="2.2" data-duration="3.3">
+      <span data-hf-id="hf-ybr6" class="k">Verified only</span>
+      <span data-hf-id="hf-9vnk" class="t">RM 58.10 counts only the two verified receipts.</span>
+    </div>
+  </div>
+
+  <script>
+    const tl = gsap.timeline({ paused: true });
+
+    // hard cut in: the shot is present at frame 0, no dip to black at the seam
+    // vignette is static: fading it in from 0 made every cut-in start brighter than the scene
+    gsap.set("#ds-vig", { opacity: 1 });
+
+    // open wide, then land on the spend figure. At s=1.34 the largest safe x-shift is
+    // (1.34-1)*960 = 326px, so the figure is framed in the left third rather than centred.
+    gsap.set("#ds-stage", { scale: 1.2, x: 0, y: -34 });
+    tl.to(
+      "#ds-stage",
+      { scale: 1.34, x: 324, y: 0, duration: 2.2, ease: "power2.inOut" },
+      0.1,
+    );
+
+    tl.fromTo(
+      "#ds-spend-box",
+      { opacity: 0, scale: 1.06 },
+      { opacity: 1, scale: 1, duration: 0.45, ease: "power3.out" },
+      1.4,
+    );
+    tl.fromTo(
+      "#ds-underline",
+      { opacity: 0, scaleX: 0 },
+      { opacity: 1, scaleX: 1, duration: 0.55, ease: "power3.out" },
+      1.7,
+    );
+    tl.fromTo("#ds-note", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 2.2);
+
+    // pull back to the two tables underneath
+    tl.to("#ds-stage", { scale: 1.18, x: 0, y: -71, duration: 1.7, ease: "power2.inOut" }, 3.15);
+    tl.to("#ds-spend-box", { opacity: 0, duration: 0.4, ease: "none" }, 3.35);
+
+    tl.to("#ds-note", { opacity: 0, duration: 0.35, ease: "power2.in" }, 4.75);
+    tl.to("#ds-underline", { opacity: 0, duration: 0.3, ease: "none" }, 4.8);
+    // hard cut out: hold the full frame so the next scene cuts in, never washes to bg
+    // hard cut out: hold the full frame so the next scene cuts in, never washes to bg
+
+    window.__timelines["dash"] = tl;
+    tl.seek(0);
+  </script>
+</template>
