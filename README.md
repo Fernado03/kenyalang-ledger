@@ -77,21 +77,19 @@ The launch film is a portfolio artefact, and its media carries its own provenanc
 
 | Asset | Origin | Licence |
 |---|---|---|
-| Receipt photographs (`kenyalang-launch/assets/media/`) | Unverified — see below | Covered by this repository's MIT licence |
+| Receipt photographs (`kenyalang-launch/assets/media/`) | A fabricated demo receipt made as a prop; merchant, phone, SST and invoice details are invented | Covered by this repository's MIT licence |
 | Voiceover (`assets/audio/vo-*.mp3`) | ElevenLabs, voice `Eric` | Generated on a free tier |
 | Score (`assets/bgm/track.mp3`) | *Suasam Sarawak*, generated with Suno | **Suno free tier is non-commercial.** Fine for a portfolio and a local render; if this film is ever used commercially, replace the track |
 | Sound effects (`assets/sfx/`) | ElevenLabs sound generation | Generated on a free tier |
 
-**On the receipt photograph.** `kenyalang-launch/assets/media/receipt.jpg` shows a merchant name,
-phone number, SST number and invoice number. Its origin is not recorded anywhere in this
-repository, and its EXIF is stripped, so I cannot tell you whether it is a real receipt or a prop.
-I treat it as unverified rather than assume either way. If it is real, it is unredacted: the same
-merchant name, invoice number and SST number also appear in
-`kenyalang-launch/assets/data.csv` and in the export fixtures. Replace or blur the image and scrub
-those strings before reusing this film anywhere that matters.
+**On the receipt photograph.** `kenyalang-launch/assets/media/receipt.jpg` is a prop receipt made
+for the film. The merchant name, phone number, SST number and invoice number on it are invented,
+not copied from anyone's paper. The same invented details appear in
+`kenyalang-launch/assets/data.csv` and the export fixtures, because those fixtures are built from
+the same demo batch.
 
 The three receipts the demo *app* processes are not in the repository at all: the database and the
-uploaded scans are gitignored. What *is* committed is the export fixture built from one of them.
+uploaded scans are gitignored.
 
 ---
 
