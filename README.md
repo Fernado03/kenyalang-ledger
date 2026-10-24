@@ -9,8 +9,12 @@ Sections below state exactly where those demo boundaries are.
 
 ![The Kenyalang Ledger launch film — eight scenes, 48 seconds](kenyalang-launch/renders/kenyalang-launch-preview.gif)
 
-*Above: a silent 8-second trailer, one beat per scene. The full 48-second cut with voiceover,
-sound design and score is **[here](kenyalang-launch/renders/kenyalang-launch.mp4)** (33 MB, MP4).*
+*Above: a silent 8-second trailer, one beat per scene, 1.2 MB so it loads fast.*
+
+*The full 48-second cut has voiceover, sound design and score, so it cannot play here: GitHub
+shows no inline player for MP4s at any size. Download it from
+[`kenyalang-launch/renders/kenyalang-launch.mp4`](kenyalang-launch/renders/kenyalang-launch.mp4)
+(33 MB) and open it locally.*
 
 ---
 
@@ -73,13 +77,21 @@ The launch film is a portfolio artefact, and its media carries its own provenanc
 
 | Asset | Origin | Licence |
 |---|---|---|
-| Receipt photographs (`kenyalang-launch/assets/media/`) | A demo receipt photographed as a prop for this film; not a customer document | Covered by this repository's MIT licence |
+| Receipt photographs (`kenyalang-launch/assets/media/`) | Unverified — see below | Covered by this repository's MIT licence |
 | Voiceover (`assets/audio/vo-*.mp3`) | ElevenLabs, voice `Eric` | Generated on a free tier |
 | Score (`assets/bgm/track.mp3`) | *Suasam Sarawak*, generated with Suno | **Suno free tier is non-commercial.** Fine for a portfolio and a local render; if this film is ever used commercially, replace the track |
 | Sound effects (`assets/sfx/`) | ElevenLabs sound generation | Generated on a free tier |
 
-No real customer receipt, supplier invoice, or personal data appears in the film or the
-repository. The receipts the app processes in the demo are fixtures, not scans of anyone's paper.
+**On the receipt photograph.** `kenyalang-launch/assets/media/receipt.jpg` shows a merchant name,
+phone number, SST number and invoice number. Its origin is not recorded anywhere in this
+repository, and its EXIF is stripped, so I cannot tell you whether it is a real receipt or a prop.
+I treat it as unverified rather than assume either way. If it is real, it is unredacted: the same
+merchant name, invoice number and SST number also appear in
+`kenyalang-launch/assets/data.csv` and in the export fixtures. Replace or blur the image and scrub
+those strings before reusing this film anywhere that matters.
+
+The three receipts the demo *app* processes are not in the repository at all: the database and the
+uploaded scans are gitignored. What *is* committed is the export fixture built from one of them.
 
 ---
 
