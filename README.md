@@ -116,6 +116,10 @@ kenyalang-ledger/
 
 ### The launch film
 
+[![The Kenyalang Ledger launch film — open](kenyalang-launch/renders/kenyalang-launch-poster.jpg)](kenyalang-launch/renders/kenyalang-launch.mp4)
+
+https://github.com/Fernado03/kenyalang-ledger/blob/main/kenyalang-launch/renders/kenyalang-launch.mp4
+
 `kenyalang-launch/` holds a 48-second product film (1920×1080, 30 fps) built with
 [HyperFrames](https://hyperframes.dev). It is not a mockup: every product frame is a real
 screenshot of the app running on the seeded demo data, with camera moves and overlays drawn on
