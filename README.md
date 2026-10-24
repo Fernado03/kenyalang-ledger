@@ -20,8 +20,9 @@ shoeboxes of thermal receipts. Kenyalang Ledger digitizes that flow:
   overlays on the scan so a field can be traced back to the pixels it came from.
 - **LLM structured extraction:** an OpenAI-compatible chat model turns OCR text into the
   receipt header and line items.
-- **Deterministic reconciliation:** line totals plus tax are compared against the grand total
-  with a two-cent tolerance; low-confidence or unreconciled receipts route to human review.
+- **Deterministic reconciliation:** line totals, tax and printed rounding are compared against
+  the grand total with a two-cent tolerance, using the receipt's tax basis (Malaysian receipts
+  print line amounts GST-inclusive); low-confidence or unreconciled receipts route to human review.
 - **Fixed expense taxonomy:** line items are classified into `F&B`, `HARDWARE`, `WORKSHOP`,
   `RETAIL`, or `OTHER` by keyword, with `OTHER` as the fallback.
 - **Export:** an AutoCount / SQL Account purchase journal CSV, and a MyInvois-shaped JSON
@@ -50,7 +51,7 @@ flowchart LR
 |---|---|---|
 | Identity | `X-Accountant-Id` UUID header, accepted only when `KENYALANG_ENV` is `local` or `test` | A real IdP, signed sessions, per-user authorization |
 | Processing | FastAPI `BackgroundTasks` in the API process | A durable queue and worker with retries and a dead-letter path |
-| Schema evolution | `create_all` plus additive guards for the two fields added after launch | Alembic migrations and a reviewed migration history |
+| Schema evolution | `create_all` plus additive guards for the three fields added after launch (`expense_category`, `amount_basis`, `rounding`) | Alembic migrations and a reviewed migration history |
 | Storage | Local filesystem under `KENYALANG_STORAGE_ROOT` | Object storage with encryption and short-lived signed URLs |
 | MyInvois | A JSON envelope shaped like the LHDN sample | Schema validation and submission through LHDN's API |
 | Compliance | No claim of PDPA, WCAG, or LHDN certification | Legal and accessibility audits, data-processing agreements |
@@ -72,7 +73,7 @@ service on a public network.
 | **CV & OCR** | OpenCV (headless), EasyOCR, Pillow, Pillow-HEIF, PyMuPDF | HEIC through `pillow-heif`, PDF page 1 rendered at 200 DPI |
 | **LLM extraction** | OpenAI SDK against any OpenAI-compatible base URL | Default model `gpt-4o-mini`, overridable with `KENYALANG_LLM_MODEL` |
 | **Persistence** | PostgreSQL 15 or SQLite | Portable column types (`GUID`, `JSONBType`, `UTCDateTime`) |
-| **Testing** | pytest, Vitest, Testing Library, ruff, ESLint | 236 backend tests, 37 frontend tests |
+| **Testing** | pytest, Vitest, Testing Library, ruff, ESLint | 311 backend tests, 56 frontend tests |
 | **Containerization** | Docker, Docker Compose | Non-root backend image; PostgreSQL 15 + API Compose stack |
 
 ---
@@ -90,7 +91,7 @@ kenyalang-ledger/
 │   │   ├── schemas/        # Pydantic v2 request/response contracts
 │   │   ├── services/       # reconciler, classifier, export engine
 │   │   └── main.py         # app factory, lifespan, CORS, router mounting
-│   ├── tests/              # 236 pytest tests
+│   ├── tests/              # 311 pytest tests
 │   ├── sql/                # pgcrypto extension for the Compose database
 │   ├── Dockerfile
 │   ├── pyproject.toml      # package metadata and pytest config
@@ -109,8 +110,21 @@ kenyalang-ledger/
 │   └── vite.config.ts      # Vite dev server with /api proxy + Vitest config
 ├── dataset/                # SROIE/FUNSD/CORU references and LHDN sample JSON
 ├── docs/                   # PRD, appflow, UI specs, TRD, schema/API, RTM
+├── kenyalang-launch/       # 48s launch film: HyperFrames compositions + render
 └── docker-compose.yml      # PostgreSQL 15 + backend
 ```
+
+### The launch film
+
+`kenyalang-launch/` holds a 48-second product film (1920×1080, 30 fps) built with
+[HyperFrames](https://hyperframes.dev). It is not a mockup: every product frame is a real
+screenshot of the app running on the seeded demo data, with camera moves and overlays drawn on
+top. `index.html` carries the master timeline and the audio mix, `compositions/` holds one file
+per scene, and `renders/kenyalang-launch.mp4` is the finished cut. `REVIEW.md` records the
+corrections made across passes and what was verified by measurement rather than by eye.
+
+Tool caches (`.hyperframes/`, `.media/`, thumbnails, waveform caches) are gitignored; the authored
+source and the render are committed.
 
 ---
 
@@ -303,15 +317,26 @@ The dashboard always returns all five categories, including zeros.
 
 Reconciliation (`backend/app/services/reconciler.py`):
 
-- **Math:** `|sum(line_total) + tax_amount - grand_total| <= RM 0.02`. Missing line items fall
-  back to comparing `subtotal + tax`.
+- **Math:** the identity depends on the receipt's `amount_basis`, because Malaysian receipts
+  print line amounts **inclusive** of GST. Inclusive uses
+  `|sum(line_total) + rounding - grand_total|`; exclusive uses
+  `|sum(line_total) + tax_amount + rounding - grand_total|`. Both compare against a RM 0.02
+  tolerance. Missing line items fall back to comparing `subtotal + tax + rounding`.
+  Treating an inclusive receipt as exclusive is exactly the bug the audit caught (H1) — every
+  GST receipt failed the arithmetic check and the export carried the wrong basis.
+- **Tax basis:** `amount_basis` (`INCLUSIVE` / `EXCLUSIVE`) is a first-class column, extracted
+  by the LLM stage and persisted on the receipt. It drives both reconciliation and export.
+- **Printed rounding:** the signed till-rounding line some receipts print (`ROUNDING -0.04`) is
+  persisted as `rounding` and netted into the journal, so the exported total matches the paper.
 - **Confidence:** any critical field below `0.80` routes the receipt to `STATUS_NEEDS_REVIEW`.
 - **Date sanity:** invoice dates in the future or older than 365 days are flagged.
 - **SST:** an SST-registered merchant with no tax amount is flagged.
 - **Critical fields:** `merchant_name`, `invoice_date`, `grand_total`.
 
 Failing any gate produces `STATUS_NEEDS_REVIEW`; passing all gates produces
-`STATUS_AUTO_VERIFIED`.
+`STATUS_AUTO_VERIFIED`. Terminal failures use the `ERR_*` family (`ERR_EXTRACTION`,
+`ERR_UNREADABLE`, `ERR_TIMEOUT`, `ERR_FILE_CORRUPT`), which is filterable in the inbox and
+distinct from `STATUS_REJECTED` (a human decision).
 
 ---
 
@@ -326,7 +351,7 @@ python -m pytest
 ruff check app tests
 ```
 
-The suite runs 236 tests over auth, tenancy, health, uploads, receipt updates, exports,
+The suite runs 311 tests over auth, tenancy, health, uploads, receipt updates, exports,
 dashboard, pipeline formats, and end-to-end export flows. It uses SQLite and a temporary
 storage root, so no Docker or network access is required. Tests that would need EasyOCR
 weights skip with an explicit reason.
@@ -340,8 +365,9 @@ npm run lint
 npm run build   # tsc -b && vite build
 ```
 
-37 Vitest tests cover money and date formatting, math auditing, keyboard shortcut resolution,
-and the status pill. Testing Library runs in jsdom with globals disabled, so tests import
+56 Vitest tests across 5 files cover money and date formatting, math auditing, keyboard shortcut
+resolution, the status pill, and the API error parser that turns FastAPI validation payloads into
+readable messages. Testing Library runs in jsdom with globals disabled, so tests import
 `describe`/`it`/`expect` from `vitest` explicitly.
 
 ### End-to-end
