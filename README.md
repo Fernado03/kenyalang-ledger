@@ -116,9 +116,10 @@ kenyalang-ledger/
 
 ### The launch film
 
-[![The Kenyalang Ledger launch film — open](kenyalang-launch/renders/kenyalang-launch-poster.jpg)](kenyalang-launch/renders/kenyalang-launch.mp4)
+![The Kenyalang Ledger launch film — eight scenes, 48 seconds](kenyalang-launch/renders/kenyalang-launch-preview.gif)
 
-https://github.com/Fernado03/kenyalang-ledger/blob/main/kenyalang-launch/renders/kenyalang-launch.mp4
+*Above: a silent 8-second trailer, one beat per scene. The full 48-second cut with voiceover,
+sound design and score is **[here](kenyalang-launch/renders/kenyalang-launch.mp4)** (33 MB, MP4).*
 
 `kenyalang-launch/` holds a 48-second product film (1920×1080, 30 fps) built with
 [HyperFrames](https://hyperframes.dev). It is not a mockup: every product frame is a real
